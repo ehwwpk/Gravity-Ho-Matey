@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gravity-ho-matey"
+version = "0.1.0"
+description = "Standard-library-first Python arcade skeleton for a pirate gravity race maze game."
+requires-python = ">=3.11"
+authors = [{ name = "Gravity Ho, Matey!" }]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum, auto
+
+from gravity_ho_matey.core.geometry import Rect
+from gravity_ho_matey.core.vector import Vec2
+
+
+class GameStatus(Enum):
+    RUNNING = auto()
+    WON = auto()
+    LOST = auto()
+
+
+@dataclass(slots=True)
+class Ship:
+    pos: Vec2
+    vel: Vec2 = field(default_factory=Vec2)
+    angle: float = 0.0
+    radius: float = 12.0
+    cooldown: float = 0.0
+    boost_energy: float = 1.0
+
+
+@dataclass(slots=True)
+class Projectile:
+    pos: Vec2
+    vel: Vec2
+    ttl: float = 2.3
+    radius: float = 4.0
+
+
+@dataclass(frozen=True, slots=True)
+class GravityWell:
+    pos: Vec2
+    strength: float
+    radius: float
+    label: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Wall:
+    rect: Rect
+
+
+@dataclass(slots=True)
+class Beacon:
+    pos: Vec2
+    radius: float = 9.0
+    collected: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class FinishGate:
+    rect: Rect
+
+
+@dataclass(frozen=True, slots=True)
+class WorldConfig:
+    width: int
+    height: int
+    turn_rate: float = 4.4
+    thrust: float = 230.0
+    boost_multiplier: float = 1.85
+    drag: float = 0.985
+    max_ship_speed: float = 330.0
+    projectile_speed: float = 315.0
+    ship_fire_cooldown: float = 0.18
