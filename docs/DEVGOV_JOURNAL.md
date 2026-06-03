@@ -81,4 +81,14 @@ Pre-edit check failed MCP 120s timeout; CLI `devgov check` completed in ~9s. Pat
 
 ---
 
+## 2026-06-03 — Clean MCP run after commit
+
+### +EV · Post-commit `devgov_run` MCP exit 0 / outcome `clean`
+Single-file level edit → ruff, compileall, pytest passed; no human_review block; obligations **met**. Activity pane should show green verification (contrast with pre-commit HIGH-risk blocked state).
+
+### +EV · MCP `devgov_run` reliable; `devgov_check` still flaky
+Check timed out over MCP (120s) again; CLI check + MCP run combo worked in ~4s for run.
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->

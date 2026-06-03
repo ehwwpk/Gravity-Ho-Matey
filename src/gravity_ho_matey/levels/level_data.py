@@ -17,7 +17,6 @@ def build_cove_run_level() -> GameWorld:
         # Light interior obstacles (~70% fewer maze walls than original).
         Wall(Rect(145, 490, 250, 34)),
         Wall(Rect(650, 300, 34, 245)),
-        Wall(Rect(790, 500, 120, 34)),
     ]
     wells = [
         GravityWell(Vec2(240, 420), strength=34000, radius=210, label="Black Rum Eddy"),
