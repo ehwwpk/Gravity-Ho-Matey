@@ -12,3 +12,15 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+.cursor/mcp.json
+
+# DevGov — ignore block (generated; safe to edit above)
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+Artifacts/
+Artifacts/DevGov/
+Artifacts/**

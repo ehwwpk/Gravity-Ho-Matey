@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
@@ -99,7 +98,7 @@ class TkRenderer:
         for frac in (1.0, 0.66, 0.33):
             r = radius * frac
             self.canvas.create_oval(pos.x - r, pos.y - r, pos.x + r, pos.y + r, outline=palette.WELL)
-        self.canvas.create_oval(pos.x - 9, pos.y - 9, pos.x + 9, pos.y + 9, fill=palette.WELL_CORE, outline="")
+        self.canvas.create_oval(pos.x - 10, pos.y - 10, pos.x + 10, pos.y + 10, fill=palette.WELL_CORE, outline="")
         if label:
             self.canvas.create_text(pos.x, pos.y - 24, text=label, fill="#caaaff", font=("Courier", 8))
 

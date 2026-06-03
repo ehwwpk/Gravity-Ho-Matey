@@ -60,10 +60,12 @@ class FinishGate:
 class WorldConfig:
     width: int
     height: int
-    turn_rate: float = 4.4
-    thrust: float = 230.0
+    gravity_scale: float = 0.5
+    turn_rate: float = 5.0
+    thrust: float = 250.0
     boost_multiplier: float = 1.85
-    drag: float = 0.985
+    drag: float = 0.988
     max_ship_speed: float = 330.0
     projectile_speed: float = 315.0
     ship_fire_cooldown: float = 0.18
+    well_maw_radius: float = 10.0

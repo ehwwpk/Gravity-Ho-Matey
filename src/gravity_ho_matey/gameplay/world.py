@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import math
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import (
@@ -65,7 +64,7 @@ class GameWorld:
         if intent.rotate_right:
             self.ship.angle += self.config.turn_rate * dt
 
-        accel = gravity_acceleration_at(self.ship.pos, self.wells)
+        accel = gravity_acceleration_at(self.ship.pos, self.wells) * self.config.gravity_scale
         if intent.thrust:
             multiplier = self.config.boost_multiplier if intent.boost and self.ship.boost_energy > 0.05 else 1.0
             accel += Vec2.from_angle(self.ship.angle) * (self.config.thrust * multiplier)
@@ -92,7 +91,7 @@ class GameWorld:
     def _update_projectiles(self, dt: float) -> None:
         kept: list[Projectile] = []
         for projectile in self.projectiles:
-            accel = gravity_acceleration_at(projectile.pos, self.wells)
+            accel = gravity_acceleration_at(projectile.pos, self.wells) * self.config.gravity_scale
             projectile.vel = projectile.vel + accel * dt
             projectile.pos = projectile.pos + projectile.vel * dt
             projectile.ttl -= dt
@@ -126,7 +125,7 @@ class GameWorld:
             self.loss_reason = "Hull smashed on the rocks."
             return
         for well in self.wells:
-            if (well.pos - self.ship.pos).length() <= 16.0:
+            if (well.pos - self.ship.pos).length() <= self.config.well_maw_radius:
                 self.status = GameStatus.LOST
                 self.loss_reason = "Dragged into the gravity maw."
                 return

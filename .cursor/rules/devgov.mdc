@@ -1,0 +1,61 @@
+---
+description: DevGov — read session_context after init/check/plan/run; steer before opening other JSON
+globs:
+  - "**/*"
+alwaysApply: false
+---
+
+Tuning: For small repos you may set `alwaysApply: true`. For large monorepos, keep `alwaysApply: false` and use globs (e.g. `src/**`).
+
+## After init (bootstrap)
+
+On greenfield repos, run **`devgov check`** first (creates `devgov.toml` if missing). After init or implicit init, read **`session_context.json`** or `devgov context --json`. If **`invocation.command` is `bootstrap`**, complete **`devgov check`** — T0 is orientation only until analysis finishes.
+
+**Git with no commits yet:** If exit **11** and **`unknowns[].code` is `intake.git_repository_no_commits`**, run **`remediation[0]`** (e.g. `git commit --allow-empty -m "bootstrap"`), then **`devgov check --task "…"`** again — not a broken DevGov install. See **`docs/DEVGOV_AGENT_LOOP.md`** § Greenfield git (no commits yet).
+
+## Default loop (agents)
+
+After every `devgov check`, `devgov plan`, or `devgov run`:
+
+1. Read **`Artifacts/DevGov/agent/session_context.json`** (written by the command you just ran), or run **`devgov context --json`** to re-emit it (read-only; does not run analysis). Re-read after every check/plan/run.
+2. If **`next_action.steering_headline`** is set, read it before panicking on **`planned_verification_step_count: 0`**. Use **`change.plan_verification_shape`** with **`plan.diff_empty_no_changes`** / **`context.worktree_cleared_since_last_command`**. **`task.cli_text`** mirrors **`--task`**.
+3. After **`unknowns[]`**, scan **`obligations[]`** — unmet **`runner.*`** → run **`devgov run`** before claiming done; **`next_action.no_op_clean` alone is not enough**.
+4. **Polyglot:** scan **all** `boundaries[]` before cross-root edits — headline is execution lead, not repo identity; see **`docs/DEVGOV_AGENT_LOOP.md`** § Polyglot brownfield.
+5. **Contract depth (power path):** on `execution_contract.depth`, if `honest_uncertainty.reason_codes` contains **`depth.verification.graph_pytest_suppressed_headline_mismatch`**, do **not** run graph-origin `python -m pytest` — use T0 **`change.planned_steps_summary`** and **`boundaries[]`** (PH-INT-G3; see **`.cursor/rules/devgov-session-context-first.mdc`**).
+6. **Prior run proof (F-MCP-07):** on **`check`** / **`plan`**, read **`change.last_run_executed_steps_summary[]`** when present — **`executed_steps_summary`** is run-only; **`devgov context`** between run and check is optional.
+7. **Disk wins** over MCP cap JSON when fields are truncated.
+8. Steer from **`next_action.reason_codes[]`**, **`posture`**, and **`boundaries[]`**. If **`context.worktree_cleared_since_last_command`** is present, read **`prior_command`** — worktree cleared since the last DevGov command (commit/reset between commands), not an engine bug; re-run **`devgov check`** before implementing tests.
+9. **Material vs headline:** read **`posture.material_task_profile`** (+ source/confidence) on analyzed check/plan/run. When **`next_action.material_task_differs_from_headline`** is in **`reason_codes[]`**, do not infer stack commands from **`headline_profile`** alone — match **`boundaries[].profile`** to material.
+10. **Untracked vs empty diff:** when **`change.untracked_files_count > 0`** and **`change.changed_files == 0`** (and not **`scope_includes_untracked`**), read **`unknowns[]`** for **`context.analysis_excluded_untracked_files`** — not **`plan.diff_empty_no_changes`** alone; see **`.cursor/rules/devgov-session-context-first.mdc`** §2k.
+11. Open other artifacts only via **`refs.*`** when you need detail (plan steps, risk tier, contract, compliance).
+
+Full minimal contract: **`docs/DEVGOV_AGENT_LOOP.md`**. MCP (shipped): **`devgov_check`**, **`devgov_plan`**, **`devgov_run`**, **`devgov_context`** — same CLI via transport; disk T0 remains authoritative. Recommend host **approval** for **`devgov_run`** only. **One-time MCP setup (human):** `devgov doctor --setup-cursor --repo .` (or `--mcp-hints` / `--write-cursor-mcp`) — not an agent loop step.
+
+- **Activity stream (humans):** For terminal-only agent runs, ensure **`[features] emit_activity = true`** in `devgov.toml` or export **`DEVGOV_ACTIVITY=1`** so supervisors see motion in the IDE pane. MCP passes **`--emit-activity`** automatically. **Human supervisor:** In a **second terminal**, run `devgov activity tail --follow` to see DevGov motion while the agent runs `check`/`plan`/`run`. **Tier B IDE pane (once per machine):** after `pip install devgov`, run `devgov activity show-vsix-path` and install that VSIX (`devgov doctor` prints copy-paste commands) — **not** an agent step. If the pane is empty, run **`devgov doctor`** once (read **`Human activity feed (hints):`** and **Tier B install**) — do **not** add doctor or VSIX install to the agent loop. Agents steer from **T0/MCP only** — not doctor stdout, tail, or IDE webview.
+
+## Before editing
+
+```bash
+devgov check
+```
+
+Then read **`session_context.json`** on disk (primary steer surface). Optional: `devgov check --agent-json` if you need the full stdout envelope (~same wall time, much larger output).
+
+- If **`refs.risk_report`** or T1 envelopes show **`risk.tier`** is `HIGH` or `CRITICAL`, or human review is required, tell the user before proceeding.
+- Honor **`unknowns[]`** remediation (topology, polyglot, config) before guessing.
+- When **`change.engine_unknowns > 0`** and enrichment ran, disk T0 **pins** the enriched **`intake.engine_unknowns_present`** row on **`unknowns[]`** and mirrors on **`obligations[]`** even under cap; **`unknowns.list_truncated`** means other rows were suppressed. Generic fallback / human cap-only banner only when the enriched row is truly absent on disk.
+
+When you know the task, pass **`--task "brief honest description"`** (3–10 words).
+
+## After editing
+
+```bash
+devgov run
+```
+
+Optional: `--agent-json` for stdout envelope. Re-read **`session_context.json`** either way.
+
+- Do not treat the task as done if run outcome or gating says otherwise.
+- Merge/ship truth: CI and **`devgov verify-protocol`** — not chat rules alone.
+
+Exit code `0` is success for that command's class; read stderr **`DG-*`** codes when present.

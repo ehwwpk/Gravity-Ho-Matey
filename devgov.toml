@@ -1,0 +1,40 @@
+# Created by DevGov implicit init on first devgov check
+# CI setup: docs/ci_getting_started.md - local usage: docs/getting_started.md
+
+profile = "python"
+
+# DevGov Python onboarding:
+#   After devgov init, read Artifacts/DevGov/agent/session_context.json (bootstrap stub)
+#   or `devgov context --json`. After your first `devgov check`, that file is overwritten
+#   with full analysis — always re-read session_context after check/plan/run.
+#   Run devgov plan --emit-contract or devgov check --emit-contract to request contract artifacts.
+#   read_with_contract (AV-0.2) attaches on plan/run machine and agent envelopes when emit is requested.
+#   On check --emit-contract, read read_with_contract_not_attached instead (T1d).
+#   If contract_written is false, read contract_compiler_context, contract_emit_skipped, and the metrics route when enabled instead of looking for a disk contract.
+#   For scope/depth truth after emitted contracts, read Artifacts/DevGov/contracts/execution_contract.json and contract_compiler_context on machine/*.json.
+#   Concrete default examples may include Artifacts/DevGov/machine/plan.json, Artifacts/DevGov/agent/plan_agent.json,
+#   Artifacts/DevGov/machine/run.json, and Artifacts/DevGov/agent/run_agent.json.
+#   Use Artifacts/DevGov/contracts/execution_contract.json for scope/depth contract metadata.
+#   See docs/DEVGOV_AGENT_LOOP.md; maintainer detail: docs/internal/MAINTAINER_AGENT_INTEGRATION_REFERENCE.md
+
+# Topology: depth-one + flat-root discovery enabled by default on devgov init.
+# Set false if child folders are fixtures/vendored UI, or use: devgov init --topology off
+topology_discover_subprojects = true
+
+# Optional: skip fixture/vendor depth-one dirs from topology boundaries (MC-RUNPATH-EXCLUSION):
+# [govdev.topology]
+# excluded_child_dirnames = ["examples", "vendor"]  # replaces frozen defaults when set
+# exclusion_globs = ["path/to/workshop/**"]
+
+[paths]
+core = ["src"]
+
+[test_discovery]
+test_paths = ["tests"]
+
+# Human activity stream (M13.2): pane + `devgov activity tail` read activity.ndjson.
+# Set false only for CI-only repos:
+# [features]
+# emit_activity = false
+[features]
+emit_activity = true
