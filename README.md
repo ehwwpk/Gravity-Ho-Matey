@@ -1,5 +1,7 @@
 # Gravity Ho, Matey!
 
+A surprisingly fun Python minigame built while testing DevGov software pre-beta.
+
 A standard-library-first Python arcade project skeleton for a pirate-flavored gravity race / maze game.
 
 You pilot a tiny pixel-art ship through a dangerous cove full of gravity wells, walls, reefs, and tight corridors. Shots curve. Routes curve. Momentum matters. Collect every beacon, then hit the finish gate.
@@ -33,6 +35,12 @@ That keeps the project easy to open and iterate on in coding agents.
 ## Quick start
 
 From the repo root:
+
+```bash
+python run_game.py
+```
+
+Or as a module:
 
 ```bash
 python -m gravity_ho_matey
