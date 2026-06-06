@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
@@ -7,6 +9,8 @@ from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+from gravity_ho_matey.render.lighting import LightRig, arc_tone_for_point, material_for, well_material_kind
+from gravity_ho_matey.render.lit_draw import draw_lit_ship_hull
 
 
 def draw_gravity_heatmap(
@@ -147,30 +151,63 @@ def draw_well(
     kind: str,
     *,
     scale: float = 1.0,
+    rig: LightRig | None = None,
 ) -> None:
     r = radius * scale
+    theme = rig.theme if rig is not None else "cove"
+    material = material_for(well_material_kind(kind), theme=theme)
+    cx, cy = pos.x, pos.y
     if kind == "black_hole":
-        for i, frac in enumerate(_BLACK_HOLE_RING_FRACS):
-            ring = r * frac
-            width = 2 if i < 3 or frac >= 0.58 else 1
-            canvas.create_oval(pos.x - ring, pos.y - ring, pos.x + ring, pos.y + ring, outline=palette.BLACK_HOLE_RING, width=width)
-        core = max(10.0, 22 * scale)
-        canvas.create_oval(pos.x - core, pos.y - core, pos.x + core, pos.y + core, fill=palette.BLACK_HOLE_CORE, outline=palette.BLACK_HOLE, width=2)
+        ring_fracs = _BLACK_HOLE_RING_FRACS
+    else:
+        ring_fracs = _WELL_RING_FRACS
+    for i, frac in enumerate(ring_fracs):
+        ring = r * frac
+        width = 2 if (kind == "black_hole" and (i < 3 or frac >= 0.58)) or frac >= 0.72 else 1
+        if rig is not None:
+            _draw_lit_ring_oval(canvas, cx, cy, ring, rig, material, width)
+        else:
+            color = material.rim
+            canvas.create_oval(cx - ring, cy - ring, cx + ring, cy + ring, outline=color, width=width)
+    core = max(10.0, 22 * scale) if kind == "black_hole" else 10 * scale
+    if kind == "planet":
+        canvas.create_oval(cx - r * 0.55, cy - r * 0.55, cx + r * 0.55, cy + r * 0.55, fill=material.mid, outline="")
+    canvas.create_oval(cx - core, cy - core, cx + core, cy + core, fill=material.deep, outline=material.rim, width=2)
+    if rig is not None:
+        hx = cx + rig.key_dir.x * core * 0.35
+        hy = cy + rig.key_dir.y * core * 0.35
+        canvas.create_oval(hx - core * 0.35, hy - core * 0.35, hx + core * 0.25, hy + core * 0.25, fill=material.highlight, outline="")
+    if kind == "black_hole":
         label_color = "#c58cff"
     elif kind == "planet":
-        canvas.create_oval(pos.x - r, pos.y - r, pos.x + r, pos.y + r, outline=palette.PLANET_WELL, width=2)
-        canvas.create_oval(pos.x - r * 0.55, pos.y - r * 0.55, pos.x + r * 0.55, pos.y + r * 0.55, fill=palette.PLANET_CORE, outline="")
         label_color = palette.PLANET_LABEL
     else:
-        for frac in _WELL_RING_FRACS:
-            ring = r * frac
-            canvas.create_oval(pos.x - ring, pos.y - ring, pos.x + ring, pos.y + ring, outline=palette.WELL, width=2 if frac >= 0.72 else 1)
-        core = 10 * scale
-        canvas.create_oval(pos.x - core, pos.y - core, pos.x + core, pos.y + core, fill=palette.WELL_CORE, outline="")
         label_color = "#caaaff"
     if label and scale >= 0.35:
         font_size = max(6, int(8 * scale))
-        canvas.create_text(pos.x, pos.y - r - 10 * scale, text=label, fill=label_color, font=("Courier", font_size))
+        canvas.create_text(cx, cy - r - 10 * scale, text=label, fill=label_color, font=("Courier", font_size))
+
+
+def _draw_lit_ring_oval(
+    canvas: tk.Canvas,
+    cx: float,
+    cy: float,
+    radius: float,
+    rig: LightRig,
+    material,
+    width: int,
+) -> None:
+    segments = 24
+    for i in range(segments):
+        a0 = (i / segments) * math.tau
+        a1 = ((i + 1) / segments) * math.tau
+        x0 = cx + math.cos(a0) * radius
+        y0 = cy + math.sin(a0) * radius
+        x1 = cx + math.cos(a1) * radius
+        y1 = cy + math.sin(a1) * radius
+        mx, my = (x0 + x1) * 0.5, (y0 + y1) * 0.5
+        color = arc_tone_for_point(mx, my, cx, cy, rig, material)
+        canvas.create_line(x0, y0, x1, y1, fill=color, width=width)
 
 
 def draw_ship(
@@ -183,6 +220,7 @@ def draw_ship(
     invuln: float = 0.0,
     elapsed: float = 0.0,
     scale: float = 1.0,
+    rig: LightRig | None = None,
 ) -> None:
     if invuln > 0.0 and int(elapsed * 14) % 2 == 0:
         ring_r = 22 * scale
@@ -190,7 +228,21 @@ def draw_ship(
     nose = pos + Vec2.from_angle(angle) * (18 * scale)
     left = pos + Vec2.from_angle(angle + 2.45) * (13 * scale)
     right = pos + Vec2.from_angle(angle - 2.45) * (13 * scale)
-    canvas.create_polygon(nose.x, nose.y, left.x, left.y, right.x, right.y, fill=palette.SHIP, outline="#fff0b5", width=2)
+    theme = rig.theme if rig is not None else "cove"
+    material = material_for("ship", theme=theme)
+    if rig is not None:
+        draw_lit_ship_hull(
+            canvas,
+            (nose.x, nose.y),
+            (left.x, left.y),
+            (right.x, right.y),
+            rig=rig,
+            material=material,
+            outline="#fff0b5",
+            outline_width=2,
+        )
+    else:
+        canvas.create_polygon(nose.x, nose.y, left.x, left.y, right.x, right.y, fill=palette.SHIP, outline="#fff0b5", width=2)
     mast = pos - Vec2.from_angle(angle) * (4 * scale)
     sail_tip = mast + Vec2.from_angle(angle + 1.55) * (9 * scale)
     canvas.create_line(mast.x, mast.y, sail_tip.x, sail_tip.y, fill=palette.SHIP_TRIM, width=3)
@@ -198,6 +250,7 @@ def draw_ship(
         flame = pos - Vec2.from_angle(angle) * (20 * scale)
         width = 3 + int(2 * min(1.0, boost_burst / 0.35))
         canvas.create_line(pos.x, pos.y, flame.x, flame.y, fill="#ff7a4a", width=width)
+    _ = boost_energy
 
 
 def draw_velocity_trail(canvas: tk.Canvas, ship_pos: Vec2, ship_vel: Vec2, screen_pos: Vec2) -> None:

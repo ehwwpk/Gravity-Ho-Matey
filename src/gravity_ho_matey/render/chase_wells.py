@@ -7,6 +7,12 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import GravityWell
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
+from gravity_ho_matey.render.lighting import (
+    LightRig,
+    arc_tone_for_point,
+    material_for,
+    well_material_kind,
+)
 
 # Chase: floor rings — segment-stitched (never chord through behind-camera collapse).
 CHASE_RING_FRACS = (1.0, 0.72, 0.44)
@@ -61,9 +67,12 @@ def draw_chase_well(
     ship_pos: Vec2,
     ship_angle: float,
     default_maw: float,
+    rig: LightRig,
 ) -> None:
-    _ = elapsed, pos, scale
+    _ = elapsed, scale
     horizon = camera.chase_horizon_y()
+    material = material_for(well_material_kind(well.kind), theme=rig.theme)
+    screen_cx, screen_cy = pos.x, pos.y
 
     outer_pts = project_floor_ring(
         camera, well.pos, well.radius, ship_pos, ship_angle, horizon=horizon,
@@ -71,19 +80,10 @@ def draw_chase_well(
     any_ring = _ring_drawable(outer_pts, horizon)
 
     if well.kind == "black_hole":
-        ring_color = palette.BLACK_HOLE_RING
-        core_fill = palette.BLACK_HOLE_CORE
-        core_edge = palette.BLACK_HOLE
         label_color = "#c58cff"
     elif well.kind == "planet":
-        ring_color = palette.PLANET_WELL
-        core_fill = palette.PLANET_CORE
-        core_edge = ""
         label_color = palette.PLANET_LABEL
     else:
-        ring_color = palette.WELL
-        core_fill = palette.WELL_CORE
-        core_edge = ""
         label_color = "#caaaff"
 
     for frac in CHASE_RING_FRACS:
@@ -94,16 +94,7 @@ def draw_chase_well(
             continue
         any_ring = True
         width = 2 if frac >= 0.72 else 1
-        _stroke_ring(canvas, pts, ring_color, width)
-
-    if well.kind in _LETHAL_KINDS and well.kind != "black_hole":
-        maw = well.maw_radius if well.maw_radius is not None else default_maw
-        maw_pts = project_floor_ring(
-            camera, well.pos, maw * 1.05, ship_pos, ship_angle, horizon=horizon,
-        )
-        if _ring_drawable(maw_pts, horizon):
-            any_ring = True
-            _stroke_ring(canvas, maw_pts, palette.HELM_THREAT_LETHAL, 2)
+        _stroke_ring_lit(canvas, pts, screen_cx, screen_cy, rig, material, width)
 
     if not any_ring:
         return
@@ -116,7 +107,7 @@ def draw_chase_well(
         camera, well.pos, core_r, ship_pos, ship_angle, horizon=horizon,
     )
     if _ring_drawable(core_pts, horizon):
-        _fill_ring(canvas, core_pts, core_fill, core_edge or core_fill)
+        _fill_ring_lit(canvas, core_pts, material)
 
     if well.label and depth < camera.focal_length * 2.5 and floor_ring_span(outer_pts) >= 24.0:
         visible = [p for p in outer_pts if p is not None]
@@ -136,6 +127,35 @@ def _ring_drawable(pts: list[tuple[float, float] | None], horizon: float) -> boo
         return True
     max_y = max(y for _, y in visible)
     return len(visible) >= 3 and max_y >= horizon - _HORIZON_RING_SLACK * 0.35
+
+
+def _stroke_ring_lit(
+    canvas: tk.Canvas,
+    pts: list[tuple[float, float] | None],
+    center_x: float,
+    center_y: float,
+    rig: LightRig,
+    material,
+    width: int,
+) -> None:
+    for ax, ay, bx, by in _ring_segments(pts):
+        mx, my = (ax + bx) * 0.5, (ay + by) * 0.5
+        color = arc_tone_for_point(mx, my, center_x, center_y, rig, material)
+        canvas.create_line(ax, ay, bx, by, fill=color, width=width)
+
+
+def _fill_ring_lit(
+    canvas: tk.Canvas,
+    pts: list[tuple[float, float] | None],
+    material,
+) -> None:
+    visible = [p for p in pts if p is not None]
+    if len(visible) < 3:
+        return
+    flat: list[float] = []
+    for x, y in visible:
+        flat.extend((x, y))
+    canvas.create_polygon(*flat, fill=material.deep, outline=material.rim, width=1)
 
 
 def _stroke_ring(

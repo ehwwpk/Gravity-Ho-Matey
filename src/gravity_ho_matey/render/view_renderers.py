@@ -8,6 +8,8 @@ from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
+from gravity_ho_matey.render.lighting import LightRig
+from gravity_ho_matey.render.light_compose import LightLayerBuilder
 from gravity_ho_matey.render.edge_hints import draw_edge_hints
 from gravity_ho_matey.render.asteroid_viz import draw_tactical_asteroid
 from gravity_ho_matey.render.entity_viz import draw_beacon_marker, draw_gate_portal
@@ -35,6 +37,7 @@ class TacticalViewRenderer:
         vh = camera.viewport_height
         solar = world.config.level_theme == "solar"
         ship_pos = world.ship.pos
+        rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=camera.mode)
         bg = palette.SOLAR_BG if solar else palette.BACKGROUND
         canvas.create_rectangle(0, hud_top, vw, vh, fill=bg, outline="")
         if solar:
@@ -51,7 +54,7 @@ class TacticalViewRenderer:
                 asteroid,
                 camera,
                 hud_top=hud_top,
-                solar=solar,
+                rig=rig,
                 ship_pos=ship_pos,
                 ship_angle=world.ship.angle,
             )
@@ -64,6 +67,7 @@ class TacticalViewRenderer:
                 well.label,
                 well.kind,
                 scale=camera.tactical_scale * WELL_RING_VISUAL_SCALE,
+                rig=rig,
             )
         gate = world.finish_gate.rect
         gate_center = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
@@ -96,6 +100,7 @@ class TacticalViewRenderer:
             invuln=world.invuln_remaining,
             elapsed=world.elapsed,
             scale=1.08 * camera.tactical_scale / 1.1,
+            rig=rig,
         )
         draw_edge_hints(canvas, world, camera, hud_top=hud_top)
         draw_explosions(
@@ -188,6 +193,7 @@ class PerspectiveViewRenderer:
         ship_pos = world.ship.pos
         ship_angle = world.ship.angle
         elapsed = world.elapsed
+        rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=camera.mode)
         thrusting = world.ship.boost_flash > 0.0
         camera.chase_thrust_boost = 1.12 if thrusting else 1.0
 
@@ -200,6 +206,14 @@ class PerspectiveViewRenderer:
             canvas, field, camera, ship_pos, ship_angle, step=2, _world=world,
         )
 
+        light_layer = LightLayerBuilder(rig, elapsed=elapsed)
+        for well in world.wells:
+            wp = camera.world_to_screen(well.pos, ship_pos, ship_angle)
+            if wp.visible:
+                wscale = max(0.25, camera.perspective_scale(wp.depth) / camera.focal_length)
+                light_layer.add_well(well, Vec2(wp.x, wp.y), scale=wscale, depth=wp.depth)
+        light_layer.draw_onto_canvas(canvas, horizon_y=camera.chase_horizon_y())
+
         asteroid_sprites = collect_chase_asteroid_sprites(
             world.asteroids,
             camera,
@@ -209,7 +223,7 @@ class PerspectiveViewRenderer:
         draw_chase_asteroids(
             canvas,
             asteroid_sprites,
-            solar=solar,
+            rig=rig,
             urgency=asteroid_urgency(world),
             focal_length=camera.focal_length,
         )
@@ -260,6 +274,7 @@ class PerspectiveViewRenderer:
                     ship_pos=ship_pos,
                     ship_angle=ship_angle,
                     default_maw=world.config.well_maw_radius,
+                    rig=rig,
                 )
             elif kind == "gate":
                 pos, unlocked, gate_size, depth = payload
@@ -298,6 +313,7 @@ class PerspectiveViewRenderer:
             invuln=world.invuln_remaining,
             elapsed=elapsed,
             scale=CHASE_SHIP_SCALE,
+            rig=rig,
         )
         draw_xwing_cockpit_hud(
             canvas,

@@ -79,10 +79,13 @@ Presentation is split from simulation:
 | Module | Role |
 |--------|------|
 | `render/camera.py` | `ViewCamera`, `CameraMode` — follow + projection only |
+| `render/lighting.py` | `LightRig`, `MaterialTones`, shade bands — shared entity lighting |
+| `render/lit_draw.py` | Faceted illustrated polygons, lit ship hull, map glyphs |
+| `render/light_compose.py` | B-lite well glow layer (B-full multiply reserved for Pillow) |
 | `render/chase_fx.py` | Parallax sky, fog glow, speed streaks, engine bloom |
-| `render/chase_ground.py` | Bright gravity grid + flow chevrons |
-| `render/asteroid_viz.py` | Tactical, chase, and holo-map asteroid polygons + craters |
-| `render/chase_wells.py` | Well fog halos (singularity/planet/cove) |
+| `render/chase_ground.py` | Purple gravity floor wash (no threat coloring) |
+| `render/asteroid_viz.py` | Tactical/chase/map asteroid collection + draw |
+| `render/chase_wells.py` | Lit floor rings + cores (segment-stitched) |
 | `render/chase_entities.py` | Chase beacons, gates, enemies, pickups |
 | `render/view_renderers.py` | Tactical pan + chase pipeline orchestration |
 | `gameplay/gravity_field.py` | Baked well field for heatmap, chase floor, holo chart |

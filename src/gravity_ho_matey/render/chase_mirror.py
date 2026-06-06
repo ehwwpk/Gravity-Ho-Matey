@@ -8,7 +8,7 @@ from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
-from gravity_ho_matey.render.chase_threat import ThreatLevel, threat_at_point, threat_color
+from gravity_ho_matey.render.world_draw import gravity_field_color
 
 # Rear-view mirror — ship-frame tactical display (presentation only).
 _MIRROR_W = 332.0
@@ -141,10 +141,7 @@ def _draw_gravity_heatmap(
             norm = field.normalized_magnitude_at(world_pt)
             if norm < 0.08:
                 continue
-            threat = threat_at_point(world, world_pt)
-            tone = threat_color(threat, norm=norm)
-            if threat is ThreatLevel.LETHAL:
-                tone = palette.HELM_THREAT_LETHAL
+            tone = gravity_field_color(norm)
             tw = mw * _LATERAL_FRAC / _HEAT_LAT_STEPS * 0.92
             th = (mh - 18.0) / _HEAT_AFT_STEPS * 0.82
             alpha_strength = min(1.0, norm * 1.15 * pulse)
@@ -269,7 +266,14 @@ def draw_rear_view_mirror(
         draw_size = size * boost
         if kind in ("well_lethal", "enemy", "hostile_shot", "asteroid") and closing > 40.0:
             ring_r = draw_size + 3.0 + pulse * 2.0
-            ring_color = palette.HELM_THREAT_LETHAL if kind == "well_lethal" else palette.HELM_THREAT_HEAVY
+            if kind == "well_lethal":
+                ring_color = palette.BLACK_HOLE_RING
+            elif kind == "enemy":
+                ring_color = palette.ENEMY_EDGE
+            elif kind == "hostile_shot":
+                ring_color = palette.HOSTILE_PROJECTILE
+            else:
+                ring_color = palette.HOLO_ASTEROID_EDGE
             canvas.create_oval(px - ring_r, py - ring_r, px + ring_r, py + ring_r, outline=ring_color, width=1)
 
         if kind in ("well", "well_lethal"):

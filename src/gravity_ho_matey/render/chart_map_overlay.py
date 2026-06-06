@@ -11,6 +11,7 @@ from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.level_registry import LEVEL_LABELS
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
+from gravity_ho_matey.render.camera import CameraMode
 from gravity_ho_matey.render.entity_viz import draw_beacon_glyph, draw_gate_glyph
 from gravity_ho_matey.render.world_draw import gravity_field_color
 
@@ -358,6 +359,9 @@ class ChartMapOverlay:
         glyph_scale = max(0.35, min(0.85, t.scale * 1.1))
 
         from gravity_ho_matey.render.asteroid_viz import draw_map_asteroid_glyph
+        from gravity_ho_matey.render.lighting import LightRig
+
+        map_rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=CameraMode.TACTICAL)
 
         for asteroid in world.asteroids:
             hit = self._world_to_map(asteroid.pos, t)
@@ -368,7 +372,7 @@ class ChartMapOverlay:
                 Vec2(hit[0], hit[1]),
                 asteroid,
                 scale=max(0.22, min(0.55, glyph_scale * 0.55)),
-                solar=world.config.level_theme == "solar",
+                rig=map_rig,
             )
 
         for well in world.wells:

@@ -1,0 +1,216 @@
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+from gravity_ho_matey.core.vector import Vec2
+from gravity_ho_matey.render import palette
+from gravity_ho_matey.render.camera import CameraMode
+
+_KEY_COVE = Vec2(-0.65, -0.75).normalized()
+_KEY_SOLAR = Vec2(-0.55, -0.80).normalized()
+
+
+@dataclass(frozen=True, slots=True)
+class LightRig:
+    """Screen-space lighting rig — shared tactical + chase entity drawing."""
+
+    theme: str
+    view: str
+    key_dir: Vec2
+    ambient: float
+    rim_strength: float
+
+    @staticmethod
+    def for_play(*, theme: str, camera_mode: CameraMode) -> LightRig:
+        solar = theme == "solar"
+        key = _KEY_SOLAR if solar else _KEY_COVE
+        view = "chase" if camera_mode is CameraMode.CHASE else "tactical"
+        rim = 0.55 if view == "chase" else 0.45
+        if solar:
+            rim += 0.05
+        return LightRig(
+            theme=theme,
+            view=view,
+            key_dir=key,
+            ambient=0.28 if solar else 0.35,
+            rim_strength=min(0.65, rim),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialTones:
+    highlight: str
+    mid: str
+    shadow: str
+    deep: str
+    rim: str
+    crater_pit: str
+    crater_rim_hi: str
+
+
+def material_for(kind: str, *, theme: str) -> MaterialTones:
+    solar = theme == "solar"
+    if kind == "asteroid":
+        if solar:
+            return MaterialTones(
+                highlight=palette.CHASE_ASTEROID_HIGHLIGHT,
+                mid=palette.CHASE_ASTEROID_FACE,
+                shadow=palette.CHASE_ASTEROID_SIDE,
+                deep=palette.CHASE_ASTEROID_SIDE_DARK,
+                rim=palette.CHASE_ASTEROID_RIM,
+                crater_pit=palette.ASTEROID_CRATER,
+                crater_rim_hi=palette.CHASE_ASTEROID_REGOLITH,
+            )
+        return MaterialTones(
+            highlight="#6a90b0",
+            mid=palette.HOLO_ASTEROID_TOP,
+            shadow=palette.HOLO_ASTEROID_SIDE,
+            deep=palette.HOLO_ASTEROID_SIDE_DARK,
+            rim=palette.HOLO_ASTEROID_EDGE,
+            crater_pit=palette.ASTEROID_CRATER,
+            crater_rim_hi=palette.HOLO_ASTEROID_REGOLITH,
+        )
+    if kind == "well_black_hole":
+        return MaterialTones(
+            highlight=palette.BLACK_HOLE_RING,
+            mid="#2a1048",
+            shadow=palette.BLACK_HOLE,
+            deep=palette.BLACK_HOLE_CORE,
+            rim=palette.BLACK_HOLE_RING,
+            crater_pit=palette.BLACK_HOLE_CORE,
+            crater_rim_hi="#8b50cc",
+        )
+    if kind == "well_planet":
+        return MaterialTones(
+            highlight="#ffe8a8",
+            mid=palette.PLANET_CORE,
+            shadow="#c89848",
+            deep="#8a6830",
+            rim=palette.PLANET_WELL,
+            crater_pit="#6a5020",
+            crater_rim_hi="#fff0c0",
+        )
+    if kind == "well_cove":
+        return MaterialTones(
+            highlight="#d0a8ff",
+            mid=palette.WELL_CORE,
+            shadow=palette.WELL,
+            deep="#4a2080",
+            rim=palette.WELL,
+            crater_pit="#3a1868",
+            crater_rim_hi="#e0c0ff",
+        )
+    if kind == "ship":
+        return MaterialTones(
+            highlight="#fff0c0",
+            mid=palette.SHIP,
+            shadow="#c8a848",
+            deep="#8a7030",
+            rim="#fff0b5",
+            crater_pit=palette.SHIP_TRIM,
+            crater_rim_hi=palette.SHIP_TRIM,
+        )
+    return material_for("asteroid", theme=theme)
+
+
+def shade_band(normal_dot_key: float) -> int:
+    """Map lighting response to 0=highlight .. 3=deep."""
+    if normal_dot_key > 0.35:
+        return 0
+    if normal_dot_key > 0.05:
+        return 1
+    if normal_dot_key > -0.28:
+        return 2
+    return 3
+
+
+def tone_for_band(material: MaterialTones, band: int) -> str:
+    if band <= 0:
+        return material.highlight
+    if band == 1:
+        return material.mid
+    if band == 2:
+        return material.shadow
+    return material.deep
+
+
+def poly_centroid(pts: list[tuple[float, float]]) -> tuple[float, float]:
+    cx = sum(x for x, _ in pts) / len(pts)
+    cy = sum(y for _, y in pts) / len(pts)
+    return cx, cy
+
+
+def face_normal_outward(
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+    cx: float,
+    cy: float,
+) -> tuple[float, float]:
+    """Outward normal for CCW edge a→b on polygon centered near (cx, cy)."""
+    mx = (ax + bx) * 0.5
+    my = (ay + by) * 0.5
+    ex, ey = bx - ax, by - ay
+    nx, ny = ey, -ex
+    nl = math.hypot(nx, ny)
+    if nl <= 1e-6:
+        return 0.0, -1.0
+    nx /= nl
+    ny /= nl
+    if (mx - cx) * nx + (my - cy) * ny < 0.0:
+        nx, ny = -nx, -ny
+    return nx, ny
+
+
+def normal_dot_key(nx: float, ny: float, rig: LightRig) -> float:
+    return nx * rig.key_dir.x + ny * rig.key_dir.y
+
+
+def arc_tone_for_point(
+    px: float,
+    py: float,
+    center_x: float,
+    center_y: float,
+    rig: LightRig,
+    material: MaterialTones,
+) -> str:
+    dx = px - center_x
+    dy = py - center_y
+    dist = math.hypot(dx, dy)
+    if dist <= 1e-6:
+        return material.deep
+    nd = normal_dot_key(dx / dist, dy / dist, rig)
+    return tone_for_band(material, shade_band(nd))
+
+
+def lerp_hex(a: str, b: str, t: float) -> str:
+    t = max(0.0, min(1.0, t))
+    ar, ag, ab = _hex_rgb(a)
+    br, bg, bb = _hex_rgb(b)
+    r = int(ar + (br - ar) * t)
+    g = int(ag + (bg - ag) * t)
+    bl = int(ab + (bb - ab) * t)
+    return f"#{r:02x}{g:02x}{bl:02x}"
+
+
+def gravity_tone_with_sink(base: str, *, sink_strength: float) -> str:
+    if sink_strength <= 0.01:
+        return base
+    return lerp_hex(base, "#0a0610", min(1.0, sink_strength))
+
+
+def _hex_rgb(color: str) -> tuple[int, int, int]:
+    c = color.lstrip("#")
+    if len(c) != 6:
+        return 0, 0, 0
+    return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+
+
+def well_material_kind(well_kind: str) -> str:
+    if well_kind == "black_hole":
+        return "well_black_hole"
+    if well_kind == "planet":
+        return "well_planet"
+    return "well_cove"
