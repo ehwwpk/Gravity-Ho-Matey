@@ -11,7 +11,7 @@ from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 class GameStatus(Enum):
     RUNNING = auto()
     WON = auto()
-    LOST = auto()
+    SHIP_HIT = auto()
 
 
 @dataclass(slots=True)

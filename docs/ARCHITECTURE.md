@@ -34,10 +34,21 @@ Scene transitions that start gameplay should go through `scenes/game_flow.start_
 
 | Object | Lifetime | Owns |
 |--------|----------|------|
-| `CampaignState` | Whole campaign (3 lives, collected power-ups) | lives, `powerups` set |
-| `GameWorld` | Single level attempt | ship, enemies, pickups, beacons, projectiles |
+| `CampaignState` | Whole campaign (3 lives, collected power-ups) | lives, `hull_chunks`, `powerups` set |
+| `GameWorld` | Single level attempt | ship, enemies, pickups, beacons, projectiles, invuln timer |
 
-`gameplay/session.wire_world_for_campaign()` applies carried bonuses and connects pickup collection to the campaign. This keeps `CampaignState` free of `GameWorld` imports.
+`gameplay/session.wire_world_for_campaign()` applies carried bonuses and connects pickup collection to the campaign. `capture_level_spawn()` + `respawn_ship_at_spawn()` handle in-level chip respawns with 0.66s invulnerability. `ensure_active_life_hull()` refills hull only when entering play with zero chunks (new life); partial hull carries between levels.
+
+## Damage model
+
+`gameplay/damage.py` defines chip vs lethal sources:
+
+| Source | Severity |
+|--------|----------|
+| Wall, out-of-bounds, enemy | 1 hull chunk (in-level respawn) |
+| Gravity maw (singularity, planet, cove well) | Lethal (whole life) |
+
+Three hull chunks per life; three chips on one life costs one campaign life. Partial hull carries between levels. Only `PlayScene` applies damage to `CampaignState`.
 
 ## Gameplay model
 
@@ -57,8 +68,8 @@ Scene transitions that start gameplay should go through `scenes/game_flow.start_
 
 ## Rendering model
 
-The Tk renderer converts world + campaign HUD data into canvas primitives. No game rules live here.
+The Tk renderer converts world + campaign HUD data into canvas primitives. `render/hud_overlay.py` draws the retro sci-fi command overlay (lives, hull chunks, beacons, chrono, reactor, cargo). No game rules live here.
 
 ## Tests
 
-Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, enemy patrol/combat, and registry alignment.
+Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, and registry alignment.

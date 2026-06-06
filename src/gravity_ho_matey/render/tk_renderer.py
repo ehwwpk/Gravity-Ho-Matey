@@ -3,17 +3,19 @@ from __future__ import annotations
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.campaign import CampaignState, MAX_LIVES
+from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE
 from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_LABELS, PowerUpKind
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.gameplay.progress import is_level_selectable
 from gravity_ho_matey.render import palette
+from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
 
 
 class TkRenderer:
     def __init__(self, canvas: tk.Canvas) -> None:
         self.canvas = canvas
+        self._hud = SciFiHudOverlay()
 
     def clear(self) -> None:
         self.canvas.delete("all")
@@ -34,7 +36,8 @@ class TkRenderer:
             "Collect all beacons, then escape through the finish gate.",
             "A/D or ←/→ rotate     W/↑ thrust     Shift boost     R restarts level",
             "Space fires curved cannon shots — sink patrol skiffs for power-ups.",
-            "3 lives for the whole campaign. Power-ups carry across levels.",
+            "3 lives per campaign — 3 hull chunks per life. Power-ups carry across levels.",
+            "Planet wells and the singularity are lethal. Reef scrapes cost 1 chunk.",
             f"1 — Full campaign (Cove)     {level_two_line}",
             "Enter starts the campaign at Cove.",
         ]
@@ -49,15 +52,16 @@ class TkRenderer:
             )
         self._draw_demo_ship(Vec2(480, 455), 0.0, scale=2.4)
 
-    def draw_world(self, world: GameWorld, campaign: CampaignState) -> None:
+    def draw_world(self, world: GameWorld, campaign: CampaignState, *, hud_alert: str = "") -> None:
         self.clear()
         solar = world.config.level_theme == "solar"
         bg = palette.SOLAR_BG if solar else palette.BACKGROUND
+        hud_top = SciFiHudOverlay.PANEL_H + (22 if hud_alert else 0)
         self.canvas.create_rectangle(0, 0, world.config.width, world.config.height, fill=bg, outline="")
         if solar:
-            self._draw_starfield(dense=True)
+            self._draw_starfield(dense=True, y_offset=hud_top)
         else:
-            self._draw_grid(world.config.width, world.config.height)
+            self._draw_grid(world.config.width, world.config.height, y_offset=hud_top)
         self._draw_gate(world, solar)
         for wall in world.walls:
             r = wall.rect
@@ -81,8 +85,10 @@ class TkRenderer:
             self.canvas.create_oval(p.x - 4, p.y - 4, p.x + 4, p.y + 4, fill=palette.PROJECTILE, outline="")
             tail = p - projectile.vel.normalized() * 14
             self.canvas.create_line(tail.x, tail.y, p.x, p.y, fill=palette.PROJECTILE)
-        self._draw_ship(world.ship.pos, world.ship.angle, world.ship.boost_energy)
-        self._draw_hud(world, campaign)
+        self._draw_ship(world.ship.pos, world.ship.angle, world.ship.boost_energy, world.invuln_remaining, world.elapsed)
+        self._hud.draw(self.canvas, world, campaign, hud_alert=hud_alert)
+        if world.status is GameStatus.WON:
+            self.canvas.create_text(480, 320, text="YOU ESCAPED", fill=palette.GATE_OPEN, font=("Courier", 28, "bold"))
 
     def draw_end(
         self,
@@ -115,7 +121,10 @@ class TkRenderer:
                 prompt = "Enter: return to title     Esc: title"
         else:
             title = "Shipwrecked."
-            subtitle = f"{reason or 'The void claims another captain.'}   Lives left: {campaign.lives}"
+            subtitle = (
+                f"{reason or 'The void claims another captain.'}   "
+                f"Lives left: {campaign.lives}   Hull: {campaign.hull_chunks}/{CHUNKS_PER_LIFE}"
+            )
             prompt = "Enter: try again     Esc: title"
         self.canvas.create_text(480, 220, text=title, fill=palette.TEXT, font=("Courier", 30, "bold"))
         self.canvas.create_text(480, 275, text=subtitle, fill=palette.MUTED_TEXT, font=("Courier", 16))
@@ -124,22 +133,32 @@ class TkRenderer:
             perks = "Carried loot: " + ", ".join(POWERUP_LABELS[kind] for kind in sorted(campaign.powerups, key=lambda k: k.name))
             self.canvas.create_text(480, 410, text=perks, fill=palette.MUTED_TEXT, font=("Courier", 12))
 
-    def _draw_grid(self, width: int, height: int) -> None:
+    def _draw_grid(self, width: int, height: int, y_offset: int = 0) -> None:
         for x in range(0, width, 48):
-            self.canvas.create_line(x, 0, x, height, fill=palette.SEA_GRID)
-        for y in range(0, height, 48):
+            self.canvas.create_line(x, y_offset, x, height, fill=palette.SEA_GRID)
+        for y in range(y_offset, height, 48):
             self.canvas.create_line(0, y, width, y, fill=palette.SEA_GRID)
 
-    def _draw_starfield(self, dense: bool = False) -> None:
+    def _draw_starfield(self, dense: bool = False, y_offset: int = 0) -> None:
         count = 140 if dense else 80
         for i in range(count):
             x = (i * 83 + 17) % 960
-            y = (i * 47 + 31) % 640
+            y = y_offset + (i * 47 + 31) % max(1, 640 - y_offset)
             size = 3 if dense and i % 5 == 0 else 2
             tone = "#3a5570" if dense and i % 7 == 0 else "#294764"
             self.canvas.create_rectangle(x, y, x + size, y + size, fill=tone, outline="")
 
-    def _draw_ship(self, pos: Vec2, angle: float, boost: float) -> None:
+    def _draw_ship(self, pos: Vec2, angle: float, boost: float, invuln: float = 0.0, elapsed: float = 0.0) -> None:
+        if invuln > 0.0 and int(elapsed * 14) % 2 == 0:
+            ring_r = 22
+            self.canvas.create_oval(
+                pos.x - ring_r,
+                pos.y - ring_r,
+                pos.x + ring_r,
+                pos.y + ring_r,
+                outline=palette.HUD_ACCENT,
+                width=2,
+            )
         nose = pos + Vec2.from_angle(angle) * 18
         left = pos + Vec2.from_angle(angle + 2.45) * 13
         right = pos + Vec2.from_angle(angle - 2.45) * 13
@@ -211,14 +230,3 @@ class TkRenderer:
             outline="#fff",
         )
 
-    def _draw_hud(self, world: GameWorld, campaign: CampaignState) -> None:
-        lives = "".join("♥" if i < campaign.lives else "♡" for i in range(MAX_LIVES))
-        perk_count = len(campaign.powerups)
-        status = (
-            f"{world.config.level_name}   Lives: {lives}   Beacons: {world.beacons_remaining}   "
-            f"Time: {world.elapsed:0.1f}s   Boost: {int(world.ship.boost_energy * 100)}%   Loot: {perk_count}"
-        )
-        self.canvas.create_rectangle(0, 0, world.config.width, 28, fill="#050a12", outline="")
-        self.canvas.create_text(14, 14, anchor="w", text=status, fill=palette.TEXT, font=("Courier", 12, "bold"))
-        if world.status is GameStatus.WON:
-            self.canvas.create_text(480, 320, text="YOU ESCAPED", fill=palette.GATE_OPEN, font=("Courier", 28, "bold"))

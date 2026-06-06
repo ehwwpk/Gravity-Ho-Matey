@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from gravity_ho_matey.core.vector import Vec2
+from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSource, default_reason
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
 from gravity_ho_matey.gameplay.entities import (
     Beacon,
@@ -43,7 +44,10 @@ class GameWorld:
     on_powerup_collected: Callable[[PowerUpKind], None] | None = None
     status: GameStatus = GameStatus.RUNNING
     elapsed: float = 0.0
-    loss_reason: str = ""
+    last_damage: DamageEvent | None = None
+    spawn_pos: Vec2 = field(default_factory=Vec2)
+    spawn_angle: float = 0.0
+    invuln_remaining: float = 0.0
 
     @property
     def beacons_remaining(self) -> int:
@@ -59,6 +63,7 @@ class GameWorld:
 
         dt = max(0.0, min(dt, 1.0 / 20.0))
         self.elapsed += dt
+        self._tick_invuln(dt)
         self._update_ship(dt, intent)
         self._update_projectiles(dt)
         self._update_enemies(dt)
@@ -67,6 +72,20 @@ class GameWorld:
         self._check_enemy_collisions()
         self._check_finish()
         self._check_loss()
+
+    def _tick_invuln(self, dt: float) -> None:
+        if self.invuln_remaining > 0.0:
+            self.invuln_remaining = max(0.0, self.invuln_remaining - dt)
+
+    def _register_ship_hit(self, source: DamageSource, reason: str = "") -> None:
+        if self.invuln_remaining > 0.0:
+            return
+        theme = self.config.level_theme
+        self.last_damage = DamageEvent(
+            source=source,
+            reason=reason or default_reason(source, theme),
+        )
+        self.status = GameStatus.SHIP_HIT
 
     def _update_ship(self, dt: float, intent: ControlIntent) -> None:
         turn_rate = self.config.turn_rate * self.ship.turn_rate_multiplier
@@ -132,7 +151,12 @@ class GameWorld:
     def _update_enemies(self, dt: float) -> None:
         for enemy in self.enemies:
             if enemy.alive:
-                enemy.advance(dt)
+                enemy.integrate(
+                    dt,
+                    self.wells,
+                    gravity_scale=self.config.gravity_scale,
+                    drag=self.config.drag,
+                )
 
     def _prune_dead_enemies(self) -> None:
         self.enemies = [enemy for enemy in self.enemies if enemy.alive]
@@ -163,11 +187,12 @@ class GameWorld:
             if not enemy.alive:
                 continue
             if (enemy.pos - self.ship.pos).length() <= enemy.radius + self.ship.radius:
-                self.status = GameStatus.LOST
-                self.loss_reason = "Hull breached by a patrol skiff."
+                self._register_ship_hit(DamageSource.ENEMY)
                 return
 
     def _check_finish(self) -> None:
+        if self.status is not GameStatus.RUNNING:
+            return
         if self.finish_unlocked and self.finish_gate.rect.intersects_circle(self.ship.pos, self.ship.radius):
             self.status = GameStatus.WON
 
@@ -175,29 +200,24 @@ class GameWorld:
         if self.status is not GameStatus.RUNNING:
             return
         if not self._point_in_bounds(self.ship.pos, margin=0):
-            self.status = GameStatus.LOST
-            self.loss_reason = self._out_of_bounds_reason()
+            self._register_ship_hit(DamageSource.OUT_OF_BOUNDS)
             return
         if any(wall.rect.intersects_circle(self.ship.pos, self.ship.radius) for wall in self.walls):
-            self.status = GameStatus.LOST
-            self.loss_reason = self._wall_impact_reason()
+            self._register_ship_hit(DamageSource.WALL)
             return
         for well in self.wells:
             maw = well.maw_radius if well.maw_radius is not None else self.config.well_maw_radius
             if (well.pos - self.ship.pos).length() <= maw:
-                self.status = GameStatus.LOST
-                self.loss_reason = "Spaghettified by the singularity." if well.kind == "black_hole" else "Dragged into the gravity maw."
+                reason = self._gravity_maw_reason(well)
+                self._register_ship_hit(DamageSource.GRAVITY_MAW, reason=reason)
                 return
+
+    def _gravity_maw_reason(self, well: GravityWell) -> str:
+        if well.kind == "black_hole":
+            return "Spaghettified by the singularity."
+        if well.kind == "planet":
+            return f"Swallowed by {well.label or 'the planet'}."
+        return "Dragged into the gravity maw."
 
     def _point_in_bounds(self, p: Vec2, margin: float) -> bool:
         return -margin <= p.x <= self.config.width + margin and -margin <= p.y <= self.config.height + margin
-
-    def _out_of_bounds_reason(self) -> str:
-        if self.config.level_theme == "solar":
-            return "Drifted beyond the star chart."
-        return "Lost beyond the reef."
-
-    def _wall_impact_reason(self) -> str:
-        if self.config.level_theme == "solar":
-            return "Hull cracked on an asteroid."
-        return "Hull smashed on the rocks."

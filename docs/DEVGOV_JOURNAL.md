@@ -151,4 +151,30 @@ Same flaky check pattern; **run** remains the effective gate for this repo.
 
 ---
 
+## 2026-06-02 — Hull chunk health + retro HUD overlay
+
+### +EV · Damage pipeline isolated in `gameplay/damage.py`
+Chip (wall, bounds, enemy) vs lethal (gravity maw: singularity, planet, cove well) rules live in one table; `CampaignState.apply_damage()` is the only mutator. PlayScene owns respawn + 0.66s invuln — no scene pause on chip.
+
+### +EV · Hostile `test_health.py` (20 cases) caught invuln dt cap + integration ordering
+Tests forced clearing invuln between repeated OOB hits and looped decay ticks (world caps dt at 50ms). Full suite **44 passed**.
+
+### +EV · Sci-fi HUD overlay (`render/hud_overlay.py`)
+Bracketed panels: CAPTAIN / HULL INTEGRITY / NAV BEACONS / CHRONO / REACTOR / CARGO MANIFEST; shield ring + alert strip on chip.
+
+### Confirmed design locked in
+- Planet wells + singularity + cove wells: **lethal**
+- Out of bounds / walls / enemies: **1 chunk**, in-level respawn
+- **0.66s** invuln, no pause
+- Partial hull **carries between levels**
+
+### Realistic weight
+**Strong +EV** — layered damage + campaign state is easy to get wrong; hostile tests + architecture doc update reduce regression risk.
+
+### Post-audit fixes (same session)
+- `_check_finish` now requires `RUNNING` so a lethal/enemy hit cannot be overwritten by a same-frame gate crossing.
+- Hull stays at 0 after life loss until `ensure_active_life_hull()` on `PlayScene` entry — end screen shows honest 0/3; partial hull still carries level-to-level.
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->
