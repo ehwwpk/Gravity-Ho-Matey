@@ -10,8 +10,10 @@ from gravity_ho_matey.render.camera import ViewCamera
 
 # Chase: floor rings — segment-stitched (never chord through behind-camera collapse).
 CHASE_RING_FRACS = (1.0, 0.72, 0.44)
-_FLOOR_SEGMENTS = 48
+_FLOOR_SEGMENTS = 56
 _MAX_SEGMENT_PX = 160.0
+_HORIZON_RING_SLACK = 14.0
+_MIN_RING_SPAN_PX = 12.0
 _LETHAL_KINDS = frozenset({"black_hole", "planet"})
 
 
@@ -32,7 +34,7 @@ def project_floor_ring(
         a = (i / _FLOOR_SEGMENTS) * math.tau
         wp = center + Vec2(math.cos(a), math.sin(a)) * world_radius
         p = camera.world_to_screen(wp, ship_pos, ship_angle)
-        if not p.visible or p.y < horizon - 2.0:
+        if not p.visible or p.y < horizon - _HORIZON_RING_SLACK:
             pts.append(None)
         else:
             pts.append((p.x, p.y))
@@ -66,8 +68,7 @@ def draw_chase_well(
     outer_pts = project_floor_ring(
         camera, well.pos, well.radius, ship_pos, ship_angle, horizon=horizon,
     )
-    if not _ring_on_floor(outer_pts, horizon):
-        return
+    any_ring = _ring_drawable(outer_pts, horizon)
 
     if well.kind == "black_hole":
         ring_color = palette.BLACK_HOLE_RING
@@ -89,18 +90,23 @@ def draw_chase_well(
         pts = project_floor_ring(
             camera, well.pos, well.radius * frac, ship_pos, ship_angle, horizon=horizon,
         )
-        if not _ring_on_floor(pts, horizon):
+        if not _ring_drawable(pts, horizon):
             continue
+        any_ring = True
         width = 2 if frac >= 0.72 else 1
         _stroke_ring(canvas, pts, ring_color, width)
 
-    if well.kind in _LETHAL_KINDS:
+    if well.kind in _LETHAL_KINDS and well.kind != "black_hole":
         maw = well.maw_radius if well.maw_radius is not None else default_maw
         maw_pts = project_floor_ring(
             camera, well.pos, maw * 1.05, ship_pos, ship_angle, horizon=horizon,
         )
-        if _ring_on_floor(maw_pts, horizon):
+        if _ring_drawable(maw_pts, horizon):
+            any_ring = True
             _stroke_ring(canvas, maw_pts, palette.HELM_THREAT_LETHAL, 2)
+
+    if not any_ring:
+        return
 
     core_r = max(10.0, min(22.0, well.radius * 0.09))
     if well.kind in _LETHAL_KINDS:
@@ -109,7 +115,7 @@ def draw_chase_well(
     core_pts = project_floor_ring(
         camera, well.pos, core_r, ship_pos, ship_angle, horizon=horizon,
     )
-    if _ring_on_floor(core_pts, horizon):
+    if _ring_drawable(core_pts, horizon):
         _fill_ring(canvas, core_pts, core_fill, core_edge or core_fill)
 
     if well.label and depth < camera.focal_length * 2.5 and floor_ring_span(outer_pts) >= 24.0:
@@ -121,12 +127,15 @@ def draw_chase_well(
             canvas.create_text(cx, top_y - 8, text=well.label, fill=label_color, font=("Courier", font_size))
 
 
-def _ring_on_floor(pts: list[tuple[float, float] | None], horizon: float) -> bool:
+def _ring_drawable(pts: list[tuple[float, float] | None], horizon: float) -> bool:
+    """True when any ring arc is worth stroking — including lateral side arcs."""
     visible = [p for p in pts if p is not None]
-    if len(visible) < 4:
+    if len(visible) < 2:
         return False
-    avg_y = sum(y for _, y in visible) / len(visible)
-    return avg_y >= horizon + 2.0
+    if floor_ring_span(pts) >= _MIN_RING_SPAN_PX:
+        return True
+    max_y = max(y for _, y in visible)
+    return len(visible) >= 3 and max_y >= horizon - _HORIZON_RING_SLACK * 0.35
 
 
 def _stroke_ring(

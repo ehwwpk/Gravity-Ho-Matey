@@ -160,14 +160,15 @@ def draw_chase_asteroids(
     for depth, screen_points, asteroid in sprites:
         scale = max(0.35, min(1.4, focal_length / max(depth, 1.0)))
         width = max(1, int(1 + scale * 2.2))
+        edge_color = edge
         if urgency > 0.12:
-            edge = palette.HELM_THREAT_HEAVY if urgency > 0.45 else palette.HELM_THREAT_LETHAL
+            edge_color = palette.HELM_THREAT_HEAVY if urgency > 0.45 else palette.HELM_THREAT_LETHAL
             width += 1
         draw_asteroid_polygon(
             canvas,
             screen_points,
             fill=fill,
-            edge=edge,
+            edge=edge_color,
             crater=crater,
             seed=asteroid.seed,
             radius_hint=asteroid.approximate_radius() * scale,

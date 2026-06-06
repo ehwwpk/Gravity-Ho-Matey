@@ -6,18 +6,18 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.camera import ViewCamera
-from gravity_ho_matey.render.chase_threat import threat_at_point, threat_color
+from gravity_ho_matey.render.world_draw import gravity_field_color
 
 
 def draw_chase_gravity_heatmap(
     canvas: tk.Canvas,
     field: GravityField,
     camera: ViewCamera,
-    world: GameWorld,
     ship_pos: Vec2,
     ship_angle: float,
     *,
     step: int = 2,
+    _world: GameWorld | None = None,
 ) -> None:
     """Purple floor wash — flat projection, no grid lines."""
     horizon = camera.chase_horizon_y()
@@ -38,7 +38,7 @@ def draw_chase_gravity_heatmap(
             depth_scale = camera.perspective_scale(p.depth) / camera.focal_length
             half_w = field.cell_size * step * 0.58 * depth_scale
             half_h = half_w * 0.32
-            tone = threat_color(threat_at_point(world, wp, check_asteroids=False), norm=norm)
+            tone = gravity_field_color(norm)
             canvas.create_rectangle(
                 p.x - half_w,
                 p.y - half_h,

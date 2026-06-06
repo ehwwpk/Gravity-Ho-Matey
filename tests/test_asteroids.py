@@ -98,5 +98,6 @@ class AsteroidWorldTests(unittest.TestCase):
             self.assertIn("ring", kinds)
 
 
+
 if __name__ == "__main__":
     unittest.main()

@@ -196,7 +196,9 @@ class PerspectiveViewRenderer:
         draw_chase_sky(canvas, camera, world)
 
         draw_chase_floor_gradient(canvas, camera)
-        draw_chase_gravity_heatmap(canvas, field, camera, world, ship_pos, ship_angle, step=2)
+        draw_chase_gravity_heatmap(
+            canvas, field, camera, ship_pos, ship_angle, step=2, _world=world,
+        )
 
         asteroid_sprites = collect_chase_asteroid_sprites(
             world.asteroids,

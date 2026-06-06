@@ -19,7 +19,7 @@ def draw_gravity_heatmap(
     world: GameWorld | None = None,
     check_asteroids: bool = False,
 ) -> None:
-    from gravity_ho_matey.render.chase_threat import threat_at_point, threat_color
+    _ = world, check_asteroids
 
     for row in range(0, field.rows, alpha_step):
         for col in range(0, field.cols, alpha_step):
@@ -37,13 +37,7 @@ def draw_gravity_heatmap(
             size = field.cell_size * alpha_step
             if sx + size < 0 or sy + size < y_offset or sx > camera.viewport_width or sy > camera.viewport_height:
                 continue
-            if world is not None:
-                tone = threat_color(
-                    threat_at_point(world, Vec2(wx, wy), check_asteroids=check_asteroids),
-                    norm=norm,
-                )
-            else:
-                tone = gravity_field_color(norm)
+            tone = gravity_field_color(norm)
             canvas.create_rectangle(sx, sy, sx + size, sy + size, fill=tone, outline="")
 
 
@@ -90,7 +84,7 @@ def _draw_field_segment(
     world: GameWorld | None = None,
     check_asteroids: bool = False,
 ) -> None:
-    from gravity_ho_matey.render.chase_threat import ThreatLevel, ahead_emphasis, threat_at_point, threat_color
+    from gravity_ho_matey.render.chase_threat import ahead_emphasis
 
     pa = camera.world_to_screen(a, ship_pos, ship_angle)
     pb = camera.world_to_screen(b, ship_pos, ship_angle)
@@ -107,15 +101,12 @@ def _draw_field_segment(
         return
     mid = Vec2((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
     norm = field.normalized_magnitude_at(mid)
-    if world is not None:
-        threat = threat_at_point(world, mid, check_asteroids=check_asteroids)
-        color = threat_color(threat, norm=norm)
+    _ = world, check_asteroids
+    color = gravity_field_color(norm)
+    if world is not None and camera.mode is CameraMode.TACTICAL:
         emphasis = ahead_emphasis(ship_pos, ship_angle, mid)
         width = max(1, int((1 + norm * 3) * emphasis))
-        if threat is not ThreatLevel.SAFE:
-            width = max(width, 2)
     else:
-        color = gravity_field_color(norm)
         width = max(1, int(1 + norm * 3))
     canvas.create_line(pa.x, pa.y + y_offset, pb.x, pb.y + y_offset, fill=color, width=width)
 

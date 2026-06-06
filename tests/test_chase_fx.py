@@ -209,6 +209,32 @@ class ChaseWellScaleTests(unittest.TestCase):
             self.assertFalse(x1 == 0.0 and y1 == 0.0)
             self.assertFalse(x2 == 0.0 and y2 == 0.0)
 
+    def test_lateral_well_ring_stays_drawable_between_holes(self) -> None:
+        import math
+
+        from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+        from gravity_ho_matey.render.chase_wells import _ring_drawable, _ring_segments, project_floor_ring
+
+        world = build_cove_run_level()
+        reef = next(w for w in world.wells if w.label == "Dead Star Reef")
+        maelstrom = next(w for w in world.wells if w.label == "Maelstrom")
+        world.ship.pos = Vec2((reef.pos.x + maelstrom.pos.x) * 0.5, (reef.pos.y + maelstrom.pos.y) * 0.5)
+        world.ship.angle = math.atan2(maelstrom.pos.y - reef.pos.y, maelstrom.pos.x - reef.pos.x)
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        horizon = camera.chase_horizon_y()
+        drawable = 0
+        segments = 0
+        for well in (reef, maelstrom):
+            pts = project_floor_ring(
+                camera, well.pos, well.radius, world.ship.pos, world.ship.angle, horizon=horizon,
+            )
+            if _ring_drawable(pts, horizon):
+                drawable += 1
+                segments += len(_ring_segments(pts))
+        self.assertGreaterEqual(drawable, 1)
+        self.assertGreater(segments, 4)
+
 
 class ChaseRendererSmokeTests(unittest.TestCase):
     def test_perspective_renderer_draws_without_error(self) -> None:
