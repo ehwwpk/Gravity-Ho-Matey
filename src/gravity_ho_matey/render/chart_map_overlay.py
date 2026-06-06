@@ -216,7 +216,8 @@ class ChartMapOverlay:
             ("BEACONS", str(len(world.beacons))),
             ("WELLS", str(len(world.wells))),
             ("PATROLS", str(enemies) if enemies else "—"),
-            ("BOUNDS", "OPEN" if cfg.open_bounds else "WALLED"),
+            ("ASTEROIDS", str(len(world.asteroids))),
+            ("BOUNDS", "OPEN" if cfg.open_bounds else "BOUNDED"),
         ]
         ry = y + 28
         for label, value in rows:
@@ -232,6 +233,7 @@ class ChartMapOverlay:
             ("▣", "Exit gate", palette.GATE_LOCKED),
             ("▲", "Spawn", palette.SHIP),
             ("×", "Patrol", palette.ENEMY),
+            ("⬡", "Asteroid", palette.ASTEROID_EDGE),
         ):
             canvas.create_text(x + 14, legend_y, anchor="w", text=glyph, fill=color, font=self.FONT)
             canvas.create_text(x + 30, legend_y, anchor="w", text=text, fill=dim, font=self.FONT_SMALL)
@@ -355,17 +357,19 @@ class ChartMapOverlay:
     def _draw_map_entities(self, canvas: tk.Canvas, world: GameWorld, t: _MapTransform, dim: str) -> None:
         glyph_scale = max(0.35, min(0.85, t.scale * 1.1))
 
-        for wall in world.walls:
-            r = wall.rect
-            p0 = self._world_to_map(Vec2(r.x, r.y), t)
-            p1 = self._world_to_map(Vec2(r.x + r.w, r.y + r.h), t)
-            if p0 is None and p1 is None:
+        from gravity_ho_matey.render.asteroid_viz import draw_map_asteroid_glyph
+
+        for asteroid in world.asteroids:
+            hit = self._world_to_map(asteroid.pos, t)
+            if hit is None:
                 continue
-            if p0 is None or p1 is None:
-                continue
-            x1, y1 = p0
-            x2, y2 = p1
-            canvas.create_rectangle(x1, y1, x2, y2, fill=palette.WALL, outline=palette.WALL_EDGE)
+            draw_map_asteroid_glyph(
+                canvas,
+                Vec2(hit[0], hit[1]),
+                asteroid,
+                scale=max(0.22, min(0.55, glyph_scale * 0.55)),
+                solar=world.config.level_theme == "solar",
+            )
 
         for well in world.wells:
             hit = self._world_to_map(well.pos, t)

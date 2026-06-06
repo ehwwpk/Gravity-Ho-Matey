@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import tkinter as tk
 
+from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera

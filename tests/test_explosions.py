@@ -3,7 +3,8 @@ import unittest
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
-from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, GravityWell, Projectile, Ship, Wall, WorldConfig
+from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid
+from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, GravityWell, Projectile, Ship, WorldConfig
 from gravity_ho_matey.gameplay.explosions import (
     ExplosionKind,
     ExplosionSystem,
@@ -39,7 +40,7 @@ class ExplosionWorldTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(10, 10)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -51,15 +52,15 @@ class ExplosionWorldTests(unittest.TestCase):
         self.assertIn(ExplosionKind.PROJECTILE_IMPACT, kinds)
         self.assertIn(ExplosionKind.ENEMY_DESTROYED, kinds)
 
-    def test_wall_impact_spawns_projectile_fx(self) -> None:
+    def test_asteroid_impact_spawns_projectile_fx(self) -> None:
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(10, 10)),
-            walls=[Wall(Rect(48, 0, 20, 200))],
+            asteroids=[make_asteroid(Vec2(50, 50), seed=5, drift_kind="slow", velocity=Vec2())],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
-            projectiles=[Projectile(pos=Vec2(50, 50), vel=Vec2(200, 0))],
+            projectiles=[Projectile(pos=Vec2(20, 50), vel=Vec2(200, 0))],
         )
         world._update_projectiles(0.05)
         self.assertGreaterEqual(len(world.explosions.active), 1)
@@ -69,7 +70,7 @@ class ExplosionWorldTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200, open_bounds=False),
             ship=Ship(pos=Vec2(-5, 50)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -82,7 +83,7 @@ class ExplosionWorldTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(100, 100)),
-            walls=[],
+            asteroids=[],
             wells=[GravityWell(Vec2(100, 100), strength=9000, radius=50, kind="black_hole", maw_radius=20)],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -94,7 +95,7 @@ class ExplosionWorldTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(-5, 50)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),

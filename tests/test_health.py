@@ -4,7 +4,8 @@ from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CHUNKS_PER_LIFE, CampaignState, MAX_LIVES
 from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSource
-from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, GravityWell, Ship, Wall, WorldConfig
+from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid
+from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, GravityWell, Ship, WorldConfig
 from gravity_ho_matey.gameplay.session import INVULN_SECONDS, capture_level_spawn, respawn_ship_at_spawn
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
 
@@ -14,7 +15,7 @@ def tiny_world(*, ship_pos: Vec2 | None = None) -> GameWorld:
     world = GameWorld(
         config=WorldConfig(width=200, height=200),
         ship=Ship(pos=pos),
-        walls=[],
+        asteroids=[],
         wells=[],
         beacons=[],
         finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -31,7 +32,7 @@ class HealthCampaignTests(unittest.TestCase):
 
     def test_single_chip_leaves_two_chunks_and_same_life(self) -> None:
         campaign = CampaignState.new()
-        result = campaign.apply_damage(DamageEvent(DamageSource.WALL))
+        result = campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
         self.assertFalse(result.life_lost)
         self.assertEqual(campaign.hull_chunks, 2)
         self.assertEqual(campaign.lives, MAX_LIVES)
@@ -46,8 +47,8 @@ class HealthCampaignTests(unittest.TestCase):
     def test_third_chip_on_same_life_costs_campaign_life(self) -> None:
         campaign = CampaignState.new()
         for _ in range(2):
-            campaign.apply_damage(DamageEvent(DamageSource.WALL))
-        result = campaign.apply_damage(DamageEvent(DamageSource.WALL))
+            campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
+        result = campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
         self.assertTrue(result.life_lost)
         self.assertFalse(result.campaign_over)
         self.assertEqual(campaign.lives, MAX_LIVES - 1)
@@ -66,14 +67,14 @@ class HealthCampaignTests(unittest.TestCase):
         from gravity_ho_matey.gameplay.session import ensure_active_life_hull
 
         campaign = CampaignState.new()
-        campaign.apply_damage(DamageEvent(DamageSource.WALL))
+        campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
         ensure_active_life_hull(campaign)
         self.assertEqual(campaign.hull_chunks, 2)
 
     def test_lethal_ignores_remaining_hull(self) -> None:
         campaign = CampaignState.new()
-        campaign.apply_damage(DamageEvent(DamageSource.WALL))
-        campaign.apply_damage(DamageEvent(DamageSource.WALL))
+        campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
+        campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
         self.assertEqual(campaign.hull_chunks, 1)
         result = campaign.apply_damage(DamageEvent(DamageSource.GRAVITY_MAW, reason="Singularity."))
         self.assertTrue(result.life_lost)
@@ -91,7 +92,7 @@ class HealthCampaignTests(unittest.TestCase):
 
     def test_partial_hull_persists_without_reset(self) -> None:
         campaign = CampaignState.new()
-        campaign.apply_damage(DamageEvent(DamageSource.WALL))
+        campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
         self.assertEqual(campaign.hull_chunks, 2)
         # Simulate advancing to another level without touching hull.
         self.assertEqual(campaign.hull_chunks, 2)
@@ -100,7 +101,7 @@ class HealthCampaignTests(unittest.TestCase):
         campaign = CampaignState.new()
         campaign.lives = 0
         campaign.hull_chunks = 0
-        result = campaign.apply_damage(DamageEvent(DamageSource.WALL))
+        result = campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
         self.assertTrue(result.campaign_over)
         self.assertEqual(campaign.lives, 0)
 
@@ -122,11 +123,11 @@ class HealthWorldTests(unittest.TestCase):
         self.assertEqual(world.status, GameStatus.SHIP_HIT)
         self.assertEqual(world.last_damage.source, DamageSource.OUT_OF_BOUNDS)
 
-    def test_wall_is_chip(self) -> None:
+    def test_asteroid_is_chip(self) -> None:
         world = tiny_world(ship_pos=Vec2(50, 50))
-        world.walls = [Wall(Rect(40, 40, 30, 30))]
+        world.asteroids = [make_asteroid(Vec2(50, 50), seed=99, drift_kind="slow", velocity=Vec2())]
         world._check_loss()
-        self.assertEqual(world.last_damage.source, DamageSource.WALL)
+        self.assertEqual(world.last_damage.source, DamageSource.ASTEROID)
 
     def test_planet_maw_is_lethal_source(self) -> None:
         world = tiny_world(ship_pos=Vec2(100, 100))
@@ -164,7 +165,7 @@ class HealthWorldTests(unittest.TestCase):
         world.ship.vel = Vec2(200, -50)
         world.ship.angle = 2.5
         world.status = GameStatus.SHIP_HIT
-        world.last_damage = DamageEvent(DamageSource.WALL)
+        world.last_damage = DamageEvent(DamageSource.ASTEROID)
         respawn_ship_at_spawn(world)
         self.assertEqual(world.status, GameStatus.RUNNING)
         self.assertEqual(world.ship.pos.x, world.spawn_pos.x)
@@ -181,9 +182,12 @@ class HealthWorldTests(unittest.TestCase):
             world.update(0.05, ControlIntent())
         self.assertEqual(world.invuln_remaining, 0.0)
 
-    def test_double_wall_hit_same_frame_only_registers_once(self) -> None:
+    def test_double_asteroid_hit_same_frame_only_registers_once(self) -> None:
         world = tiny_world(ship_pos=Vec2(50, 50))
-        world.walls = [Wall(Rect(40, 40, 30, 30)), Wall(Rect(45, 45, 20, 20))]
+        world.asteroids = [
+            make_asteroid(Vec2(50, 50), seed=1, drift_kind="slow", velocity=Vec2()),
+            make_asteroid(Vec2(52, 52), seed=2, drift_kind="slow", velocity=Vec2()),
+        ]
         world._check_loss()
         self.assertEqual(world.status, GameStatus.SHIP_HIT)
 
@@ -222,7 +226,7 @@ class HealthIntegrationTests(unittest.TestCase):
 
     def test_lethal_well_costs_life_even_with_two_chunks_left(self) -> None:
         campaign = CampaignState.new()
-        campaign.apply_damage(DamageEvent(DamageSource.WALL))
+        campaign.apply_damage(DamageEvent(DamageSource.ASTEROID))
         self.assertEqual(campaign.hull_chunks, 2)
         result = campaign.apply_damage(DamageEvent(DamageSource.GRAVITY_MAW))
         self.assertTrue(result.life_lost)

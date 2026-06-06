@@ -35,7 +35,7 @@ class CampaignTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(20, 20)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -48,7 +48,7 @@ class CampaignTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(20, 20)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -68,7 +68,7 @@ class CampaignTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(20, 20)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -126,7 +126,7 @@ class EnemyTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(10, 10)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
@@ -160,7 +160,7 @@ class LossCopyTests(unittest.TestCase):
         world = GameWorld(
             config=WorldConfig(width=200, height=200, level_theme="solar", open_bounds=False),
             ship=Ship(pos=Vec2(-5, 20)),
-            walls=[],
+            asteroids=[],
             wells=[],
             beacons=[],
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),

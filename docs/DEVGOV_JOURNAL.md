@@ -19,7 +19,26 @@ Then reload Cursor and confirm **devgov** MCP is enabled in Settings → Tools &
 
 ---
 
-## 2026-06-06 — DevGov upgrade, MCP refresh, journal lock-in
+## 2026-06-06 — Drifting procedural asteroids (v1 end-to-end)
+
+### +EV · Pre-edit `devgov check` scoped the large multi-file change
+Task string for asteroid replacement; LOW on clean tree before edits, then primary slice **ruff + compileall + pytest** green after implementation (157 tests).
+
+### +EV · Wall → asteroid rename + drift simulation shipped
+- **Entity:** `Asteroid` with procedural convex verts, `pos`/`vel`/`spin`, drift kinds (`slow`, `medium`, `fast`, `ring`, `shower`)
+- **Motion:** `integrate_asteroid` — ring tangential cohesion, light well gravity (10%), edge bounce, continuous drift each tick
+- **Collision:** circle vs convex polygon in `core/geometry.py`; `DamageSource.ASTEROID` (chip)
+- **Render:** `asteroid_viz.py` — tactical, chase depth-sorted polys, holo chart glyphs, rear mirror blips + velocity chevrons
+- **Levels:** Cove ~14 rocks (reef ring, pillar ring, pebbles, one fast rock); Solar rings + shower belt + scatter
+- **Removed:** `chase_walls.py`, all `Wall` / `walls` code paths
+
+### neutral · `devgov run` exit 12 — primary slice OK, sub:tests slice skips
+Primary python profile executed all steps; generic `sub:tests` slice had disqualifying skips (no Phase-1 mapping). Manual pytest 157 passed matches primary slice.
+
+### neutral · Path prediction still uses current-frame asteroid positions
+`predict_path_with_threats` does not extrapolate moving rocks yet — acceptable v1; closing-speed threat uses relative velocity.
+
+---
 
 ### +EV · `doctor --setup-cursor` refreshed project MCP config
 Reinstalled editable DevGov from `DevGov_clean`, ran `devgov doctor --setup-cursor --repo .` — merged server into `.cursor/mcp.json` with `DEVGOV_MCP_EMIT_ACTIVITY=1` and `DEVGOV_REUSE_ANALYSIS=1`. Rule file already present.

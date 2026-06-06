@@ -1,17 +1,16 @@
 import unittest
 import tkinter as tk
 
-from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.entities import GravityWell, Wall
+from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid
+from gravity_ho_matey.gameplay.entities import GravityWell
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.levels.level_data import build_cove_run_level
-from gravity_ho_matey.settings import CANVAS_WIDTH
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode, TACTICAL_ZOOM_COMPACT, ViewCamera, tactical_scale_for
 from gravity_ho_matey.render.chase_fx import draw_fog_glow, draw_speed_streaks
 from gravity_ho_matey.render.world_draw import gravity_field_color
-from gravity_ho_matey.render.chase_walls import collect_wall_rails, wall_ribbons
+from gravity_ho_matey.render.asteroid_viz import collect_chase_asteroid_sprites
 from gravity_ho_matey.render.field_viz import gravity_emphasis
 from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
 from gravity_ho_matey.render.view_renderers import PerspectiveViewRenderer
@@ -33,34 +32,25 @@ def _tk_canvas():
     return root, tk.Canvas(root, width=960, height=640)
 
 
-class ChaseWallTests(unittest.TestCase):
-    def test_outer_wall_produces_ribbon_not_single_quad(self) -> None:
+class ChaseAsteroidTests(unittest.TestCase):
+    def test_chase_asteroid_sprites_have_polygon_points(self) -> None:
         world = build_cove_run_level()
-        top_wall = Wall(Rect(0, 0, CANVAS_WIDTH, 22))
-        ribbons = wall_ribbons(top_wall, world.config.width, world.config.height)
-        self.assertEqual(len(ribbons), 1)
-        self.assertTrue(ribbons[0].is_boundary)
-
-    def test_collect_wall_rails_returns_depth_sorted_segments(self) -> None:
-        world = build_cove_run_level()
-        sample_walls = [
-            Wall(Rect(0, 0, CANVAS_WIDTH, 22)),
-            Wall(Rect(650, 300, 34, 245)),
-        ]
         camera = ViewCamera(mode=CameraMode.CHASE)
         camera.set_play_layout(54.0)
         ship_pos = Vec2(480, 560)
         ship_angle = -1.5708
-        rails = collect_wall_rails(
-            sample_walls,
-            camera,
-            ship_pos,
-            ship_angle,
-            world.config.width,
-            world.config.height,
-        )
-        self.assertGreaterEqual(len(rails), 1)
-        depths = [d for d, _ in rails]
+        sprites = collect_chase_asteroid_sprites(world.asteroids, camera, ship_pos, ship_angle)
+        self.assertGreaterEqual(len(sprites), 1)
+        for _, points, _ in sprites:
+            self.assertGreaterEqual(len(points), 3)
+
+    def test_chase_asteroid_sprites_sort_by_depth(self) -> None:
+        world = build_cove_run_level()
+        world.asteroids.append(make_asteroid(Vec2(480, 200), seed=999, drift_kind="medium"))
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        sprites = collect_chase_asteroid_sprites(world.asteroids, camera, Vec2(480, 560), -1.5708)
+        depths = [depth for depth, _, _ in sprites]
         self.assertEqual(depths, sorted(depths))
 
 

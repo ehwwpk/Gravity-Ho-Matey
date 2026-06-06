@@ -243,6 +243,15 @@ def draw_rear_view_mirror(
         closing = _closing_from_behind(enemy.pos, enemy.vel, ship_pos, ship_vel, ship_angle)
         blips.append((aft, closing, "enemy", px, py, 6.0, palette.ENEMY, enemy.vel))
 
+    for asteroid in world.asteroids:
+        hit = world_to_mirror(asteroid.pos, ship_pos, ship_angle, mx, my, mw, mh)
+        if hit is None:
+            continue
+        px, py, aft = hit
+        closing = _closing_from_behind(asteroid.pos, asteroid.vel, ship_pos, ship_vel, ship_angle)
+        size = max(4.0, min(9.0, asteroid.approximate_radius() * 0.12))
+        blips.append((aft, closing, "asteroid", px, py, size, palette.ASTEROID_EDGE, asteroid.vel))
+
     for projectile in world.projectiles:
         hit = world_to_mirror(projectile.pos, ship_pos, ship_angle, mx, my, mw, mh)
         if hit is None:
@@ -258,7 +267,7 @@ def draw_rear_view_mirror(
     for _aft, closing, kind, px, py, size, color, vel in blips:
         boost = min(1.35, 1.0 + closing * 0.0018)
         draw_size = size * boost
-        if kind in ("well_lethal", "enemy", "hostile_shot") and closing > 40.0:
+        if kind in ("well_lethal", "enemy", "hostile_shot", "asteroid") and closing > 40.0:
             ring_r = draw_size + 3.0 + pulse * 2.0
             ring_color = palette.HELM_THREAT_LETHAL if kind == "well_lethal" else palette.HELM_THREAT_HEAVY
             canvas.create_oval(px - ring_r, py - ring_r, px + ring_r, py + ring_r, outline=ring_color, width=1)
@@ -273,6 +282,23 @@ def draw_rear_view_mirror(
             canvas.create_oval(px - draw_size, py - draw_size, px + draw_size, py + draw_size, fill=color, outline=palette.ENEMY_EDGE, width=1)
             if vel is not None:
                 _draw_velocity_chevron(canvas, px, py, vel, ship_angle, color=palette.ENEMY_EDGE)
+        elif kind == "asteroid":
+            s = draw_size
+            canvas.create_polygon(
+                px,
+                py - s,
+                px + s * 0.85,
+                py + s * 0.35,
+                px,
+                py + s,
+                px - s * 0.9,
+                py - s * 0.2,
+                fill=palette.ASTEROID,
+                outline=color,
+                width=1,
+            )
+            if vel is not None:
+                _draw_velocity_chevron(canvas, px, py, vel, ship_angle, color=color)
         elif kind == "hostile_shot":
             canvas.create_oval(px - 3, py - 3, px + 3, py + 3, fill=color, outline="#fff2e8")
             if vel is not None:

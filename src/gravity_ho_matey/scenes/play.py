@@ -39,6 +39,7 @@ class PlayScene(Scene):
         self.loot_toast_is_new = False
         self.loot_toast_ttl = 0.0
         wire_world_for_campaign(self.world, campaign, on_powerup_collected_hud=self._on_powerup_collected_hud)
+        self.world.refresh_threat_snapshots()
 
     def _on_powerup_collected_hud(self, kind: PowerUpKind, is_new: bool) -> None:
         self.loot_toast_kind = kind

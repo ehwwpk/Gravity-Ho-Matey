@@ -21,7 +21,7 @@ def combat_world(
     world = GameWorld(
         config=WorldConfig(width=960, height=1680, level_theme="solar"),
         ship=Ship(pos=ship_pos or Vec2(480, 840), vel=ship_vel or Vec2()),
-        walls=[],
+        asteroids=[],
         wells=[],
         beacons=[],
         finish_gate=FinishGate(Rect(900, 1600, 40, 40)),

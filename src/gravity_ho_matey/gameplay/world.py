@@ -7,7 +7,9 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSeverity, DamageSource, damage_spec_for, default_reason
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
 from gravity_ho_matey.gameplay.explosions import ExplosionKind, ExplosionSystem
+from gravity_ho_matey.gameplay.asteroid_motion import integrate_asteroid
 from gravity_ho_matey.gameplay.entities import (
+    Asteroid,
     Beacon,
     FinishGate,
     GameStatus,
@@ -15,11 +17,12 @@ from gravity_ho_matey.gameplay.entities import (
     PowerUpPickup,
     Projectile,
     Ship,
-    Wall,
     WorldConfig,
 )
+from gravity_ho_matey.core.geometry import circle_intersects_convex_polygon
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot, build_asteroid_threat_snapshots
 
 
 @dataclass(slots=True)
@@ -35,7 +38,7 @@ class ControlIntent:
 class GameWorld:
     config: WorldConfig
     ship: Ship
-    walls: list[Wall]
+    asteroids: list[Asteroid]
     wells: list[GravityWell]
     beacons: list[Beacon]
     finish_gate: FinishGate
@@ -50,6 +53,10 @@ class GameWorld:
     spawn_angle: float = 0.0
     invuln_remaining: float = 0.0
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
+    asteroid_threat_snapshots: tuple[AsteroidThreatSnapshot, ...] = ()
+
+    def refresh_threat_snapshots(self) -> None:
+        self.asteroid_threat_snapshots = build_asteroid_threat_snapshots(self.asteroids)
 
     @property
     def beacons_remaining(self) -> int:
@@ -67,6 +74,8 @@ class GameWorld:
             return
 
         self._tick_invuln(dt)
+        self._update_asteroids(dt)
+        self.refresh_threat_snapshots()
         self._update_ship(dt, intent)
         self._update_enemies(dt)
         self._update_projectiles(dt)
@@ -75,6 +84,30 @@ class GameWorld:
         self._check_enemy_collisions()
         self._check_finish()
         self._check_loss()
+
+    def _update_asteroids(self, dt: float) -> None:
+        cfg = self.config
+        for asteroid in self.asteroids:
+            integrate_asteroid(
+                asteroid,
+                dt,
+                self.wells,
+                gravity_scale=cfg.gravity_scale,
+                world_width=float(cfg.width),
+                world_height=float(cfg.height),
+            )
+
+    def _asteroid_hit_at(self, pos: Vec2, radius: float) -> Asteroid | None:
+        snapshots = self.asteroid_threat_snapshots
+        if not snapshots:
+            self.refresh_threat_snapshots()
+            snapshots = self.asteroid_threat_snapshots
+        for snap in snapshots:
+            if not snap.aabb.intersects_circle(pos, radius):
+                continue
+            if circle_intersects_convex_polygon(pos, radius, list(snap.verts)):
+                return snap.asteroid
+        return None
 
     def _tick_invuln(self, dt: float) -> None:
         if self.invuln_remaining > 0.0:
@@ -157,7 +190,8 @@ class GameWorld:
             if not self._point_in_bounds(projectile.pos, margin=32):
                 self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
                 continue
-            if any(wall.rect.intersects_circle(projectile.pos, projectile.radius) for wall in self.walls):
+            hit = self._asteroid_hit_at(projectile.pos, projectile.radius)
+            if hit is not None:
                 self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
                 continue
             if projectile.hostile:
@@ -259,8 +293,8 @@ class GameWorld:
         if not self.config.open_bounds and not self._point_in_bounds(self.ship.pos, margin=0):
             self._register_ship_hit(DamageSource.OUT_OF_BOUNDS)
             return
-        if any(wall.rect.intersects_circle(self.ship.pos, self.ship.radius) for wall in self.walls):
-            self._register_ship_hit(DamageSource.WALL)
+        if self._asteroid_hit_at(self.ship.pos, self.ship.radius) is not None:
+            self._register_ship_hit(DamageSource.ASTEROID)
             return
         for well in self.wells:
             maw = well.maw_radius if well.maw_radius is not None else self.config.well_maw_radius

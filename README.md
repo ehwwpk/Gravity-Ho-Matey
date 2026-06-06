@@ -4,7 +4,7 @@ A surprisingly fun Python minigame built while testing DevGov software pre-beta.
 
 A standard-library-first Python arcade project skeleton for a pirate-flavored gravity race / maze game.
 
-You pilot a tiny pixel-art ship through a dangerous cove full of gravity wells, walls, reefs, and tight corridors. Shots curve. Routes curve. Momentum matters. Collect every beacon, then hit the finish gate.
+You pilot a tiny pixel-art ship through a dangerous cove full of gravity wells, drifting asteroids, and open routes. Shots curve. Routes curve. Momentum matters. Collect every beacon, then hit the finish gate.
 
 This repo is intentionally structured like a serious project base rather than a single-file toy. It is designed so you can hand it to Cursor, Codex, or another coding agent and continue vibecoding from a clean foundation.
 
@@ -17,7 +17,7 @@ This starter includes:
 - one playable gravity race / maze level
 - curved projectiles affected by gravity wells
 - beacon collection and finish gate flow
-- simple pixel-art-style ships, shots, gravity wells, walls, and HUD drawn with Tkinter primitives
+- simple pixel-art-style ships, shots, gravity wells, drifting asteroids, and HUD drawn with Tkinter primitives
 - light unit tests for deterministic core logic
 - planning docs and architecture notes
 
@@ -98,4 +98,4 @@ No third-party packages are required.
 
 ## Design target
 
-This should feel like an arcade maze racer, not Snake with a gravity wrapper. The ship has inertia, gravity bends routes and shots, walls create cove-like corridors, and the win condition forces a route-planning loop: collect beacons first, then escape through the gate.
+This should feel like an arcade maze racer, not Snake with a gravity wrapper. The ship has inertia, gravity bends routes and shots, drifting asteroids create moving hazards, and the win condition forces a route-planning loop: collect beacons first, then escape through the gate.

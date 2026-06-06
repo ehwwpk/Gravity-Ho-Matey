@@ -1,7 +1,5 @@
 BACKGROUND = "#08111f"
 SEA_GRID = "#10223a"
-WALL = "#5b4636"
-WALL_EDGE = "#9b7b4e"
 SHIP = "#f5d06f"
 SHIP_TRIM = "#6bd3ff"
 PROJECTILE = "#ffef9f"
@@ -17,6 +15,7 @@ MUTED_TEXT = "#8ea8bf"
 SOLAR_BG = "#03050c"
 ASTEROID = "#4a4038"
 ASTEROID_EDGE = "#7a6a58"
+ASTEROID_CRATER = "#2e2820"
 BLACK_HOLE = "#1a0a28"
 BLACK_HOLE_RING = "#6b2dff"
 BLACK_HOLE_CORE = "#050008"
@@ -57,9 +56,9 @@ CHASE_SPEED_STREAK_BOOST = "#c58cff"
 CHASE_FOG_BLACK_HOLE = ("#1a0830", "#2a1050", "#4a1880", "#6b30a8", "#8b40cc")
 CHASE_FOG_PLANET = ("#1a2840", "#2a4870", "#3a68a0", "#6bc0ff")
 CHASE_FOG_WELL = ("#2a1040", "#4a2080", "#7a40b0", "#c58cff")
-CHASE_WALL_FACE = "#3a2e28"
-CHASE_WALL_CAP = "#9b7b4e"
-CHASE_WALL_RAIL = "#6b5340"
+CHASE_ASTEROID_FACE = "#3a2e28"
+CHASE_ASTEROID_HIGHLIGHT = "#9b7b4e"
+CHASE_ASTEROID_RIM = "#6b5340"
 CHASE_ENGINE_GLOW = "#ff9a4a"
 CHASE_ENGINE_CORE = "#ffb347"
 CHASE_VIGNETTE = "#020408"
@@ -74,6 +73,6 @@ HELM_HUD_DIM = "#3a5878"
 HELM_RIBBON_SAFE = "#66e8ff"
 HELM_RIBBON_FADE = "#3a7898"
 
-# Holo tactical walls (shared language with chase rails)
-HOLO_WALL_FILL = "#1a2840"
-HOLO_WALL_EDGE = "#53a8c8"
+# Holo tactical asteroids (shared language with chase view)
+HOLO_ASTEROID_FILL = "#1a2840"
+HOLO_ASTEROID_EDGE = "#53a8c8"

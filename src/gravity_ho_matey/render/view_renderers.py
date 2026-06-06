@@ -9,7 +9,8 @@ from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
 from gravity_ho_matey.render.edge_hints import draw_edge_hints
-from gravity_ho_matey.render.entity_viz import draw_beacon_marker, draw_gate_portal, draw_tactical_wall
+from gravity_ho_matey.render.asteroid_viz import draw_tactical_asteroid
+from gravity_ho_matey.render.entity_viz import draw_beacon_marker, draw_gate_portal
 from gravity_ho_matey.render.explosion_fx import draw_explosions
 from gravity_ho_matey.render.world_draw import (
     WELL_RING_VISUAL_SCALE,
@@ -40,19 +41,19 @@ class TacticalViewRenderer:
             self._starfield(canvas, vw, vh, hud_top, dense=True)
         else:
             self._grid(canvas, vw, vh, hud_top, camera)
-        draw_gravity_heatmap(canvas, field, camera, y_offset=hud_top, alpha_step=1, world=world)
+        draw_gravity_heatmap(canvas, field, camera, y_offset=hud_top, alpha_step=2, world=world)
         draw_gravity_floor_grid(
-            canvas, field, camera, ship_pos, world.ship.angle, y_offset=hud_top, step=1, world=world,
+            canvas, field, camera, ship_pos, world.ship.angle, y_offset=hud_top, step=2, world=world,
         )
-        for wall in world.walls:
-            draw_tactical_wall(
+        for asteroid in world.asteroids:
+            draw_tactical_asteroid(
                 canvas,
-                wall,
+                asteroid,
                 camera,
                 hud_top=hud_top,
                 solar=solar,
-                world_width=world.config.width,
-                world_height=world.config.height,
+                ship_pos=ship_pos,
+                ship_angle=world.ship.angle,
             )
         for well in world.wells:
             p = camera.world_to_screen(well.pos, ship_pos, world.ship.angle)
@@ -175,9 +176,9 @@ class PerspectiveViewRenderer:
             draw_speed_vignette,
         )
         from gravity_ho_matey.render.chase_ground import draw_chase_gravity_heatmap
-        from gravity_ho_matey.render.chase_walls import collect_wall_rails, draw_wall_rails
+        from gravity_ho_matey.render.asteroid_viz import collect_chase_asteroid_sprites, draw_chase_asteroids
         from gravity_ho_matey.render.chase_helm import bank_angle_for_chase, draw_xwing_cockpit_hud
-        from gravity_ho_matey.render.chase_threat import wall_rail_urgency
+        from gravity_ho_matey.render.chase_threat import asteroid_urgency
         from gravity_ho_matey.render.chase_wells import draw_chase_well
 
         vw = camera.viewport_width
@@ -197,15 +198,19 @@ class PerspectiveViewRenderer:
         draw_chase_floor_gradient(canvas, camera)
         draw_chase_gravity_heatmap(canvas, field, camera, world, ship_pos, ship_angle, step=2)
 
-        wall_rails = collect_wall_rails(
-            world.walls,
+        asteroid_sprites = collect_chase_asteroid_sprites(
+            world.asteroids,
             camera,
             ship_pos,
             ship_angle,
-            world.config.width,
-            world.config.height,
         )
-        draw_wall_rails(canvas, wall_rails, solar=solar, urgency=wall_rail_urgency(world))
+        draw_chase_asteroids(
+            canvas,
+            asteroid_sprites,
+            solar=solar,
+            urgency=asteroid_urgency(world),
+            focal_length=camera.focal_length,
+        )
 
         sprites: list[tuple[float, str, object]] = []
         for well in world.wells:

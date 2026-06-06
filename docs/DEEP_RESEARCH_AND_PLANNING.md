@@ -32,7 +32,7 @@ Cannon shots are not straight bullets. They inherit ship velocity and are pulled
 
 ### 3. Maze race pressure
 
-The map has walls, corridors, beacons, and a finish gate. Winning requires route planning, not just survival.
+The map has drifting asteroids, open routes, beacons, and a finish gate. Winning requires route planning, not just survival.
 
 ### 4. Pixel-art readability through primitives
 
@@ -62,7 +62,7 @@ This is intentionally not a fully deterministic engine yet. It is a clean arcade
 - One playable level.
 - Ship steering and thrust.
 - Gravity wells.
-- Walls.
+- Drifting procedural asteroids (rings, showers, scatter).
 - Beacons.
 - Finish gate.
 - Curved shots.

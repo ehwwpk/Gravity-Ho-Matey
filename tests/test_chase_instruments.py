@@ -4,7 +4,7 @@ import unittest
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.levels.level_data import build_cove_run_level
 from gravity_ho_matey.render.chase_helm import bank_angle_for_chase, predict_ship_path, slip_angle_rad
-from gravity_ho_matey.render.chase_threat import ThreatLevel, nearest_wall_threat, predict_path_with_threats, threat_at_point
+from gravity_ho_matey.render.chase_threat import ThreatLevel, nearest_asteroid_threat, predict_path_with_threats, threat_at_point
 
 
 class ChaseHelmTests(unittest.TestCase):
@@ -55,15 +55,14 @@ class ChaseHelmTests(unittest.TestCase):
         samples = predict_path_with_threats(world, steps=8, step_dt=0.05)
         self.assertTrue(any(level is ThreatLevel.LETHAL for _, level in samples))
 
-    def test_wall_threat_detects_near_wall(self) -> None:
-        from gravity_ho_matey.core.geometry import Rect
-        from gravity_ho_matey.gameplay.entities import Wall
+    def test_asteroid_threat_detects_near_rock(self) -> None:
+        from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid
 
         world = build_cove_run_level()
-        world.walls = [Wall(Rect(0, 0, 960, 22))]
+        world.asteroids = [make_asteroid(Vec2(480, 30), seed=12, drift_kind="fast", velocity=Vec2(0, 80))]
         world.ship.pos = Vec2(480, 18)
         world.ship.vel = Vec2(0, 120)
-        dist, closing = nearest_wall_threat(world)
+        dist, closing = nearest_asteroid_threat(world)
         self.assertLess(dist, 40.0)
         self.assertGreater(closing, 0.0)
 

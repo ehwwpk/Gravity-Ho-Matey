@@ -38,7 +38,7 @@ Scene transitions that start gameplay should go through `scenes/game_flow.start_
 | Object | Lifetime | Owns |
 |--------|----------|------|
 | `CampaignState` | Whole campaign (3 lives, collected power-ups) | lives, `hull_chunks`, `powerups` set |
-| `GameWorld` | Single level attempt | ship, enemies, pickups, beacons, projectiles, invuln timer |
+| `GameWorld` | Single level attempt | ship, asteroids, enemies, pickups, beacons, projectiles, invuln timer |
 
 `gameplay/session.wire_world_for_campaign()` applies carried bonuses and connects pickup collection to the campaign. `capture_level_spawn()` + `respawn_ship_at_spawn()` handle in-level chip respawns with 1s invulnerability. `ensure_active_life_hull()` refills hull only when entering play with zero chunks (new life); partial hull carries between levels.
 
@@ -48,7 +48,7 @@ Scene transitions that start gameplay should go through `scenes/game_flow.start_
 
 | Source | Severity |
 |--------|----------|
-| Wall, out-of-bounds, enemy | 1 hull chunk (in-level respawn) |
+| Asteroid, out-of-bounds, enemy | 1 hull chunk (in-level respawn) |
 | Gravity maw (singularity, planet, cove well) | Lethal (whole life) |
 
 Three hull chunks per life; three chips on one life costs one campaign life. Partial hull carries between levels. Only `PlayScene` applies damage to `CampaignState`.
@@ -58,7 +58,10 @@ Three hull chunks per life; three chips on one life costs one campaign life. Par
 `GameWorld` owns mutable per-level state:
 
 - `Ship`, `Projectile`, `PatrolEnemy`, `PowerUpPickup`
-- `Wall`, `GravityWell`, `Beacon`, `FinishGate`
+- `Asteroid`, `GravityWell`, `Beacon`, `FinishGate`
+- `gameplay/asteroid_shape.py` — seeded procedural convex silhouettes
+- `gameplay/asteroid_motion.py` — drift profiles (slow/medium/fast/ring/shower), integration
+- `levels/asteroid_placements.py` — per-level field layout
 - `GameStatus`, optional `on_powerup_collected` callback
 
 `WorldConfig` owns tuning constants and `level_theme` / `level_name`.
@@ -78,7 +81,7 @@ Presentation is split from simulation:
 | `render/camera.py` | `ViewCamera`, `CameraMode` — follow + projection only |
 | `render/chase_fx.py` | Parallax sky, fog glow, speed streaks, engine bloom |
 | `render/chase_ground.py` | Bright gravity grid + flow chevrons |
-| `render/chase_walls.py` | Extruded boundary rails (not flat quads) |
+| `render/asteroid_viz.py` | Tactical, chase, and holo-map asteroid polygons + craters |
 | `render/chase_wells.py` | Well fog halos (singularity/planet/cove) |
 | `render/chase_entities.py` | Chase beacons, gates, enemies, pickups |
 | `render/view_renderers.py` | Tactical pan + chase pipeline orchestration |
@@ -90,4 +93,4 @@ Presentation is split from simulation:
 
 ## Tests
 
-Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, and registry alignment.
+Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, registry alignment, and drifting asteroid shape/motion/collision/render paths.

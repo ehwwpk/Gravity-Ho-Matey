@@ -4,8 +4,9 @@ from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Beacon, FinishGate, GravityWell, Ship, WorldConfig
 from gravity_ho_matey.gameplay.world import GameWorld
+from gravity_ho_matey.levels.asteroid_placements import build_cove_asteroids, build_solar_asteroids
 from gravity_ho_matey.levels.solar_patrols import solar_patrol_enemies
-from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH
+from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
 
 
 def build_cove_run_level() -> GameWorld:
@@ -32,14 +33,11 @@ def build_cove_run_level() -> GameWorld:
             open_bounds=True,
         ),
         ship=Ship(pos=Vec2(80, 70), angle=0.58),
-        walls=[],
+        asteroids=build_cove_asteroids(),
         wells=wells,
         beacons=beacons,
         finish_gate=FinishGate(Rect(880, 550, 54, 54)),
     )
-
-
-SOLAR_STRIP_HEIGHT = 1680
 
 
 def build_solar_crossing_level() -> GameWorld:
@@ -80,7 +78,7 @@ def build_solar_crossing_level() -> GameWorld:
             open_bounds=True,
         ),
         ship=Ship(pos=Vec2(52, 120), angle=1.52),
-        walls=[],
+        asteroids=build_solar_asteroids(),
         wells=wells,
         beacons=beacons,
         finish_gate=FinishGate(Rect(895, strip_h - 90, 50, 50)),

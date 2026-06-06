@@ -38,7 +38,7 @@ def draw_chase_gravity_heatmap(
             depth_scale = camera.perspective_scale(p.depth) / camera.focal_length
             half_w = field.cell_size * step * 0.58 * depth_scale
             half_h = half_w * 0.32
-            tone = threat_color(threat_at_point(world, wp), norm=norm)
+            tone = threat_color(threat_at_point(world, wp, check_asteroids=False), norm=norm)
             canvas.create_rectangle(
                 p.x - half_w,
                 p.y - half_h,

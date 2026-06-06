@@ -10,7 +10,7 @@ def tiny_world() -> GameWorld:
     return GameWorld(
         config=WorldConfig(width=200, height=200),
         ship=Ship(pos=Vec2(20, 20)),
-        walls=[],
+        asteroids=[],
         wells=[],
         beacons=[Beacon(Vec2(20, 20))],
         finish_gate=FinishGate(Rect(150, 150, 25, 25)),

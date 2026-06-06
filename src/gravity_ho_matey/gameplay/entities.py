@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
@@ -54,9 +55,32 @@ class GravityWell:
     maw_radius: float | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class Wall:
-    rect: Rect
+@dataclass(slots=True)
+class Asteroid:
+    pos: Vec2
+    vel: Vec2
+    angle: float
+    spin: float
+    local_verts: tuple[Vec2, ...]
+    size_class: str = "rock"
+    drift_kind: str = "medium"
+    seed: int = 0
+    ring_anchor: Vec2 | None = None
+    ring_radius: float = 0.0
+    ring_sign: float = 1.0
+
+    def approximate_radius(self) -> float:
+        if not self.local_verts:
+            return 20.0
+        return max(v.length() for v in self.local_verts)
+
+    def world_vertices(self) -> list[Vec2]:
+        c = math.cos(self.angle)
+        s = math.sin(self.angle)
+        out: list[Vec2] = []
+        for v in self.local_verts:
+            out.append(Vec2(self.pos.x + v.x * c - v.y * s, self.pos.y + v.x * s + v.y * c))
+        return out
 
 
 @dataclass(slots=True)

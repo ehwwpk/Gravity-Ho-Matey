@@ -14,7 +14,7 @@ You are working in `Gravity Ho, Matey!`, a standard-library-first Python arcade 
 
 ## Current playable loop
 
-The player pilots a small ship through a gravity cove. Collect all beacons, then fly into the finish gate. Gravity wells bend ship movement and projectiles. Walls kill the run on collision.
+The player pilots a small ship through a gravity cove. Collect all beacons, then fly into the finish gate. Gravity wells bend ship movement and projectiles. Drifting asteroids chip the hull on collision.
 
 ## Good next tasks
 

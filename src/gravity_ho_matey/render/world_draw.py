@@ -17,6 +17,7 @@ def draw_gravity_heatmap(
     y_offset: float = 0.0,
     alpha_step: int = 2,
     world: GameWorld | None = None,
+    check_asteroids: bool = False,
 ) -> None:
     from gravity_ho_matey.render.chase_threat import threat_at_point, threat_color
 
@@ -37,7 +38,10 @@ def draw_gravity_heatmap(
             if sx + size < 0 or sy + size < y_offset or sx > camera.viewport_width or sy > camera.viewport_height:
                 continue
             if world is not None:
-                tone = threat_color(threat_at_point(world, Vec2(wx, wy)), norm=norm)
+                tone = threat_color(
+                    threat_at_point(world, Vec2(wx, wy), check_asteroids=check_asteroids),
+                    norm=norm,
+                )
             else:
                 tone = gravity_field_color(norm)
             canvas.create_rectangle(sx, sy, sx + size, sy + size, fill=tone, outline="")
@@ -53,17 +57,24 @@ def draw_gravity_floor_grid(
     y_offset: float,
     step: int = 2,
     world: GameWorld | None = None,
+    check_asteroids: bool = False,
 ) -> None:
     for row in range(0, field.rows, step):
         for col in range(0, field.cols - 1, step):
             a = Vec2(field.origin.x + col * field.cell_size, field.origin.y + row * field.cell_size)
             b = Vec2(field.origin.x + (col + step) * field.cell_size, field.origin.y + row * field.cell_size)
-            _draw_field_segment(canvas, field, camera, ship_pos, ship_angle, a, b, y_offset, world=world)
+            _draw_field_segment(
+                canvas, field, camera, ship_pos, ship_angle, a, b, y_offset,
+                world=world, check_asteroids=check_asteroids,
+            )
     for col in range(0, field.cols, step):
         for row in range(0, field.rows - 1, step):
             a = Vec2(field.origin.x + col * field.cell_size, field.origin.y + row * field.cell_size)
             b = Vec2(field.origin.x + col * field.cell_size, field.origin.y + (row + step) * field.cell_size)
-            _draw_field_segment(canvas, field, camera, ship_pos, ship_angle, a, b, y_offset, world=world)
+            _draw_field_segment(
+                canvas, field, camera, ship_pos, ship_angle, a, b, y_offset,
+                world=world, check_asteroids=check_asteroids,
+            )
 
 
 def _draw_field_segment(
@@ -77,6 +88,7 @@ def _draw_field_segment(
     y_offset: float,
     *,
     world: GameWorld | None = None,
+    check_asteroids: bool = False,
 ) -> None:
     from gravity_ho_matey.render.chase_threat import ThreatLevel, ahead_emphasis, threat_at_point, threat_color
 
@@ -96,7 +108,7 @@ def _draw_field_segment(
     mid = Vec2((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
     norm = field.normalized_magnitude_at(mid)
     if world is not None:
-        threat = threat_at_point(world, mid)
+        threat = threat_at_point(world, mid, check_asteroids=check_asteroids)
         color = threat_color(threat, norm=norm)
         emphasis = ahead_emphasis(ship_pos, ship_angle, mid)
         width = max(1, int((1 + norm * 3) * emphasis))

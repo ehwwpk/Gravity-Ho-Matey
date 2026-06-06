@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import math
 from enum import Enum, auto
 
-from gravity_ho_matey.core.geometry import Rect
+from gravity_ho_matey.core.geometry import (
+    circle_intersects_convex_polygon,
+    nearest_point_on_polygon_boundary,
+)
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import GravityWell
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
+from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 
@@ -19,7 +22,21 @@ class ThreatLevel(Enum):
     LETHAL = auto()
 
 
-def threat_at_point(world: GameWorld, point: Vec2, *, ship_radius: float | None = None) -> ThreatLevel:
+def _ensure_threat_snapshots(world: GameWorld) -> tuple[AsteroidThreatSnapshot, ...]:
+    snapshots = world.asteroid_threat_snapshots
+    if not snapshots:
+        world.refresh_threat_snapshots()
+        snapshots = world.asteroid_threat_snapshots
+    return snapshots
+
+
+def threat_at_point(
+    world: GameWorld,
+    point: Vec2,
+    *,
+    ship_radius: float | None = None,
+    check_asteroids: bool = True,
+) -> ThreatLevel:
     """Red only where physics would kill the ship soon."""
     radius = ship_radius if ship_radius is not None else world.ship.radius
     cfg = world.config
@@ -28,9 +45,13 @@ def threat_at_point(world: GameWorld, point: Vec2, *, ship_radius: float | None 
     if point.x < -margin or point.y < -margin or point.x > cfg.width + margin or point.y > cfg.height + margin:
         return ThreatLevel.LETHAL
 
-    for wall in world.walls:
-        if wall.rect.intersects_circle(point, radius * 0.92):
-            return ThreatLevel.LETHAL
+    if check_asteroids:
+        test_r = radius * 0.92
+        for snap in _ensure_threat_snapshots(world):
+            if not snap.aabb.intersects_circle(point, test_r):
+                continue
+            if circle_intersects_convex_polygon(point, test_r, list(snap.verts)):
+                return ThreatLevel.LETHAL
 
     for well in world.wells:
         level = _well_threat_at(point, well, cfg.well_maw_radius)
@@ -90,39 +111,54 @@ def predict_path_with_threats(
     return samples
 
 
-def wall_rail_urgency(world: GameWorld) -> float:
-    """0–1 heat for hull-close rails."""
-    dist, closing = nearest_wall_threat(world)
+def asteroid_urgency(world: GameWorld) -> float:
+    """0–1 heat for hull-close drifting asteroids."""
+    dist, closing = nearest_asteroid_threat(world)
     if dist > 110.0 or closing < 18.0:
         return 0.0
     return max(0.0, min(1.0, (110.0 - dist) / 110.0) * min(1.0, closing / 90.0))
 
 
-def nearest_wall_threat(world: GameWorld) -> tuple[float, float]:
+def nearest_asteroid_threat(world: GameWorld) -> tuple[float, float]:
     ship = world.ship
     best_dist = 9999.0
     best_closing = 0.0
-    for wall in world.walls:
-        dist, closing = _wall_surface_distance_and_closing(ship.pos, ship.vel, ship.radius, wall.rect)
+    for snap in _ensure_threat_snapshots(world):
+        dist, closing = _asteroid_surface_distance_and_closing(
+            ship.pos,
+            ship.vel,
+            ship.radius,
+            snap.verts,
+            snap.aabb,
+            snap.asteroid.vel,
+        )
         if dist < best_dist:
             best_dist = dist
             best_closing = closing
     return best_dist, best_closing
 
 
-def _wall_surface_distance_and_closing(pos: Vec2, vel: Vec2, radius: float, rect: Rect) -> tuple[float, float]:
-    nx = min(max(pos.x, rect.left), rect.right)
-    ny = min(max(pos.y, rect.top), rect.bottom)
-    nearest = Vec2(nx, ny)
-    delta = pos - nearest
-    dist_sq = delta.length_sq()
-    if dist_sq < 1e-6:
-        if rect.contains_point(pos):
-            return 0.0, vel.length()
-        return 0.0, 0.0
-    dist = math.sqrt(dist_sq) - radius
-    closing = max(0.0, -vel.dot(delta.normalized()))
-    return max(0.0, dist), closing
+def _asteroid_surface_distance_and_closing(
+    pos: Vec2,
+    vel: Vec2,
+    radius: float,
+    verts: tuple[Vec2, ...],
+    aabb,
+    asteroid_vel: Vec2,
+) -> tuple[float, float]:
+    if len(verts) < 2:
+        return 9999.0, 0.0
+    if not aabb.intersects_circle(pos, radius + 140.0):
+        return 9999.0, 0.0
+    nearest, boundary_dist = nearest_point_on_polygon_boundary(pos, list(verts))
+    surface_dist = max(0.0, boundary_dist - radius)
+    rel_vel = vel - asteroid_vel
+    to_ship = pos - nearest
+    if to_ship.length_sq() > 1e-6:
+        closing = max(0.0, rel_vel.dot(to_ship.normalized()))
+    else:
+        closing = rel_vel.length()
+    return surface_dist, closing
 
 
 def ahead_emphasis(ship_pos: Vec2, ship_angle: float, point: Vec2, *, radius: float = 340.0) -> float:

@@ -13,7 +13,7 @@ def tiny_world(*, angle: float = -math.pi / 2) -> GameWorld:
     world = GameWorld(
         config=WorldConfig(width=200, height=200),
         ship=Ship(pos=Vec2(100, 100), angle=angle),
-        walls=[],
+        asteroids=[],
         wells=[],
         beacons=[],
         finish_gate=FinishGate(Rect(150, 150, 25, 25)),

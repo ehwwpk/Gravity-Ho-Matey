@@ -10,7 +10,7 @@ class DamageSeverity(Enum):
 
 
 class DamageSource(Enum):
-    WALL = auto()
+    ASTEROID = auto()
     OUT_OF_BOUNDS = auto()
     ENEMY = auto()
     ENEMY_PROJECTILE = auto()
@@ -40,7 +40,7 @@ class DamageResult:
 
 
 DAMAGE_RULES: dict[DamageSource, DamageSpec] = {
-    DamageSource.WALL: DamageSpec(DamageSeverity.CHIP, 1),
+    DamageSource.ASTEROID: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.OUT_OF_BOUNDS: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.ENEMY: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.ENEMY_PROJECTILE: DamageSpec(DamageSeverity.CHIP, 1),
@@ -54,8 +54,8 @@ def damage_spec_for(source: DamageSource) -> DamageSpec:
 
 def default_reason(source: DamageSource, level_theme: str = "cove") -> str:
     solar = level_theme == "solar"
-    if source is DamageSource.WALL:
-        return "Hull cracked on an asteroid." if solar else "Hull smashed on the rocks."
+    if source is DamageSource.ASTEROID:
+        return "Hull cracked on a rogue asteroid." if solar else "Hull smashed on drifting reef rock."
     if source is DamageSource.OUT_OF_BOUNDS:
         return "Drifted beyond the star chart." if solar else "Lost beyond the reef."
     if source is DamageSource.ENEMY:

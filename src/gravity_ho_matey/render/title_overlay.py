@@ -196,7 +196,7 @@ class TitleScreenOverlay:
         lines = [
             ("3 campaign lives  ·  3 hull chunks per life", palette.TEXT),
             ("Planet wells & singularity: LETHAL (whole life)", palette.HUD_WARN),
-            ("Reef / wall / skiff scrape: 1 chunk + respawn", accent),
+            ("Reef / asteroid / skiff scrape: 1 chunk + respawn", accent),
         ]
         for i, (line, color) in enumerate(lines):
             hp.draw_body_line(canvas, x + 14, y + 34 + i * 22, f"▸ {line}", color=color)
