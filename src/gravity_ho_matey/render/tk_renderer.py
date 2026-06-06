@@ -52,11 +52,24 @@ class TkRenderer:
             )
         self._draw_demo_ship(Vec2(480, 455), 0.0, scale=2.4)
 
-    def draw_world(self, world: GameWorld, campaign: CampaignState, *, hud_alert: str = "") -> None:
+    def draw_world(
+        self,
+        world: GameWorld,
+        campaign: CampaignState,
+        *,
+        hud_alert: str = "",
+        loot_toast_kind: PowerUpKind | None = None,
+        loot_toast_is_new: bool = False,
+        loot_toast_ttl: float = 0.0,
+    ) -> None:
         self.clear()
         solar = world.config.level_theme == "solar"
         bg = palette.SOLAR_BG if solar else palette.BACKGROUND
-        hud_top = SciFiHudOverlay.PANEL_H + (22 if hud_alert else 0)
+        hud_top = SciFiHudOverlay.PANEL_H
+        if hud_alert:
+            hud_top += SciFiHudOverlay.ALERT_H
+        if loot_toast_kind is not None and loot_toast_ttl > 0.0:
+            hud_top += SciFiHudOverlay.LOOT_BANNER_H
         self.canvas.create_rectangle(0, 0, world.config.width, world.config.height, fill=bg, outline="")
         if solar:
             self._draw_starfield(dense=True, y_offset=hud_top)
@@ -86,7 +99,15 @@ class TkRenderer:
             tail = p - projectile.vel.normalized() * 14
             self.canvas.create_line(tail.x, tail.y, p.x, p.y, fill=palette.PROJECTILE)
         self._draw_ship(world.ship.pos, world.ship.angle, world.ship.boost_energy, world.invuln_remaining, world.elapsed)
-        self._hud.draw(self.canvas, world, campaign, hud_alert=hud_alert)
+        self._hud.draw(
+            self.canvas,
+            world,
+            campaign,
+            hud_alert=hud_alert,
+            loot_toast_kind=loot_toast_kind,
+            loot_toast_is_new=loot_toast_is_new,
+            loot_toast_ttl=loot_toast_ttl,
+        )
         if world.status is GameStatus.WON:
             self.canvas.create_text(480, 320, text="YOU ESCAPED", fill=palette.GATE_OPEN, font=("Courier", 28, "bold"))
 

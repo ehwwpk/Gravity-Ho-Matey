@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CHUNKS_PER_LIFE, CampaignState
 from gravity_ho_matey.gameplay.entities import GameStatus
@@ -8,6 +10,9 @@ from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
 from gravity_ho_matey.gameplay.world import GameWorld
 
 INVULN_SECONDS = 1.0
+LOOT_TOAST_SECONDS = 2.8
+
+PowerUpHudCallback = Callable[[PowerUpKind, bool], None]
 
 
 def capture_level_spawn(world: GameWorld) -> None:
@@ -21,12 +26,20 @@ def ensure_active_life_hull(campaign: CampaignState) -> None:
         campaign.hull_chunks = CHUNKS_PER_LIFE
 
 
-def wire_world_for_campaign(world: GameWorld, campaign: CampaignState) -> None:
+def wire_world_for_campaign(
+    world: GameWorld,
+    campaign: CampaignState,
+    *,
+    on_powerup_collected_hud: PowerUpHudCallback | None = None,
+) -> None:
     """Apply carried campaign bonuses and route pickup collection back to campaign."""
     apply_powerups_to_ship(world.ship, campaign.powerups)
 
     def on_powerup_collected(kind: PowerUpKind) -> None:
+        is_new = kind not in campaign.powerups
         campaign.collect_powerup(kind, world.ship)
+        if on_powerup_collected_hud is not None:
+            on_powerup_collected_hud(kind, is_new)
 
     world.on_powerup_collected = on_powerup_collected
 

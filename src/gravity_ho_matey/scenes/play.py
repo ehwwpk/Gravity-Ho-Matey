@@ -4,11 +4,13 @@ from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.progress import record_level_cleared
 from gravity_ho_matey.gameplay.session import (
+    LOOT_TOAST_SECONDS,
     capture_level_spawn,
     ensure_active_life_hull,
     respawn_ship_at_spawn,
     wire_world_for_campaign,
 )
+from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.levels.level_registry import build_level
 from gravity_ho_matey.scenes.base import Scene, SceneHost
 
@@ -20,15 +22,27 @@ class PlayScene(Scene):
         ensure_active_life_hull(campaign)
         self.world = build_level(level_id)
         capture_level_spawn(self.world)
-        wire_world_for_campaign(self.world, campaign)
         self.hud_alert = ""
         self.hud_alert_ttl = 0.0
+        self.loot_toast_kind: PowerUpKind | None = None
+        self.loot_toast_is_new = False
+        self.loot_toast_ttl = 0.0
+        wire_world_for_campaign(self.world, campaign, on_powerup_collected_hud=self._on_powerup_collected_hud)
+
+    def _on_powerup_collected_hud(self, kind: PowerUpKind, is_new: bool) -> None:
+        self.loot_toast_kind = kind
+        self.loot_toast_is_new = is_new
+        self.loot_toast_ttl = LOOT_TOAST_SECONDS
 
     def update(self, host: SceneHost, dt: float) -> None:
         from gravity_ho_matey.scenes.end import EndScene
 
         if self.hud_alert_ttl > 0.0:
             self.hud_alert_ttl = max(0.0, self.hud_alert_ttl - dt)
+        if self.loot_toast_ttl > 0.0:
+            self.loot_toast_ttl = max(0.0, self.loot_toast_ttl - dt)
+            if self.loot_toast_ttl <= 0.0:
+                self.loot_toast_kind = None
 
         self.world.update(dt, host.input_state.to_control_intent())
 
@@ -71,6 +85,9 @@ class PlayScene(Scene):
             self.world,
             self.campaign,
             hud_alert=self.hud_alert if self.hud_alert_ttl > 0.0 else "",
+            loot_toast_kind=self.loot_toast_kind,
+            loot_toast_is_new=self.loot_toast_is_new,
+            loot_toast_ttl=self.loot_toast_ttl,
         )
 
     def on_key_press(self, host: SceneHost, keysym: str) -> None:

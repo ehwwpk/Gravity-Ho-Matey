@@ -14,3 +14,9 @@ POWERUP_LABELS: dict[PowerUpKind, str] = {
     PowerUpKind.RAPID_FIRE: "Gatling Rigging",
     PowerUpKind.STABILIZER: "Steady Helm",
 }
+
+POWERUP_HUD_TAGS: dict[PowerUpKind, str] = {
+    PowerUpKind.THRUST_BOOST: "THRUST",
+    PowerUpKind.RAPID_FIRE: "GATLING",
+    PowerUpKind.STABILIZER: "HELM",
+}

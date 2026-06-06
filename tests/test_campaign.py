@@ -62,6 +62,30 @@ class CampaignTests(unittest.TestCase):
         self.assertEqual(len(world.pickups), 0)
         self.assertIn(PowerUpKind.THRUST_BOOST, campaign.powerups)
 
+    def test_pickup_hud_callback_reports_new_vs_duplicate(self) -> None:
+        campaign = CampaignState.new()
+        events: list[tuple[PowerUpKind, bool]] = []
+        world = GameWorld(
+            config=WorldConfig(width=200, height=200),
+            ship=Ship(pos=Vec2(20, 20)),
+            walls=[],
+            wells=[],
+            beacons=[],
+            finish_gate=FinishGate(Rect(150, 150, 25, 25)),
+            pickups=[PowerUpPickup(pos=Vec2(20, 20), kind=PowerUpKind.RAPID_FIRE)],
+        )
+        wire_world_for_campaign(
+            world,
+            campaign,
+            on_powerup_collected_hud=lambda kind, is_new: events.append((kind, is_new)),
+        )
+        world.update(0.016, ControlIntent())
+        self.assertEqual(events, [(PowerUpKind.RAPID_FIRE, True)])
+
+        world.pickups = [PowerUpPickup(pos=Vec2(20, 20), kind=PowerUpKind.RAPID_FIRE)]
+        world.update(0.016, ControlIntent())
+        self.assertEqual(events, [(PowerUpKind.RAPID_FIRE, True), (PowerUpKind.RAPID_FIRE, False)])
+
 
 class EnemyTests(unittest.TestCase):
     def test_patrol_steers_toward_waypoints(self) -> None:
