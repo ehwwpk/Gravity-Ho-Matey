@@ -9,9 +9,12 @@ from gravity_ho_matey.render.camera import (
     CHASE_BACK,
     CHASE_SCREEN_HEADING,
     CHASE_SHIP_ANCHOR_FRAC,
+    TACTICAL_OOB_ZOOM_RELIEF_MAX,
     TACTICAL_ZOOM_COMPACT,
     CameraMode,
     ViewCamera,
+    chase_focal_for_hfov,
+    chase_horizontal_fov_deg,
 )
 
 
@@ -55,10 +58,40 @@ class ViewCameraHostileTests(unittest.TestCase):
 
     def test_tactical_center_clamps_on_vertical_strip(self) -> None:
         camera = ViewCamera()
-        config = WorldConfig(width=960, height=1680, viewport_width=960, viewport_height=640)
+        config = WorldConfig(width=960, height=1680, viewport_width=960, viewport_height=640, open_bounds=True)
         camera.update_follow(Vec2(480, 1500), config, 1.0)
         self.assertAlmostEqual(camera.center.x, 0.0)
         self.assertAlmostEqual(camera.center.y, 1040.0, delta=2.0)
+
+    def test_tactical_tracks_ship_outside_open_chart(self) -> None:
+        camera = ViewCamera()
+        config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640, open_bounds=True)
+        for _ in range(80):
+            camera.update_follow(Vec2(1050, 320), config, 0.05)
+        vis_w = config.viewport_width / camera.tactical_scale
+        self.assertAlmostEqual(camera.center.x, 1050.0 - vis_w * 0.5, delta=8.0)
+        self.assertGreater(camera._bounds_follow_blend, 0.9)
+
+    def test_tactical_bounds_transition_does_not_snap(self) -> None:
+        camera = ViewCamera()
+        config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640, open_bounds=True)
+        for _ in range(40):
+            camera.update_follow(Vec2(480, 320), config, 0.05)
+        center_in = camera.center.x
+        camera.update_follow(Vec2(1050, 320), config, 0.05)
+        self.assertLess(abs(camera.center.x - center_in), 120.0)
+        self.assertLess(camera._bounds_follow_blend, 0.35)
+
+    def test_tactical_zooms_out_when_off_chart(self) -> None:
+        camera = ViewCamera()
+        config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640, open_bounds=True)
+        for _ in range(40):
+            camera.update_follow(Vec2(480, 320), config, 0.05)
+        in_scale = camera.tactical_scale
+        for _ in range(40):
+            camera.update_follow(Vec2(1100, 320), config, 0.05)
+        self.assertLess(camera.tactical_scale, in_scale)
+        self.assertGreaterEqual(camera.tactical_scale, TACTICAL_ZOOM_COMPACT * (1.0 - TACTICAL_OOB_ZOOM_RELIEF_MAX))
 
     def test_tactical_world_to_screen_applies_pan_only(self) -> None:
         camera = ViewCamera(mode=CameraMode.TACTICAL)
@@ -72,8 +105,9 @@ class ViewCameraHostileTests(unittest.TestCase):
     def test_tactical_zoom_scales_compact_arena(self) -> None:
         camera = ViewCamera(mode=CameraMode.TACTICAL)
         config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640)
-        camera.update_follow(Vec2(480, 320), config, 0.016)
-        self.assertAlmostEqual(camera.tactical_scale, TACTICAL_ZOOM_COMPACT)
+        for _ in range(30):
+            camera.update_follow(Vec2(480, 320), config, 0.05)
+        self.assertAlmostEqual(camera.tactical_scale, TACTICAL_ZOOM_COMPACT, places=2)
         p = camera.world_to_screen(Vec2(580, 420), Vec2(), 0.0)
         self.assertGreater(p.x, 100.0)
 
@@ -173,6 +207,15 @@ class ViewCameraHostileTests(unittest.TestCase):
         self.assertGreater(camera.mode_flash_ttl, 0.0)
         camera.tick(2.0)
         self.assertEqual(camera.mode_flash_ttl, 0.0)
+
+    def test_chase_hfov_target_is_105_degrees(self) -> None:
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        fov = chase_horizontal_fov_deg(
+            viewport_width=float(camera.viewport_width),
+            focal_length=camera.focal_length,
+        )
+        self.assertAlmostEqual(fov, 105.0, places=1)
+        self.assertAlmostEqual(camera.focal_length, chase_focal_for_hfov(960.0, 105.0), places=1)
 
     def test_chase_rig_uses_drone_style_offsets(self) -> None:
         camera = ViewCamera(mode=CameraMode.CHASE)

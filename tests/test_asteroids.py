@@ -93,7 +93,8 @@ class AsteroidWorldTests(unittest.TestCase):
 
         for level_id in ("cove", "solar"):
             world = build_level(level_id)
-            self.assertGreaterEqual(len(world.asteroids), 8)
+            min_rocks = 3 if level_id == "cove" else 8
+            self.assertGreaterEqual(len(world.asteroids), min_rocks)
             kinds = {a.drift_kind for a in world.asteroids}
             self.assertIn("ring", kinds)
 

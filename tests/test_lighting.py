@@ -1,5 +1,6 @@
 import unittest
 
+from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode
 from gravity_ho_matey.render.lighting import (
     LightRig,
@@ -21,6 +22,12 @@ class LightRigTests(unittest.TestCase):
         cove = material_for("asteroid", theme="cove")
         solar = material_for("asteroid", theme="solar")
         self.assertNotEqual(cove.mid, solar.mid)
+
+    def test_chase_cove_asteroids_use_physical_rock_not_holo(self) -> None:
+        tactical = material_for("asteroid", theme="cove", view="tactical")
+        chase = material_for("asteroid", theme="cove", view="chase")
+        self.assertEqual(tactical.rim, palette.HOLO_ASTEROID_EDGE)
+        self.assertNotEqual(chase.rim, tactical.rim)
 
 
 class ShadeBandTests(unittest.TestCase):

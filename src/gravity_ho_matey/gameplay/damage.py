@@ -12,6 +12,7 @@ class DamageSeverity(Enum):
 class DamageSource(Enum):
     ASTEROID = auto()
     OUT_OF_BOUNDS = auto()
+    CHART_RADIATION = auto()
     ENEMY = auto()
     ENEMY_PROJECTILE = auto()
     GRAVITY_MAW = auto()
@@ -42,6 +43,7 @@ class DamageResult:
 DAMAGE_RULES: dict[DamageSource, DamageSpec] = {
     DamageSource.ASTEROID: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.OUT_OF_BOUNDS: DamageSpec(DamageSeverity.CHIP, 1),
+    DamageSource.CHART_RADIATION: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.ENEMY: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.ENEMY_PROJECTILE: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.GRAVITY_MAW: DamageSpec(DamageSeverity.LETHAL, 3),
@@ -58,6 +60,8 @@ def default_reason(source: DamageSource, level_theme: str = "cove") -> str:
         return "Hull cracked on a rogue asteroid." if solar else "Hull smashed on drifting reef rock."
     if source is DamageSource.OUT_OF_BOUNDS:
         return "Drifted beyond the star chart." if solar else "Lost beyond the reef."
+    if source is DamageSource.CHART_RADIATION:
+        return "Chart radiation exceeded safe exposure." if solar else "Void radiation breached the hull."
     if source is DamageSource.ENEMY:
         return "Hull breached by a patrol skiff."
     if source is DamageSource.ENEMY_PROJECTILE:

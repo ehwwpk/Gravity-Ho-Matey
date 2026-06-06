@@ -5,6 +5,7 @@ import tkinter as tk
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
@@ -16,7 +17,6 @@ from gravity_ho_matey.render.entity_viz import draw_beacon_marker, draw_gate_por
 from gravity_ho_matey.render.explosion_fx import draw_explosions
 from gravity_ho_matey.render.world_draw import (
     WELL_RING_VISUAL_SCALE,
-    draw_gravity_floor_grid,
     draw_gravity_heatmap,
     draw_ship,
     draw_well,
@@ -32,6 +32,7 @@ class TacticalViewRenderer:
         field: GravityField,
         *,
         hud_top: int,
+        powerup_stacks: PowerUpStacks | None = None,
     ) -> None:
         vw = camera.viewport_width
         vh = camera.viewport_height
@@ -43,11 +44,8 @@ class TacticalViewRenderer:
         if solar:
             self._starfield(canvas, vw, vh, hud_top, dense=True)
         else:
-            self._grid(canvas, vw, vh, hud_top, camera)
-        draw_gravity_heatmap(canvas, field, camera, y_offset=hud_top, alpha_step=2, world=world)
-        draw_gravity_floor_grid(
-            canvas, field, camera, ship_pos, world.ship.angle, y_offset=hud_top, step=2, world=world,
-        )
+            self._ambient_depth(canvas, vw, vh, hud_top)
+        draw_gravity_heatmap(canvas, field, camera, y_offset=hud_top, alpha_step=4, world=world)
         for asteroid in world.asteroids:
             draw_tactical_asteroid(
                 canvas,
@@ -101,6 +99,7 @@ class TacticalViewRenderer:
             elapsed=world.elapsed,
             scale=1.08 * camera.tactical_scale / 1.1,
             rig=rig,
+            powerup_stacks=powerup_stacks,
         )
         draw_edge_hints(canvas, world, camera, hud_top=hud_top)
         draw_explosions(
@@ -138,13 +137,25 @@ class TacticalViewRenderer:
             tail = Vec2(x, y) - vel.normalized() * (16 if projectile.hostile else 14)
             canvas.create_line(tail.x, tail.y, x, y, fill=color, width=2 if projectile.hostile else 1)
 
-    def _grid(self, canvas: tk.Canvas, width: int, height: int, y_offset: int, camera: ViewCamera) -> None:
-        step = int(48 / max(1.0, camera.tactical_scale * 0.85))
-        step = max(32, step)
-        for x in range(0, width + step, step):
-            canvas.create_line(x, y_offset, x, height, fill=palette.SEA_GRID)
-        for y in range(y_offset, height + step, step):
-            canvas.create_line(0, y, width, y, fill=palette.SEA_GRID)
+    def _ambient_depth(self, canvas: tk.Canvas, width: int, height: int, y_offset: int) -> None:
+        """Soft star specks — no line grid (reads cleaner than a dev overlay)."""
+        specks = (
+            (72, 118, "#0e1a2e"),
+            (188, 96, "#0c1828"),
+            (412, 142, "#101f34"),
+            (638, 88, "#0d1b2f"),
+            (824, 156, "#0f1d31"),
+            (156, 298, "#111e33"),
+            (502, 244, "#0e1a2c"),
+            (748, 312, "#101f35"),
+            (318, 402, "#0d192b"),
+            (892, 428, "#0f1e32"),
+            (44, 512, "#101d30"),
+            (566, 548, "#0e1b2d"),
+        )
+        for x, y, color in specks:
+            if y_offset <= y < height:
+                canvas.create_oval(x - 1, y - 1, x + 1, y + 1, fill=color, outline="")
 
     def _starfield(self, canvas: tk.Canvas, width: int, height: int, y_offset: int, dense: bool) -> None:
         count = 140 if dense else 80
@@ -165,8 +176,13 @@ class PerspectiveViewRenderer:
         field: GravityField,
         *,
         hud_top: int,
+        powerup_stacks: PowerUpStacks | None = None,
     ) -> None:
-        from gravity_ho_matey.render.camera import CHASE_SHIP_SCALE
+        from gravity_ho_matey.render.camera import (
+            CHASE_BEACON_SCALE_FLOOR,
+            CHASE_BEACON_VISUAL_BOOST,
+            CHASE_SHIP_SCALE,
+        )
         from gravity_ho_matey.render.chase_entities import (
             draw_chase_beacon,
             draw_chase_enemy,
@@ -183,7 +199,6 @@ class PerspectiveViewRenderer:
         from gravity_ho_matey.render.chase_ground import draw_chase_gravity_heatmap
         from gravity_ho_matey.render.asteroid_viz import collect_chase_asteroid_sprites, draw_chase_asteroids
         from gravity_ho_matey.render.chase_helm import bank_angle_for_chase, draw_xwing_cockpit_hud
-        from gravity_ho_matey.render.chase_threat import asteroid_urgency
         from gravity_ho_matey.render.chase_wells import draw_chase_well
 
         vw = camera.viewport_width
@@ -205,6 +220,15 @@ class PerspectiveViewRenderer:
         draw_chase_gravity_heatmap(
             canvas, field, camera, ship_pos, ship_angle, step=2, _world=world,
         )
+        from gravity_ho_matey.render.chase_chart_bounds import draw_chase_chart_edge_hints
+
+        draw_chase_chart_edge_hints(
+            canvas,
+            config=world.config,
+            ship_pos=ship_pos,
+            ship_angle=ship_angle,
+            camera=camera,
+        )
 
         light_layer = LightLayerBuilder(rig, elapsed=elapsed)
         for well in world.wells:
@@ -224,8 +248,7 @@ class PerspectiveViewRenderer:
             canvas,
             asteroid_sprites,
             rig=rig,
-            urgency=asteroid_urgency(world),
-            focal_length=camera.focal_length,
+            ship_angle=ship_angle,
         )
 
         sprites: list[tuple[float, str, object]] = []
@@ -243,7 +266,10 @@ class PerspectiveViewRenderer:
         for beacon in world.beacons:
             p = camera.world_to_screen(beacon.pos, ship_pos, ship_angle)
             if p.visible:
-                b_scale = max(0.35, camera.perspective_scale(p.depth) / camera.focal_length)
+                b_scale = max(
+                    CHASE_BEACON_SCALE_FLOOR,
+                    camera.perspective_scale(p.depth) / camera.focal_length * CHASE_BEACON_VISUAL_BOOST,
+                )
                 sprites.append((p.depth, "beacon", (Vec2(p.x, p.y), beacon, b_scale)))
         for pickup in world.pickups:
             p = camera.world_to_screen(pickup.pos, ship_pos, ship_angle)
@@ -314,6 +340,7 @@ class PerspectiveViewRenderer:
             elapsed=elapsed,
             scale=CHASE_SHIP_SCALE,
             rig=rig,
+            powerup_stacks=powerup_stacks,
         )
         draw_xwing_cockpit_hud(
             canvas,

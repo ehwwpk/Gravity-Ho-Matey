@@ -41,7 +41,7 @@ class ChaseAsteroidTests(unittest.TestCase):
         ship_angle = -1.5708
         sprites = collect_chase_asteroid_sprites(world.asteroids, camera, ship_pos, ship_angle)
         self.assertGreaterEqual(len(sprites), 1)
-        for _, points, _ in sprites:
+        for _, points, _, _ in sprites:
             self.assertGreaterEqual(len(points), 3)
 
     def test_chase_asteroid_sprites_sort_by_depth(self) -> None:
@@ -50,7 +50,7 @@ class ChaseAsteroidTests(unittest.TestCase):
         camera = ViewCamera(mode=CameraMode.CHASE)
         camera.set_play_layout(54.0)
         sprites = collect_chase_asteroid_sprites(world.asteroids, camera, Vec2(480, 560), -1.5708)
-        depths = [depth for depth, _, _ in sprites]
+        depths = [depth for depth, _, _, _ in sprites]
         self.assertEqual(depths, sorted(depths))
 
 

@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from gravity_ho_matey.core.vector import Vec2
+from gravity_ho_matey.gameplay.chart_radiation import advance_chart_radiation_exposure
+from gravity_ho_matey.gameplay.chart_bounds import chart_radiation_reason
 from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSeverity, DamageSource, damage_spec_for, default_reason
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
 from gravity_ho_matey.gameplay.explosions import ExplosionKind, ExplosionSystem
@@ -54,6 +56,7 @@ class GameWorld:
     invuln_remaining: float = 0.0
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
     asteroid_threat_snapshots: tuple[AsteroidThreatSnapshot, ...] = ()
+    chart_radiation_exposure: float = 0.0
 
     def refresh_threat_snapshots(self) -> None:
         self.asteroid_threat_snapshots = build_asteroid_threat_snapshots(self.asteroids)
@@ -66,7 +69,7 @@ class GameWorld:
     def finish_unlocked(self) -> bool:
         return self.beacons_remaining == 0
 
-    def update(self, dt: float, intent: ControlIntent) -> None:
+    def update(self, dt: float, intent: ControlIntent, *, beacon_capture_slack: float = 0.0) -> None:
         dt = max(0.0, min(dt, 1.0 / 20.0))
         self.elapsed += dt
         self.explosions.update(dt)
@@ -79,10 +82,11 @@ class GameWorld:
         self._update_ship(dt, intent)
         self._update_enemies(dt)
         self._update_projectiles(dt)
-        self._collect_beacons()
+        self._collect_beacons(beacon_capture_slack)
         self._collect_pickups()
         self._check_enemy_collisions()
         self._check_finish()
+        self._tick_chart_radiation(dt)
         self._check_loss()
 
     def _update_asteroids(self, dt: float) -> None:
@@ -247,11 +251,12 @@ class GameWorld:
     def _prune_dead_enemies(self) -> None:
         self.enemies = [enemy for enemy in self.enemies if enemy.alive]
 
-    def _collect_beacons(self) -> None:
+    def _collect_beacons(self, capture_slack: float = 0.0) -> None:
+        slack = max(0.0, capture_slack)
         for beacon in self.beacons:
             if beacon.collected:
                 continue
-            if (beacon.pos - self.ship.pos).length() <= beacon.radius + self.ship.radius:
+            if (beacon.pos - self.ship.pos).length() <= beacon.radius + self.ship.radius + slack:
                 beacon.collected = True
 
     def _collect_pickups(self) -> None:
@@ -286,6 +291,13 @@ class GameWorld:
             return
         if self.finish_unlocked and self.finish_gate.rect.intersects_circle(self.ship.pos, self.ship.radius):
             self.status = GameStatus.WON
+
+    def _tick_chart_radiation(self, dt: float) -> None:
+        if advance_chart_radiation_exposure(self, dt):
+            self._register_ship_hit(
+                DamageSource.CHART_RADIATION,
+                reason=chart_radiation_reason(level_theme=self.config.level_theme),
+            )
 
     def _check_loss(self) -> None:
         if self.status is not GameStatus.RUNNING:

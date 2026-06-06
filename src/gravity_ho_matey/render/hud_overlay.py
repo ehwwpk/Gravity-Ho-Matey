@@ -4,6 +4,14 @@ import tkinter as tk
 
 from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE, MAX_LIVES
 from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_HUD_TAGS, POWERUP_LABELS, PowerUpKind
+from gravity_ho_matey.gameplay.chart_bounds import (
+    CHART_RADIATION_EXPOSURE_LIMIT,
+    ChartBoundsToast,
+    chart_bounds_edge_badge,
+    chart_bounds_toast_copy,
+    ship_in_chart,
+)
+from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks, powerup_hud_tag
 from gravity_ho_matey.gameplay.session import LOOT_PULSE_SECONDS, LOOT_TOAST_SECONDS
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.camera import CameraMode
@@ -17,6 +25,7 @@ class SciFiHudOverlay:
     PANEL_H = 54
     ALERT_H = 22
     LOOT_BANNER_H = 40
+    CHART_BOUNDS_BANNER_H = 26
     FONT = ("Courier New", 10, "bold")
     FONT_SMALL = ("Courier New", 8)
     FONT_TITLE = ("Courier New", 9, "bold")
@@ -31,6 +40,8 @@ class SciFiHudOverlay:
         loot_toast_kind: PowerUpKind | None = None,
         loot_toast_is_new: bool = False,
         loot_toast_ttl: float = 0.0,
+        bounds_toast_kind: ChartBoundsToast | None = None,
+        bounds_toast_ttl: float = 0.0,
         camera_mode: CameraMode | None = None,
         camera_mode_flash: bool = False,
     ) -> None:
@@ -53,8 +64,8 @@ class SciFiHudOverlay:
         self._panel(canvas, 162, 6, 168, 42, frame, accent)
         self._label(canvas, 170, 12, "HULL INTEGRITY", dim)
         self._draw_hull_chunks(canvas, 170, 24, campaign.hull_chunks, CHUNKS_PER_LIFE, accent, palette.HUD_HULL_EMPTY)
-        if campaign.powerups:
-            self._draw_hull_fittings(canvas, 170, 38, campaign.powerups, dim, cargo_highlight)
+        if campaign.powerup_stacks:
+            self._draw_hull_fittings(canvas, 170, 38, campaign.powerup_stacks, dim, cargo_highlight)
 
         self._panel(canvas, 336, 6, 128, 42, frame, accent)
         self._label(canvas, 344, 12, "NAV BEACONS", dim)
@@ -98,7 +109,7 @@ class SciFiHudOverlay:
             canvas,
             cargo_x + 8,
             24,
-            campaign.powerups,
+            campaign.powerup_stacks,
             cargo_frame if cargo_highlight else accent,
             dim,
             highlight_kind=cargo_highlight,
@@ -127,6 +138,17 @@ class SciFiHudOverlay:
             )
             banner_y += self.ALERT_H
 
+        if bounds_toast_kind is not None and bounds_toast_ttl > 0.0:
+            self._draw_chart_bounds_toast(
+                canvas,
+                width,
+                banner_y,
+                bounds_toast_kind,
+                world,
+                bounds_toast_ttl,
+            )
+            banner_y += self.CHART_BOUNDS_BANNER_H
+
         if loot_toast_kind is not None and loot_toast_ttl > 0.0:
             self._draw_loot_acquired_banner(
                 canvas,
@@ -145,9 +167,11 @@ class SciFiHudOverlay:
         *,
         camera_mode: CameraMode | None = None,
         camera_mode_flash: bool = False,
+        bounds_alert_flash: bool = False,
     ) -> None:
         """Sector + camera badges on the playfield — never stacked on command panels."""
         width = world.config.viewport_width
+        height = world.config.viewport_height
         solar = world.config.level_theme == "solar"
         accent = palette.HUD_ACCENT_SOLAR if solar else palette.HUD_ACCENT
         dim = palette.HUD_DIM
@@ -171,6 +195,32 @@ class SciFiHudOverlay:
                 anchor="ne",
                 text=f"◈ {camera_mode.hud_label} ◈",
                 fill=mode_color,
+                font=self.FONT_SMALL,
+            )
+        if world.config.open_bounds and not ship_in_chart(world.ship.pos, world.config):
+            self._draw_chart_bounds_playfield_overlay(
+                canvas,
+                world,
+                hud_top,
+                height,
+                camera_mode=camera_mode,
+                bounds_alert_flash=bounds_alert_flash,
+            )
+        elif (
+            world.config.open_bounds
+            and world.chart_radiation_exposure > 0.0
+            and ship_in_chart(world.ship.pos, world.config)
+        ):
+            self._badge(
+                canvas,
+                width // 2,
+                y,
+                anchor="n",
+                text=(
+                    f"BANKED {world.chart_radiation_exposure:0.1f}"
+                    f" / {CHART_RADIATION_EXPOSURE_LIMIT:0.0f}s"
+                ),
+                fill=dim,
                 font=self.FONT_SMALL,
             )
 
@@ -200,6 +250,72 @@ class SciFiHudOverlay:
             width=1,
         )
         canvas.tag_raise(tid)
+
+    def _draw_chart_bounds_playfield_overlay(
+        self,
+        canvas: tk.Canvas,
+        world: GameWorld,
+        hud_top: float,
+        viewport_height: float,
+        *,
+        camera_mode: CameraMode | None,
+        bounds_alert_flash: bool,
+    ) -> None:
+        vw = world.config.viewport_width
+        warn = palette.HUD_WARN if bounds_alert_flash else "#a84840"
+        border_w = 2
+        canvas.create_rectangle(4, hud_top + 4, vw - 4, viewport_height - 4, outline=warn, width=border_w)
+        badge = chart_bounds_edge_badge(
+            level_theme=world.config.level_theme,
+            exposure=world.chart_radiation_exposure,
+        )
+        badge_y = hud_top + 34 if camera_mode is CameraMode.CHASE else hud_top + 30
+        warn_fill = palette.HUD_WARN if world.chart_radiation_exposure >= CHART_RADIATION_EXPOSURE_LIMIT * 0.65 else warn
+        self._badge(
+            canvas,
+            vw // 2,
+            badge_y,
+            anchor="n",
+            text=f"◈ {badge} ◈",
+            fill=warn_fill,
+            font=self.FONT_SMALL,
+        )
+
+    def _draw_chart_bounds_toast(
+        self,
+        canvas: tk.Canvas,
+        width: int,
+        y: float,
+        kind: ChartBoundsToast,
+        world: GameWorld,
+        ttl: float,
+    ) -> None:
+        headline, subline = chart_bounds_toast_copy(
+            kind,
+            level_theme=world.config.level_theme,
+            exposure=world.chart_radiation_exposure,
+        )
+        leaving = kind is ChartBoundsToast.LEFT_CHART
+        bg = palette.HUD_ALERT_BG if leaving else "#081810"
+        border = palette.HUD_WARN if leaving else palette.HUD_DIM
+        headline_color = palette.HUD_WARN if leaving else palette.GATE_OPEN
+
+        canvas.create_rectangle(0, y, width, y + self.CHART_BOUNDS_BANNER_H, fill=bg, outline="")
+        canvas.create_line(0, y + self.CHART_BOUNDS_BANNER_H - 1, width, y + self.CHART_BOUNDS_BANNER_H - 1, fill=border, width=1)
+        canvas.create_text(
+            width // 2,
+            y + 10,
+            text=headline.upper(),
+            fill=headline_color,
+            font=("Courier New", 10, "bold"),
+        )
+        canvas.create_text(
+            width // 2,
+            y + 21,
+            text=subline,
+            fill=border if leaving else palette.HUD_DIM,
+            font=self.FONT_SMALL,
+        )
 
     @staticmethod
     def _powerup_color(kind: PowerUpKind) -> str:
@@ -322,46 +438,54 @@ class SciFiHudOverlay:
         canvas: tk.Canvas,
         x: float,
         y: float,
-        powerups: set[PowerUpKind],
+        stacks: PowerUpStacks,
         dim: str,
         highlight_kind: PowerUpKind | None,
     ) -> None:
-        if not powerups:
+        if not stacks:
             canvas.create_text(x, y, anchor="w", text="FITTINGS: —", fill=dim, font=self.FONT_SMALL)
             return
         canvas.create_text(x, y, anchor="w", text="FITTINGS:", fill=dim, font=self.FONT_SMALL)
         chip_x = x + 58
-        for kind in sorted(powerups, key=lambda k: k.name):
+        for kind in sorted(stacks.keys(), key=lambda k: k.name):
+            count = stacks[kind]
+            if count <= 0:
+                continue
             color = self._powerup_color(kind)
-            tag = POWERUP_HUD_TAGS[kind]
+            tag = powerup_hud_tag(kind, count)
+            chip_w = 40 + (10 if count > 1 else 0)
             if highlight_kind is kind:
-                canvas.create_rectangle(chip_x - 2, y - 2, chip_x + 44, y + 10, outline=color, width=1)
-            canvas.create_rectangle(chip_x, y, chip_x + 40, y + 8, fill=color, outline=dim, width=1)
+                canvas.create_rectangle(chip_x - 2, y - 2, chip_x + chip_w + 2, y + 10, outline=color, width=1)
+            canvas.create_rectangle(chip_x, y, chip_x + chip_w, y + 8, fill=color, outline=dim, width=1)
             canvas.create_text(chip_x + 4, y + 1, anchor="w", text=tag, fill=palette.HUD_BG, font=self.FONT_SMALL)
-            chip_x += 46
+            chip_x += chip_w + 6
 
     def _draw_cargo(
         self,
         canvas: tk.Canvas,
         x: float,
         y: float,
-        powerups: set[PowerUpKind],
+        stacks: PowerUpStacks,
         accent: str,
         dim: str,
         *,
         highlight_kind: PowerUpKind | None = None,
     ) -> None:
-        if not powerups:
+        if not stacks:
             canvas.create_text(x, y + 6, anchor="w", text="EMPTY", fill=dim, font=self.FONT)
             return
         chip_x = x
-        for kind in sorted(powerups, key=lambda k: k.name):
+        for kind in sorted(stacks.keys(), key=lambda k: k.name):
+            count = stacks[kind]
+            if count <= 0:
+                continue
             color = self._powerup_color(kind)
-            label = POWERUP_HUD_TAGS[kind]
+            label = powerup_hud_tag(kind, count)
             active = highlight_kind is kind
+            chip_w = 64 + (12 if count > 1 else 0)
             if active:
-                canvas.create_rectangle(chip_x - 2, y + 2, chip_x + 68, y + 18, outline=color, width=2)
-            canvas.create_rectangle(chip_x, y + 4, chip_x + 64, y + 16, fill=color, outline=accent if active else dim, width=1)
+                canvas.create_rectangle(chip_x - 2, y + 2, chip_x + chip_w + 2, y + 18, outline=color, width=2)
+            canvas.create_rectangle(chip_x, y + 4, chip_x + chip_w, y + 16, fill=color, outline=accent if active else dim, width=1)
             canvas.create_text(
                 chip_x + 4,
                 y + 6,
@@ -370,4 +494,4 @@ class SciFiHudOverlay:
                 fill=palette.HUD_BG,
                 font=self.FONT,
             )
-            chip_x += 70
+            chip_x += chip_w + 6

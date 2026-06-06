@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE, MAX_LIVES
 from gravity_ho_matey.gameplay.gravity_field import GravityField
-from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_HUD_TAGS, PowerUpKind
+from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks, powerup_hud_tag
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.level_registry import LEVEL_LABELS
 from gravity_ho_matey.render import hud_primitives as hp
@@ -53,8 +54,8 @@ class ChartMapOverlay:
         *,
         campaign: CampaignState,
         upcoming_level_id: str,
-        cleared_level_id: str,
-        elapsed: float,
+        cleared_level_id: str | None = None,
+        elapsed: float = 0.0,
     ) -> None:
         vw = world.config.viewport_width
         vh = world.config.viewport_height
@@ -66,8 +67,8 @@ class ChartMapOverlay:
 
         canvas.create_rectangle(0, 0, vw, vh, fill=palette.SOLAR_BG if solar else palette.BACKGROUND, outline="")
         self._starfield(canvas, vw, vh, dense=solar)
-        self._draw_command_bar(canvas, world, campaign, accent, dim, frame, bg)
-        self._draw_cleared_banner(canvas, vw, cleared_level_id, elapsed, accent, dim)
+        self._draw_command_bar(canvas, world, campaign, cleared_level_id, accent, dim, frame, bg)
+        self._draw_status_banner(canvas, vw, cleared_level_id, upcoming_level_id, elapsed, accent, dim)
         body_top = _HEADER_H + _CLEARED_H + 8
         body_bottom = vh - _FOOTER_H - 8
         body_h = body_bottom - body_top
@@ -83,6 +84,7 @@ class ChartMapOverlay:
         canvas: tk.Canvas,
         world: GameWorld,
         campaign: CampaignState,
+        cleared_level_id: str | None,
         accent: str,
         dim: str,
         frame: str,
@@ -119,37 +121,46 @@ class ChartMapOverlay:
 
         hp.draw_panel(canvas, 594, 6, 118, 42, frame=frame, accent=accent)
         hp.draw_panel_title(canvas, 602, 12, "CHART MODE", color=dim)
-        canvas.create_text(602, 30, anchor="w", text="HOLO PREVIEW", fill=accent, font=("Courier New", 11, "bold"))
+        chart_mode = "HOLO PREVIEW" if cleared_level_id else "INITIAL BRIEF"
+        canvas.create_text(602, 30, anchor="w", text=chart_mode, fill=accent, font=("Courier New", 11, "bold"))
 
         cargo_x = width - 156
         hp.draw_panel(canvas, cargo_x, 6, 148, 42, frame=frame, accent=accent)
         hp.draw_panel_title(canvas, cargo_x + 8, 12, "CARGO MANIFEST", color=dim)
-        self._draw_cargo(canvas, cargo_x + 8, 24, campaign.powerups, accent, dim)
+        self._draw_cargo(canvas, cargo_x + 8, 24, campaign.powerup_stacks, accent, dim)
 
-    def _draw_cleared_banner(
+    def _draw_status_banner(
         self,
         canvas: tk.Canvas,
         width: int,
-        cleared_level_id: str,
+        cleared_level_id: str | None,
+        upcoming_level_id: str,
         elapsed: float,
         accent: str,
         dim: str,
     ) -> None:
         y = _HEADER_H
-        label = LEVEL_LABELS.get(cleared_level_id, cleared_level_id.upper())
         canvas.create_rectangle(0, y, width, y + _CLEARED_H, fill=palette.HUD_LOOT_BG, outline="")
         canvas.create_line(0, y + _CLEARED_H, width, y + _CLEARED_H, fill=accent, width=1)
+        if cleared_level_id is None:
+            upcoming = LEVEL_LABELS.get(upcoming_level_id, upcoming_level_id.upper())
+            headline = f"◈  HOLO CHART OPEN — {upcoming.upper()}  ◈"
+            headline_color = accent
+        else:
+            label = LEVEL_LABELS.get(cleared_level_id, cleared_level_id.upper())
+            headline = f"◈  {label.upper()} CLEARED — {elapsed:05.1f}s  ◈"
+            headline_color = palette.HUD_LOOT_NEW
         canvas.create_text(
             width // 2,
             y + 11,
-            text=f"◈  {label.upper()} CLEARED — {elapsed:05.1f}s  ◈",
-            fill=palette.HUD_LOOT_NEW,
+            text=headline,
+            fill=headline_color,
             font=("Courier New", 11, "bold"),
         )
         canvas.create_text(
             width // 2,
             y + 26,
-            text="Review upcoming chart · Enter to launch · Esc for title",
+            text="Review sector chart · Enter to launch · Esc for title",
             fill=dim,
             font=self.FONT_SMALL,
         )
@@ -162,13 +173,32 @@ class ChartMapOverlay:
         w: float,
         h: float,
         campaign: CampaignState,
-        cleared_level_id: str,
+        cleared_level_id: str | None,
         elapsed: float,
         accent: str,
         dim: str,
         frame: str,
     ) -> None:
         hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
+        if cleared_level_id is None:
+            hp.draw_panel_title(canvas, x + 10, y + 10, "BRIEFING", color=dim)
+            rows = [
+                ("OBJECTIVE", "Collect all beacons"),
+                ("", "Unlock exit gate"),
+                ("CONTROLS", "Arrows · thrust · fire"),
+                ("HAZARDS", "Gravity wells"),
+                ("", "Drifting asteroids"),
+                ("STATUS", "Ready to launch"),
+            ]
+            ry = y + 28
+            for label, value in rows:
+                if label:
+                    hp.draw_panel_title(canvas, x + 10, ry, label, color=dim)
+                    ry += 12
+                canvas.create_text(x + 10, ry, anchor="w", text=value, fill=accent, font=self.FONT)
+                ry += 20 if label else 16
+            return
+
         hp.draw_panel_title(canvas, x + 10, y + 10, "MISSION LOG", color=dim)
         cleared = LEVEL_LABELS.get(cleared_level_id, cleared_level_id)
         rows = [
@@ -182,15 +212,19 @@ class ChartMapOverlay:
             hp.draw_panel_title(canvas, x + 10, ry, label, color=dim)
             canvas.create_text(x + 10, ry + 12, anchor="w", text=value, fill=accent, font=self.FONT)
             ry += 32
-        if campaign.powerups:
+        if campaign.powerup_stacks:
             hp.draw_panel_title(canvas, x + 10, ry + 4, "FITTINGS", color=dim)
             chip_x = x + 10
-            for kind in sorted(campaign.powerups, key=lambda k: k.name):
+            for kind in sorted(campaign.powerup_stacks.keys(), key=lambda k: k.name):
+                count = campaign.powerup_stacks[kind]
+                if count <= 0:
+                    continue
                 color = self._powerup_color(kind)
-                tag = POWERUP_HUD_TAGS[kind]
-                canvas.create_rectangle(chip_x, ry + 18, chip_x + 42, ry + 28, fill=color, outline=dim)
+                tag = powerup_hud_tag(kind, count)
+                chip_w = 42 + (10 if count > 1 else 0)
+                canvas.create_rectangle(chip_x, ry + 18, chip_x + chip_w, ry + 28, fill=color, outline=dim)
                 canvas.create_text(chip_x + 4, ry + 19, anchor="w", text=tag, fill=palette.HUD_BG, font=self.FONT_SMALL)
-                chip_x += 46
+                chip_x += chip_w + 4
 
     def _draw_side_intel(
         self,
@@ -504,16 +538,21 @@ class ChartMapOverlay:
             canvas.create_rectangle(sx, y, sx + 22, y + 12, fill=color, outline=accent if i < chunks else palette.HUD_HULL_EMPTY, width=1)
 
     @staticmethod
-    def _draw_cargo(canvas: tk.Canvas, x: float, y: float, powerups: set[PowerUpKind], accent: str, dim: str) -> None:
-        if not powerups:
+    def _draw_cargo(canvas: tk.Canvas, x: float, y: float, stacks: PowerUpStacks, accent: str, dim: str) -> None:
+        if not stacks:
             canvas.create_text(x, y + 6, anchor="w", text="EMPTY", fill=dim, font=ChartMapOverlay.FONT)
             return
         chip_x = x
-        for kind in sorted(powerups, key=lambda k: k.name):
+        for kind in sorted(stacks.keys(), key=lambda k: k.name):
+            count = stacks[kind]
+            if count <= 0:
+                continue
             color = ChartMapOverlay._powerup_color(kind)
-            tag = POWERUP_HUD_TAGS[kind]
-            canvas.create_rectangle(chip_x, y + 4, chip_x + 64, y + 16, fill=color, outline=accent, width=1)
+            tag = powerup_hud_tag(kind, count)
+            chip_w = 64 + (12 if count > 1 else 0)
+            canvas.create_rectangle(chip_x, y + 4, chip_x + chip_w, y + 16, fill=color, outline=accent, width=1)
             canvas.create_text(chip_x + 4, y + 6, anchor="w", text=tag, fill=palette.HUD_BG, font=ChartMapOverlay.FONT)
+            chip_x += chip_w + 6
 
     @staticmethod
     def _starfield(canvas: tk.Canvas, width: int, height: int, *, dense: bool) -> None:

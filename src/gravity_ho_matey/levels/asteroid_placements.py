@@ -7,44 +7,21 @@ from gravity_ho_matey.settings import CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
 
 
 def build_cove_asteroids() -> list[Asteroid]:
+    """Intro field — a few hazards to teach drift; heavier belts come later."""
     rocks: list[Asteroid] = []
 
     rocks.extend(
         make_ring_cluster(
             Vec2(270, 505),
-            radius=88.0,
-            count=4,
+            radius=72.0,
+            count=2,
             base_seed=101,
             size_class="rock",
             clockwise=True,
         )
     )
-    rocks.append(make_asteroid(Vec2(355, 488), seed=102, size_class="boulder", drift_kind="slow"))
-    rocks.append(make_asteroid(Vec2(210, 520), seed=103, size_class="rock", drift_kind="medium"))
-
-    rocks.extend(
-        make_ring_cluster(
-            Vec2(667, 422),
-            radius=62.0,
-            count=3,
-            base_seed=201,
-            size_class="rock",
-            clockwise=False,
-        )
-    )
-    rocks.append(make_asteroid(Vec2(710, 455), seed=202, size_class="boulder", drift_kind="slow"))
-
-    for i, pos in enumerate(
-        (
-            Vec2(160, 280),
-            Vec2(520, 180),
-            Vec2(780, 340),
-            Vec2(430, 560),
-        )
-    ):
-        rocks.append(make_asteroid(pos, seed=301 + i, size_class="pebble", drift_kind="medium"))
-
-    rocks.append(make_asteroid(Vec2(600, 120), seed=310, size_class="rock", drift_kind="fast"))
+    rocks.append(make_asteroid(Vec2(355, 488), seed=102, size_class="rock", drift_kind="slow"))
+    rocks.append(make_asteroid(Vec2(520, 180), seed=301, size_class="pebble", drift_kind="medium"))
 
     return rocks
 

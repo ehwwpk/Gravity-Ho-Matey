@@ -10,12 +10,12 @@ from gravity_ho_matey.scenes.base import Scene, SceneHost
 
 @dataclass(slots=True)
 class ChartBriefingScene(Scene):
-    """Diegetic holo-map between cleared sectors and the next launch."""
+    """Diegetic holo-map before launch — inaugural chart or post-clear transition."""
 
     upcoming_level_id: str
     campaign: CampaignState
-    cleared_level_id: str
-    elapsed: float
+    cleared_level_id: str | None = None
+    elapsed: float = 0.0
 
     def __post_init__(self) -> None:
         self._preview = build_level(self.upcoming_level_id)

@@ -74,11 +74,10 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         self.assertTrue(end.won)
 
     def test_chart_briefing_launches_upcoming_level_on_enter(self) -> None:
-        from gravity_ho_matey.scenes.game_flow import start_play
+        from gravity_ho_matey.scenes.game_flow import start_chart_briefing, start_play
 
-        briefing = ChartBriefingScene(
-            upcoming_level_id="solar",
-            campaign=CampaignState.new(),
+        briefing = start_chart_briefing(
+            "solar",
             cleared_level_id="cove",
             elapsed=42.0,
         )

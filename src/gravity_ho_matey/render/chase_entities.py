@@ -6,6 +6,7 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Beacon
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.render import palette
+from gravity_ho_matey.render.camera import CHASE_BEACON_SCALE_FLOOR, CHASE_BEACON_VISUAL_BOOST
 from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
 from gravity_ho_matey.render.entity_viz import draw_beacon_glyph, draw_gate_glyph
 
@@ -18,10 +19,13 @@ def draw_chase_beacon(
     elapsed: float,
     depth_scale: float = 1.0,
 ) -> None:
-    scale = max(0.62, min(1.15, depth_scale * 1.15))
+    scale = max(
+        CHASE_BEACON_SCALE_FLOOR,
+        min(1.42, depth_scale * CHASE_BEACON_VISUAL_BOOST),
+    )
     if not beacon.collected:
         pulse = elapsed * 2.0
-        glow_r = 14.0 * scale
+        glow_r = 19.0 * scale
         draw_ground_fog_glow(
             canvas,
             pos.x,

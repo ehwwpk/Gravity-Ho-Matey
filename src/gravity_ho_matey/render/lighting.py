@@ -49,9 +49,29 @@ class MaterialTones:
     crater_rim_hi: str
 
 
-def material_for(kind: str, *, theme: str) -> MaterialTones:
+def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTones:
     solar = theme == "solar"
     if kind == "asteroid":
+        if view == "chase":
+            if solar:
+                return MaterialTones(
+                    highlight=palette.CHASE_ASTEROID_HIGHLIGHT,
+                    mid=palette.CHASE_ASTEROID_FACE,
+                    shadow=palette.CHASE_ASTEROID_SIDE,
+                    deep=palette.CHASE_ASTEROID_SIDE_DARK,
+                    rim=palette.CHASE_ASTEROID_RIM,
+                    crater_pit=palette.ASTEROID_CRATER,
+                    crater_rim_hi=palette.CHASE_ASTEROID_REGOLITH,
+                )
+            return MaterialTones(
+                highlight="#8298a8",
+                mid="#556068",
+                shadow="#3a4248",
+                deep="#222830",
+                rim="#484f58",
+                crater_pit=palette.ASTEROID_CRATER,
+                crater_rim_hi="#6a7888",
+            )
         if solar:
             return MaterialTones(
                 highlight=palette.CHASE_ASTEROID_HIGHLIGHT,
@@ -102,13 +122,23 @@ def material_for(kind: str, *, theme: str) -> MaterialTones:
             crater_rim_hi="#e0c0ff",
         )
     if kind == "ship":
+        if solar:
+            return MaterialTones(
+                highlight="#fff0c8",
+                mid="#e0c070",
+                shadow="#a08038",
+                deep="#584828",
+                rim="#b8e4ff",
+                crater_pit="#284858",
+                crater_rim_hi=palette.SHIP_TRIM,
+            )
         return MaterialTones(
-            highlight="#fff0c0",
+            highlight="#fff6dc",
             mid=palette.SHIP,
-            shadow="#c8a848",
-            deep="#8a7030",
-            rim="#fff0b5",
-            crater_pit=palette.SHIP_TRIM,
+            shadow="#b89848",
+            deep="#5a4828",
+            rim="#9ad0e8",
+            crater_pit="#2a5068",
             crater_rim_hi=palette.SHIP_TRIM,
         )
     return material_for("asteroid", theme=theme)
@@ -193,6 +223,31 @@ def lerp_hex(a: str, b: str, t: float) -> str:
     g = int(ag + (bg - ag) * t)
     bl = int(ab + (bb - ab) * t)
     return f"#{r:02x}{g:02x}{bl:02x}"
+
+
+def depth_faded_material(material: MaterialTones, fade: float) -> MaterialTones:
+    """Atmospheric falloff for chase depth — keeps silhouettes readable."""
+    t = max(0.0, min(1.0, fade))
+    if t <= 0.01:
+        return material
+    sink = material.deep
+    return MaterialTones(
+        highlight=lerp_hex(material.highlight, sink, t * 0.55),
+        mid=lerp_hex(material.mid, sink, t * 0.65),
+        shadow=lerp_hex(material.shadow, sink, t * 0.75),
+        deep=lerp_hex(material.deep, sink, t * 0.85),
+        rim=lerp_hex(material.rim, sink, t * 0.45),
+        crater_pit=lerp_hex(material.crater_pit, sink, t * 0.5),
+        crater_rim_hi=lerp_hex(material.crater_rim_hi, sink, t * 0.4),
+    )
+
+
+def chase_depth_fade(depth: float, *, near: float = 120.0, far: float = 720.0) -> float:
+    if depth <= near:
+        return 0.0
+    if depth >= far:
+        return 0.72
+    return 0.72 * (depth - near) / (far - near)
 
 
 def gravity_tone_with_sink(base: str, *, sink_strength: float) -> str:

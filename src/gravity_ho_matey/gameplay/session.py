@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from gravity_ho_matey.gameplay.chart_bounds import nudge_ship_into_chart
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CHUNKS_PER_LIFE, CampaignState
 from gravity_ho_matey.gameplay.entities import GameStatus
@@ -34,15 +35,25 @@ def wire_world_for_campaign(
     on_powerup_collected_hud: PowerUpHudCallback | None = None,
 ) -> None:
     """Apply carried campaign bonuses and route pickup collection back to campaign."""
-    apply_powerups_to_ship(world.ship, campaign.powerups)
+    apply_powerups_to_ship(world.ship, campaign.powerup_stacks)
 
     def on_powerup_collected(kind: PowerUpKind) -> None:
-        is_new = kind not in campaign.powerups
+        is_new = campaign.powerup_stacks[kind] == 0
         campaign.collect_powerup(kind, world.ship)
         if on_powerup_collected_hud is not None:
             on_powerup_collected_hud(kind, is_new)
 
     world.on_powerup_collected = on_powerup_collected
+
+
+def recover_ship_in_place(world: GameWorld) -> None:
+    """Chip damage without level respawn — stay on course with brief invuln."""
+    if world.config.open_bounds:
+        world.ship.pos = nudge_ship_into_chart(world.ship.pos, world.config)
+    world.ship.vel = Vec2()
+    world.invuln_remaining = INVULN_SECONDS
+    world.last_damage = None
+    world.status = GameStatus.RUNNING
 
 
 def respawn_ship_at_spawn(world: GameWorld) -> None:

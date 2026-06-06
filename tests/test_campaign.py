@@ -17,7 +17,7 @@ class CampaignTests(unittest.TestCase):
         campaign = CampaignState.new()
         self.assertEqual(campaign.lives, MAX_LIVES)
         self.assertEqual(campaign.hull_chunks, CHUNKS_PER_LIFE)
-        self.assertEqual(len(campaign.powerups), 0)
+        self.assertEqual(sum(campaign.powerup_stacks.values()), 0)
 
     def test_lose_life_tracks_campaign_total(self) -> None:
         campaign = CampaignState.new()
@@ -31,7 +31,7 @@ class CampaignTests(unittest.TestCase):
 
     def test_powerups_persist_on_fresh_world(self) -> None:
         campaign = CampaignState.new()
-        campaign.powerups.add(PowerUpKind.RAPID_FIRE)
+        campaign.powerup_stacks[PowerUpKind.RAPID_FIRE] = 1
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
             ship=Ship(pos=Vec2(20, 20)),
@@ -60,7 +60,30 @@ class CampaignTests(unittest.TestCase):
         wire_world_for_campaign(world, campaign)
         world.update(0.016, ControlIntent())
         self.assertEqual(len(world.pickups), 0)
-        self.assertIn(PowerUpKind.THRUST_BOOST, campaign.powerups)
+        self.assertEqual(campaign.powerup_stacks[PowerUpKind.THRUST_BOOST], 1)
+
+    def test_duplicate_enemy_drops_stack_stats(self) -> None:
+        campaign = CampaignState.new()
+        world = GameWorld(
+            config=WorldConfig(width=200, height=200),
+            ship=Ship(pos=Vec2(20, 20)),
+            asteroids=[],
+            wells=[],
+            beacons=[],
+            finish_gate=FinishGate(Rect(150, 150, 25, 25)),
+            pickups=[
+                PowerUpPickup(pos=Vec2(20, 20), kind=PowerUpKind.THRUST_BOOST),
+            ],
+        )
+        wire_world_for_campaign(world, campaign)
+        world.update(0.016, ControlIntent())
+        self.assertEqual(campaign.powerup_stacks[PowerUpKind.THRUST_BOOST], 1)
+        first_mult = world.ship.thrust_multiplier
+
+        world.pickups = [PowerUpPickup(pos=Vec2(20, 20), kind=PowerUpKind.THRUST_BOOST)]
+        world.update(0.016, ControlIntent())
+        self.assertEqual(campaign.powerup_stacks[PowerUpKind.THRUST_BOOST], 2)
+        self.assertGreater(world.ship.thrust_multiplier, first_mult)
 
     def test_pickup_hud_callback_reports_new_vs_duplicate(self) -> None:
         campaign = CampaignState.new()

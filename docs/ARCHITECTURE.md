@@ -20,14 +20,14 @@ The renderer can read game state, but gameplay should not import Tkinter.
 
 ## Scene model
 
-- `TitleScene`: static title screen; starts a new campaign via `game_flow.start_play`.
+- `TitleScene`: paginated pre-flight terminals (welcome, mission, helm, combat, deploy); Enter opens holo chart via `start_chart_briefing`.
 - `PlayScene`: owns per-level `GameWorld` + cross-level `CampaignState`; camera toggle and win/loss transitions.
-- `ChartBriefingScene`: diegetic holo-map preview before launching the next sector.
+- `ChartBriefingScene`: diegetic holo-map preview before every launch — inaugural chart from title or post-clear transition to the next sector.
 - `EndScene`: win/loss screen; retries, campaign complete, or return to title on game over.
 
-Win with a next sector routes to `ChartBriefingScene` before the next `PlayScene`.
+Win with a next sector routes to `ChartBriefingScene` before the next `PlayScene`. Starting sector 1 from title uses the same holo HUD and `ChartMapOverlay` in **initial brief** mode (`cleared_level_id=None`).
 
-Scene transitions that start gameplay should go through `scenes/game_flow.start_play` so campaign wiring stays consistent. Scene modules use **lazy imports** inside methods to avoid import cycles (`game_flow` ↔ `play` ↔ `end`).
+Scene transitions that start gameplay should go through `scenes/game_flow.start_play` so campaign wiring stays consistent. Holo chart transitions use `game_flow.start_chart_briefing`. Scene modules use **lazy imports** inside methods to avoid import cycles (`game_flow` ↔ `play` ↔ `end`).
 
 ## Campaign progress
 

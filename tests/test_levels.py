@@ -19,8 +19,16 @@ def test_all_registered_levels_build() -> None:
 def test_all_registered_levels_have_asteroids() -> None:
     for level_id in LEVEL_BUILDERS:
         world = build_level(level_id)
-        assert len(world.asteroids) >= 8
+        min_rocks = 3 if level_id == "cove" else 8
+        assert len(world.asteroids) >= min_rocks
         assert world.config.open_bounds is True
+
+
+def test_cove_is_light_intro_asteroid_field() -> None:
+    world = build_level("cove")
+    assert len(world.asteroids) <= 5
+    drift_kinds = {a.drift_kind for a in world.asteroids}
+    assert "ring" in drift_kinds
 
 
 def test_solar_level_is_open_space_layout() -> None:

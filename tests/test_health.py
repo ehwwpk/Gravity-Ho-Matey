@@ -3,10 +3,11 @@ import unittest
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CHUNKS_PER_LIFE, CampaignState, MAX_LIVES
+from gravity_ho_matey.gameplay.chart_bounds import CHART_RADIATION_EXPOSURE_LIMIT
 from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSource
 from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid
 from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, GravityWell, Ship, WorldConfig
-from gravity_ho_matey.gameplay.session import INVULN_SECONDS, capture_level_spawn, respawn_ship_at_spawn
+from gravity_ho_matey.gameplay.session import INVULN_SECONDS, capture_level_spawn, recover_ship_in_place, respawn_ship_at_spawn
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
 
 
@@ -112,6 +113,17 @@ class HealthWorldTests(unittest.TestCase):
         world._check_loss()
         self.assertEqual(world.status, GameStatus.RUNNING)
 
+    def test_open_bounds_radiation_chip_after_exposure_limit(self) -> None:
+        world = tiny_world(ship_pos=Vec2(-5, 100))
+        remaining = CHART_RADIATION_EXPOSURE_LIMIT + 0.1
+        while remaining > 0 and world.status is GameStatus.RUNNING:
+            step = min(remaining, 0.05)
+            world.update(step, ControlIntent())
+            remaining -= step
+        self.assertEqual(world.status, GameStatus.SHIP_HIT)
+        self.assertEqual(world.last_damage.source, DamageSource.CHART_RADIATION)
+        self.assertAlmostEqual(world.chart_radiation_exposure, 0.0)
+
     def test_closed_bounds_chip_when_off_map(self) -> None:
         world = tiny_world(ship_pos=Vec2(-5, 100))
         world.config = WorldConfig(
@@ -172,6 +184,18 @@ class HealthWorldTests(unittest.TestCase):
         self.assertEqual(world.ship.vel.length(), 0.0)
         self.assertAlmostEqual(world.invuln_remaining, INVULN_SECONDS)
         self.assertIsNone(world.last_damage)
+
+    def test_radiation_recover_stays_nearby_not_at_spawn(self) -> None:
+        world = tiny_world(ship_pos=Vec2(-20, 150))
+        capture_level_spawn(world)
+        world.status = GameStatus.SHIP_HIT
+        world.last_damage = DamageEvent(DamageSource.CHART_RADIATION)
+        recover_ship_in_place(world)
+        self.assertEqual(world.status, GameStatus.RUNNING)
+        self.assertAlmostEqual(world.ship.pos.x, 6.0)
+        self.assertAlmostEqual(world.ship.pos.y, 150.0)
+        self.assertNotAlmostEqual(world.ship.pos.x, world.spawn_pos.x)
+        self.assertEqual(world.ship.vel.length(), 0.0)
 
     def test_invuln_decays_over_time(self) -> None:
         world = tiny_world()

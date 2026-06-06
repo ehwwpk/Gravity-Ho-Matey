@@ -10,7 +10,8 @@ from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode, ViewCamera
 from gravity_ho_matey.render.lighting import LightRig, arc_tone_for_point, material_for, well_material_kind
-from gravity_ho_matey.render.lit_draw import draw_lit_ship_hull
+from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks
+from gravity_ho_matey.render.ship_viz import draw_fighter_ship, draw_fighter_ship_fallback
 
 
 def draw_gravity_heatmap(
@@ -31,6 +32,8 @@ def draw_gravity_heatmap(
             if cell.magnitude <= 1e-6:
                 continue
             norm = cell.magnitude / field.max_magnitude
+            if norm < 0.14:
+                continue
             wx = field.origin.x + col * field.cell_size
             wy = field.origin.y + row * field.cell_size
             projected = camera.world_to_screen(Vec2(wx, wy), Vec2(), 0.0)
@@ -221,35 +224,23 @@ def draw_ship(
     elapsed: float = 0.0,
     scale: float = 1.0,
     rig: LightRig | None = None,
+    powerup_stacks: PowerUpStacks | None = None,
 ) -> None:
     if invuln > 0.0 and int(elapsed * 14) % 2 == 0:
         ring_r = 22 * scale
         canvas.create_oval(pos.x - ring_r, pos.y - ring_r, pos.x + ring_r, pos.y + ring_r, outline=palette.HUD_ACCENT, width=2)
-    nose = pos + Vec2.from_angle(angle) * (18 * scale)
-    left = pos + Vec2.from_angle(angle + 2.45) * (13 * scale)
-    right = pos + Vec2.from_angle(angle - 2.45) * (13 * scale)
-    theme = rig.theme if rig is not None else "cove"
-    material = material_for("ship", theme=theme)
     if rig is not None:
-        draw_lit_ship_hull(
+        draw_fighter_ship(
             canvas,
-            (nose.x, nose.y),
-            (left.x, left.y),
-            (right.x, right.y),
+            pos,
+            angle,
+            scale=scale,
             rig=rig,
-            material=material,
-            outline="#fff0b5",
-            outline_width=2,
+            boost_burst=boost_burst,
+            powerup_stacks=powerup_stacks,
         )
     else:
-        canvas.create_polygon(nose.x, nose.y, left.x, left.y, right.x, right.y, fill=palette.SHIP, outline="#fff0b5", width=2)
-    mast = pos - Vec2.from_angle(angle) * (4 * scale)
-    sail_tip = mast + Vec2.from_angle(angle + 1.55) * (9 * scale)
-    canvas.create_line(mast.x, mast.y, sail_tip.x, sail_tip.y, fill=palette.SHIP_TRIM, width=3)
-    if boost_burst > 0.0:
-        flame = pos - Vec2.from_angle(angle) * (20 * scale)
-        width = 3 + int(2 * min(1.0, boost_burst / 0.35))
-        canvas.create_line(pos.x, pos.y, flame.x, flame.y, fill="#ff7a4a", width=width)
+        draw_fighter_ship_fallback(canvas, pos, angle, scale=scale)
     _ = boost_energy
 
 

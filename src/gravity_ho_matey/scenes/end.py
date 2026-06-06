@@ -38,11 +38,11 @@ class EndScene(Scene):
             if self.won:
                 upcoming = next_level_id(self.level_id)
                 if upcoming is not None:
-                    from gravity_ho_matey.scenes.chart_briefing import ChartBriefingScene
+                    from gravity_ho_matey.scenes.game_flow import start_chart_briefing
 
                     host.set_scene(
-                        ChartBriefingScene(
-                            upcoming_level_id=upcoming,
+                        start_chart_briefing(
+                            upcoming,
                             campaign=self.campaign,
                             cleared_level_id=self.level_id,
                             elapsed=self.elapsed,

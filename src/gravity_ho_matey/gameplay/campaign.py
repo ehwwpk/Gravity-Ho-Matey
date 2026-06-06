@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 from gravity_ho_matey.gameplay.damage import (
@@ -11,6 +12,7 @@ from gravity_ho_matey.gameplay.damage import (
 )
 from gravity_ho_matey.gameplay.entities import Ship
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks, active_powerup_kinds
 from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
 
 MAX_LIVES = 3
@@ -21,15 +23,20 @@ CHUNKS_PER_LIFE = 3
 class CampaignState:
     lives: int = MAX_LIVES
     hull_chunks: int = CHUNKS_PER_LIFE
-    powerups: set[PowerUpKind] = field(default_factory=set)
+    powerup_stacks: PowerUpStacks = field(default_factory=Counter)
 
     @classmethod
     def new(cls) -> CampaignState:
         return cls(lives=MAX_LIVES, hull_chunks=CHUNKS_PER_LIFE)
 
+    @property
+    def powerups(self) -> set[PowerUpKind]:
+        """Unique upgrade kinds carried — use powerup_stacks for stack depth."""
+        return active_powerup_kinds(self.powerup_stacks)
+
     def collect_powerup(self, kind: PowerUpKind, ship: Ship) -> None:
-        self.powerups.add(kind)
-        apply_powerups_to_ship(ship, self.powerups)
+        self.powerup_stacks[kind] += 1
+        apply_powerups_to_ship(ship, self.powerup_stacks)
 
     def lose_life(self) -> bool:
         """Spend one life. Returns True if the campaign continues."""

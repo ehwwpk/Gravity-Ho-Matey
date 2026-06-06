@@ -6,6 +6,7 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE
 from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.gravity_field import GravityField
+from gravity_ho_matey.gameplay.chart_bounds import ChartBoundsToast
 from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_LABELS, PowerUpKind
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.gameplay.progress import is_level_selectable
@@ -13,7 +14,7 @@ from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode, ViewCamera
 from gravity_ho_matey.render.chart_map_overlay import ChartMapOverlay
 from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
-from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
+from gravity_ho_matey.render.title_overlay import TitlePage, TitleScreenOverlay
 from gravity_ho_matey.render.view_renderers import PerspectiveViewRenderer, TacticalViewRenderer
 
 
@@ -29,10 +30,11 @@ class TkRenderer:
     def clear(self) -> None:
         self.canvas.delete("all")
 
-    def draw_title(self) -> None:
+    def draw_title(self, *, page: TitlePage = TitlePage.WELCOME) -> None:
         self.clear()
         self._title.draw(
             self.canvas,
+            page=page,
             solar_unlocked=is_level_selectable("solar"),
             draw_ship=lambda cx, cy: self._draw_demo_ship(Vec2(cx, cy), angle=0.12, scale=1.55),
         )
@@ -48,6 +50,8 @@ class TkRenderer:
         loot_toast_kind: PowerUpKind | None = None,
         loot_toast_is_new: bool = False,
         loot_toast_ttl: float = 0.0,
+        bounds_toast_kind: ChartBoundsToast | None = None,
+        bounds_toast_ttl: float = 0.0,
     ) -> None:
         self.clear()
         vw = camera.viewport_width
@@ -55,27 +59,46 @@ class TkRenderer:
         hud_top = SciFiHudOverlay.PANEL_H
         if hud_alert:
             hud_top += SciFiHudOverlay.ALERT_H
+        if bounds_toast_kind is not None and bounds_toast_ttl > 0.0:
+            hud_top += SciFiHudOverlay.CHART_BOUNDS_BANNER_H
         if loot_toast_kind is not None and loot_toast_ttl > 0.0:
             hud_top += SciFiHudOverlay.LOOT_BANNER_H
 
         if camera.mode is CameraMode.TACTICAL:
-            self._tactical.draw(self.canvas, world, camera, gravity_field, hud_top=hud_top)
+            self._tactical.draw(
+                self.canvas,
+                world,
+                camera,
+                gravity_field,
+                hud_top=hud_top,
+                powerup_stacks=campaign.powerup_stacks,
+            )
         else:
             camera.set_play_layout(hud_top)
-            self._perspective.draw(self.canvas, world, camera, gravity_field, hud_top=hud_top)
+            self._perspective.draw(
+                self.canvas,
+                world,
+                camera,
+                gravity_field,
+                hud_top=hud_top,
+                powerup_stacks=campaign.powerup_stacks,
+            )
 
         self._hud.draw_playfield_chrome(
             self.canvas,
             world,
             hud_top,
-            camera_mode=camera.mode if camera.mode is not CameraMode.TACTICAL else None,
+            camera_mode=camera.mode,
             camera_mode_flash=camera.mode_flash_ttl > 0.0,
+            bounds_alert_flash=camera.bounds_alert_flash_ttl > 0.0,
         )
         self._hud.draw(
             self.canvas,
             world,
             campaign,
             hud_alert=hud_alert,
+            bounds_toast_kind=bounds_toast_kind,
+            bounds_toast_ttl=bounds_toast_ttl,
             loot_toast_kind=loot_toast_kind,
             loot_toast_is_new=loot_toast_is_new,
             loot_toast_ttl=loot_toast_ttl,
@@ -98,8 +121,8 @@ class TkRenderer:
         *,
         campaign: CampaignState,
         upcoming_level_id: str,
-        cleared_level_id: str,
-        elapsed: float,
+        cleared_level_id: str | None = None,
+        elapsed: float = 0.0,
     ) -> None:
         self.clear()
         self._chart.draw(
@@ -151,8 +174,12 @@ class TkRenderer:
         self.canvas.create_text(480, 220, text=title, fill=palette.TEXT, font=("Courier", 30, "bold"))
         self.canvas.create_text(480, 275, text=subtitle, fill=palette.MUTED_TEXT, font=("Courier", 16))
         self.canvas.create_text(480, 355, text=prompt, fill=palette.TEXT, font=("Courier", 15))
-        if campaign.powerups:
-            perks = "Carried loot: " + ", ".join(POWERUP_LABELS[kind] for kind in sorted(campaign.powerups, key=lambda k: k.name))
+        if campaign.powerup_stacks:
+            perks = "Carried loot: " + ", ".join(
+                f"{POWERUP_LABELS[kind]}" + (f" ×{count}" if count > 1 else "")
+                for kind, count in sorted(campaign.powerup_stacks.items(), key=lambda item: item[0].name)
+                if count > 0
+            )
             self.canvas.create_text(480, 410, text=perks, fill=palette.MUTED_TEXT, font=("Courier", 12))
 
     def _draw_starfield(self, dense: bool = False) -> None:
@@ -165,7 +192,9 @@ class TkRenderer:
             self.canvas.create_rectangle(x, y, x + size, y + size, fill=tone, outline="")
 
     def _draw_demo_ship(self, pos: Vec2, angle: float, scale: float) -> None:
-        nose = pos + Vec2.from_angle(angle) * (18 * scale)
-        left = pos + Vec2.from_angle(angle + 2.45) * (13 * scale)
-        right = pos + Vec2.from_angle(angle - 2.45) * (13 * scale)
-        self.canvas.create_polygon(nose.x, nose.y, left.x, left.y, right.x, right.y, fill=palette.SHIP, outline="#fff0b5", width=3)
+        from gravity_ho_matey.render.camera import CameraMode
+        from gravity_ho_matey.render.lighting import LightRig
+        from gravity_ho_matey.render.world_draw import draw_ship
+
+        rig = LightRig.for_play(theme="cove", camera_mode=CameraMode.TACTICAL)
+        draw_ship(self.canvas, pos, angle, boost_energy=1.0, scale=scale, rig=rig)

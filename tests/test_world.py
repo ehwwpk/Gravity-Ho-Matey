@@ -24,6 +24,20 @@ class WorldTests(unittest.TestCase):
         world.update(0.016, ControlIntent())
         self.assertTrue(world.finish_unlocked)
 
+    def test_chase_capture_slack_collects_from_farther_away(self):
+        world = GameWorld(
+            config=WorldConfig(width=200, height=200),
+            ship=Ship(pos=Vec2(0, 0)),
+            asteroids=[],
+            wells=[],
+            beacons=[Beacon(Vec2(24, 0))],
+            finish_gate=FinishGate(Rect(150, 150, 25, 25)),
+        )
+        world.update(0.016, ControlIntent(), beacon_capture_slack=0.0)
+        self.assertFalse(world.beacons[0].collected)
+        world.update(0.016, ControlIntent(), beacon_capture_slack=5.0)
+        self.assertTrue(world.beacons[0].collected)
+
     def test_finish_wins_after_beacons_collected(self):
         world = tiny_world()
         world.update(0.016, ControlIntent())
