@@ -73,6 +73,8 @@ class FinishGate:
 class WorldConfig:
     width: int
     height: int
+    viewport_width: int = 960
+    viewport_height: int = 640
     gravity_scale: float = 0.5
     turn_rate: float = 5.0
     thrust: float = 250.0

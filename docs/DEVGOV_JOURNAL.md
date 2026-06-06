@@ -177,4 +177,58 @@ Bracketed panels: CAPTAIN / HULL INTEGRITY / NAV BEACONS / CHRONO / REACTOR / CA
 
 ---
 
+## 2026-06-02 — Chase camera presentation overhaul (end-to-end)
+
+### +EV · Primary slice ruff → compileall → pytest all **passed** (91 tests)
+`devgov run` primary boundary green after 5 new chase render modules + `PerspectiveViewRenderer` rewrite + `test_chase_fx.py` (11 hostile cases). **Behavior change:** agent blocked completion until full suite green and code-trace bundle audit — not just new tests.
+
+### +EV · Hostile tests caught real regressions before ship
+Wall ribbon collector returned 0 faces when ship sat at origin (horizon clip); grid color test sampled ship cell (cyan not purple). Fixed test setup → tests now guard ribbon faces, fog layers, speed streak threshold, HUD layout separation.
+
+### +EV · Scoped check before verify (~65s CLI)
+`devgov check` flagged HIGH risk + 20 untracked paths — honest for large multi-POV + chase diff still uncommitted.
+
+### neutral · Run exit 12 (sub:tests slice skips)
+Primary python slice `run_trust=all_required_executed`; sub:tests `compile_or_build_if_defined` skipped (no Phase-1 mapping). Same polyglot pattern as prior sessions — **pytest did execute** on primary slice. Not a code failure.
+
+### neutral · `test_title_overlay.py` excluded locally
+Tk `TclError` (missing `tk.tcl`) in this shell — environmental; 91 other tests pass. Chase HUD layout covered by `test_chase_fx.py::ChaseHudLayoutTests`.
+
+### Code trace (bundle checklist — all verified)
+| Item | Module / hook |
+|------|----------------|
+| Wall rails not quads | `chase_walls.wall_ribbons` → `collect_wall_faces` → `draw_wall_faces` |
+| Purple/cyan gravity grid | `chase_ground.draw_chase_gravity_grid` + `_chase_grid_color` bands |
+| Fog-glow wells / singularity | `chase_wells.draw_distant_well_fog` + `draw_chase_well` + `chase_fx.draw_fog_glow` |
+| Speed / boost juice | `chase_fx` parallax sky, streaks, vignette, engine bloom; `chase_thrust_boost` on camera |
+| Entity chase art | `chase_entities` beacons, gate arch, enemy fog, pickup glow, projectile tails |
+| HUD overlap fix | `hud_overlay`: level name `x=170`, camera mode top-right |
+| Draw order | `PerspectiveViewRenderer.draw`: sky → distant fog → floor → grid → walls → depth-sorted entities → speed FX → fixed-anchor ship |
+
+### Realistic weight
+**Strong +EV** — multi-file render pipeline easy to ship visually broken; hostile tests + trace audit matched user screenshot issues (flat walls, invisible grid, no speed feel, HUD clash, missing well glow). DevGov primary gate matched manual pytest.
+
+---
+
+## 2026-06-02 — Equal-mode presentation overhaul (GIF audit → full implementation)
+
+### Scope delivered (tactical + chase parity)
+- **Tactical Cove zoom** (`TACTICAL_ZOOM_COMPACT=1.32`) — ship/hazards larger, camera follows
+- **Single gravity encoding** — `field_viz.py` flow lines + one halo per well (removed heatmap + triple rings)
+- **Shared entity language** — `entity_viz.py` holo walls, gate portal, beacon markers
+- **Edge hints** — `edge_hints.py` rim chevrons for off-screen beacons/gate (both modes)
+- **Chase walls** — rails-only pipeline (no filled brown slabs); depth-scaled line width
+- **Chase FX** — removed vertical center streak bug; speed threshold 38; scattered parallax stars
+- **Chase grid** — ship-local emphasis, horizon fade, fewer chevrons
+- **HUD** — wider hull panel; fittings only when powerups carried
+- **Dead code** — removed `draw_cockpit_frame`
+
+### +EV · 20-frame GIF extract drove chase-specific fixes
+`docs/playtest/session.gif` → `docs/playtest/frames/` confirmed tactical 0–14s, chase 15–32s, death at end. Prior PNG-only audits under-weighted chase.
+
+### Realistic weight
+**Strong +EV** — equal-mode bar addressed in one coordinated pass; 97 tests (95+ pass in CI shell).
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->

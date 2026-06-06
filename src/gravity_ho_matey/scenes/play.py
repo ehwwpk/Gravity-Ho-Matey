@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.gameplay.entities import GameStatus
+from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.progress import record_level_cleared
 from gravity_ho_matey.gameplay.session import (
     LOOT_TOAST_SECONDS,
@@ -11,7 +12,8 @@ from gravity_ho_matey.gameplay.session import (
     wire_world_for_campaign,
 )
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
-from gravity_ho_matey.levels.level_registry import build_level
+from gravity_ho_matey.levels.level_registry import build_level, next_level_id
+from gravity_ho_matey.render.camera import ViewCamera
 from gravity_ho_matey.scenes.base import Scene, SceneHost
 
 
@@ -22,6 +24,15 @@ class PlayScene(Scene):
         ensure_active_life_hull(campaign)
         self.world = build_level(level_id)
         capture_level_spawn(self.world)
+        self.camera = ViewCamera()
+        self.gravity_field = GravityField.bake(
+            self.world.wells,
+            world_width=self.world.config.width,
+            world_height=self.world.config.height,
+            cols=32,
+            rows=max(32, int(32 * self.world.config.height / max(1, self.world.config.width))),
+            gravity_scale=self.world.config.gravity_scale,
+        )
         self.hud_alert = ""
         self.hud_alert_ttl = 0.0
         self.loot_toast_kind: PowerUpKind | None = None
@@ -35,7 +46,11 @@ class PlayScene(Scene):
         self.loot_toast_ttl = LOOT_TOAST_SECONDS
 
     def update(self, host: SceneHost, dt: float) -> None:
+        from gravity_ho_matey.scenes.chart_briefing import ChartBriefingScene
         from gravity_ho_matey.scenes.end import EndScene
+
+        self.camera.tick(dt)
+        self.camera.update_follow(self.world.ship.pos, self.world.config, dt)
 
         if self.hud_alert_ttl > 0.0:
             self.hud_alert_ttl = max(0.0, self.hud_alert_ttl - dt)
@@ -48,14 +63,25 @@ class PlayScene(Scene):
 
         if self.world.status is GameStatus.WON:
             record_level_cleared(self.level_id)
-            host.set_scene(
-                EndScene(
-                    won=True,
-                    elapsed=self.world.elapsed,
-                    level_id=self.level_id,
-                    campaign=self.campaign,
+            upcoming = next_level_id(self.level_id)
+            if upcoming is not None:
+                host.set_scene(
+                    ChartBriefingScene(
+                        upcoming_level_id=upcoming,
+                        campaign=self.campaign,
+                        cleared_level_id=self.level_id,
+                        elapsed=self.world.elapsed,
+                    )
                 )
-            )
+            else:
+                host.set_scene(
+                    EndScene(
+                        won=True,
+                        elapsed=self.world.elapsed,
+                        level_id=self.level_id,
+                        campaign=self.campaign,
+                    )
+                )
             return
 
         if self.world.status is GameStatus.SHIP_HIT and self.world.last_damage is not None:
@@ -84,6 +110,8 @@ class PlayScene(Scene):
         host.renderer.draw_world(
             self.world,
             self.campaign,
+            self.camera,
+            self.gravity_field,
             hud_alert=self.hud_alert if self.hud_alert_ttl > 0.0 else "",
             loot_toast_kind=self.loot_toast_kind,
             loot_toast_is_new=self.loot_toast_is_new,
@@ -94,7 +122,9 @@ class PlayScene(Scene):
         from gravity_ho_matey.scenes.game_flow import start_play
 
         key = keysym.lower()
-        if key == "r":
+        if key == "v":
+            self.camera.cycle_mode()
+        elif key == "r":
             host.set_scene(start_play(self.level_id, self.campaign))
         elif key == "escape":
             from gravity_ho_matey.scenes.title import TitleScene

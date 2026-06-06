@@ -21,8 +21,11 @@ The renderer can read game state, but gameplay should not import Tkinter.
 ## Scene model
 
 - `TitleScene`: static title screen; starts a new campaign via `game_flow.start_play`.
-- `PlayScene`: owns per-level `GameWorld` + cross-level `CampaignState`; handles win/loss transitions.
-- `EndScene`: win/loss screen; advances campaign, retries level, or returns to title on game over.
+- `PlayScene`: owns per-level `GameWorld` + cross-level `CampaignState`; camera toggle and win/loss transitions.
+- `ChartBriefingScene`: diegetic holo-map preview before launching the next sector.
+- `EndScene`: win/loss screen; retries, campaign complete, or return to title on game over.
+
+Win with a next sector routes to `ChartBriefingScene` before the next `PlayScene`.
 
 Scene transitions that start gameplay should go through `scenes/game_flow.start_play` so campaign wiring stays consistent. Scene modules use **lazy imports** inside methods to avoid import cycles (`game_flow` ↔ `play` ↔ `end`).
 
@@ -68,8 +71,23 @@ Three hull chunks per life; three chips on one life costs one campaign life. Par
 
 ## Rendering model
 
-The Tk renderer converts world + campaign HUD data into canvas primitives. `render/hud_overlay.py` draws the retro sci-fi command overlay (lives, hull chunks, beacons, chrono, reactor, cargo). No game rules live here.
+Presentation is split from simulation:
+
+| Module | Role |
+|--------|------|
+| `render/camera.py` | `ViewCamera`, `CameraMode` — follow + projection only |
+| `render/chase_fx.py` | Parallax sky, fog glow, speed streaks, engine bloom |
+| `render/chase_ground.py` | Bright gravity grid + flow chevrons |
+| `render/chase_walls.py` | Extruded boundary rails (not flat quads) |
+| `render/chase_wells.py` | Well fog halos (singularity/planet/cove) |
+| `render/chase_entities.py` | Chase beacons, gates, enemies, pickups |
+| `render/view_renderers.py` | Tactical pan + chase pipeline orchestration |
+| `gameplay/gravity_field.py` | Baked well field for heatmap, chase floor, holo chart |
+| `render/chart_map_overlay.py` | Between-level holo table |
+| `render/hud_overlay.py` | Command overlay (lives, hull, cargo, camera mode) |
+
+`V` cycles tactical ↔ chase cam without changing physics or `ControlIntent`.
 
 ## Tests
 
-Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, and registry alignment.
+Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, and registry alignment.

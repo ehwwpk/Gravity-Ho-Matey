@@ -4,8 +4,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSource, default_reason
+from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSeverity, DamageSource, damage_spec_for, default_reason
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
+from gravity_ho_matey.gameplay.explosions import ExplosionKind, ExplosionSystem
 from gravity_ho_matey.gameplay.entities import (
     Beacon,
     FinishGate,
@@ -48,6 +49,7 @@ class GameWorld:
     spawn_pos: Vec2 = field(default_factory=Vec2)
     spawn_angle: float = 0.0
     invuln_remaining: float = 0.0
+    explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
 
     @property
     def beacons_remaining(self) -> int:
@@ -58,11 +60,12 @@ class GameWorld:
         return self.beacons_remaining == 0
 
     def update(self, dt: float, intent: ControlIntent) -> None:
+        dt = max(0.0, min(dt, 1.0 / 20.0))
+        self.elapsed += dt
+        self.explosions.update(dt)
         if self.status is not GameStatus.RUNNING:
             return
 
-        dt = max(0.0, min(dt, 1.0 / 20.0))
-        self.elapsed += dt
         self._tick_invuln(dt)
         self._update_ship(dt, intent)
         self._update_projectiles(dt)
@@ -85,6 +88,11 @@ class GameWorld:
             source=source,
             reason=reason or default_reason(source, theme),
         )
+        spec = damage_spec_for(source)
+        if spec.severity is DamageSeverity.LETHAL:
+            self.explosions.spawn(ExplosionKind.SHIP_DESTROYED, Vec2(self.ship.pos.x, self.ship.pos.y))
+        else:
+            self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(self.ship.pos.x, self.ship.pos.y))
         self.status = GameStatus.SHIP_HIT
 
     def _update_ship(self, dt: float, intent: ControlIntent) -> None:
@@ -129,8 +137,10 @@ class GameWorld:
             if projectile.ttl <= 0:
                 continue
             if not self._point_in_bounds(projectile.pos, margin=32):
+                self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
                 continue
             if any(wall.rect.intersects_circle(projectile.pos, projectile.radius) for wall in self.walls):
+                self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
                 continue
             if self._projectile_hits_enemy(projectile):
                 continue
@@ -142,8 +152,12 @@ class GameWorld:
             if not enemy.alive:
                 continue
             if (enemy.pos - projectile.pos).length() <= enemy.radius + projectile.radius:
+                hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
+                enemy_pos = Vec2(enemy.pos.x, enemy.pos.y)
                 enemy.alive = False
-                self.pickups.append(PowerUpPickup(pos=Vec2(enemy.pos.x, enemy.pos.y), kind=enemy.drop_kind))
+                self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
+                self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, enemy_pos)
+                self.pickups.append(PowerUpPickup(pos=enemy_pos, kind=enemy.drop_kind))
                 self._prune_dead_enemies()
                 return True
         return False
@@ -188,6 +202,11 @@ class GameWorld:
             if not enemy.alive:
                 continue
             if (enemy.pos - self.ship.pos).length() <= enemy.radius + self.ship.radius:
+                if self.invuln_remaining > 0.0:
+                    continue
+                self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(enemy.pos.x, enemy.pos.y))
+                enemy.alive = False
+                self._prune_dead_enemies()
                 self._register_ship_hit(DamageSource.ENEMY)
                 return
 

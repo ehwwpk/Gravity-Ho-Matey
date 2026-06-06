@@ -10,7 +10,8 @@ from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
 from gravity_ho_matey.gameplay.world import GameWorld
 
 INVULN_SECONDS = 1.0
-LOOT_TOAST_SECONDS = 2.8
+LOOT_TOAST_SECONDS = 5.0
+LOOT_PULSE_SECONDS = 1.8
 
 PowerUpHudCallback = Callable[[PowerUpKind, bool], None]
 

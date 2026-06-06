@@ -5,29 +5,35 @@ from gravity_ho_matey.gameplay.enemies import PatrolEnemy
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 
 
-def solar_patrol_enemies() -> list[PatrolEnemy]:
-    """Patrol skiffs for Singularity Crossing — each drops a persistent power-up."""
+def solar_patrol_enemies(strip_height: float) -> list[PatrolEnemy]:
+    """Patrol skiffs for Singularity Crossing — spaced along the vertical strip."""
+    mid = strip_height * 0.5
     return [
         PatrolEnemy(
-            waypoints=(Vec2(360, 88), Vec2(600, 88), Vec2(600, 150), Vec2(360, 150)),
+            waypoints=(Vec2(360, 140), Vec2(600, 140), Vec2(600, 220), Vec2(360, 220)),
             thrust=245.0,
             max_speed=108.0,
             drop_kind=PowerUpKind.RAPID_FIRE,
         ),
         PatrolEnemy(
-            waypoints=(Vec2(845, 210), Vec2(845, 430), Vec2(770, 430), Vec2(770, 210)),
+            waypoints=(Vec2(845, mid - 120), Vec2(845, mid + 80), Vec2(770, mid + 80), Vec2(770, mid - 120)),
             thrust=235.0,
             max_speed=102.0,
             drop_kind=PowerUpKind.THRUST_BOOST,
         ),
         PatrolEnemy(
-            waypoints=(Vec2(110, 430), Vec2(240, 520), Vec2(360, 440), Vec2(240, 360)),
+            waypoints=(
+                Vec2(110, strip_height * 0.68),
+                Vec2(240, strip_height * 0.74),
+                Vec2(360, strip_height * 0.68),
+                Vec2(240, strip_height * 0.62),
+            ),
             thrust=230.0,
             max_speed=100.0,
             drop_kind=PowerUpKind.STABILIZER,
         ),
         PatrolEnemy(
-            waypoints=(Vec2(620, 250), Vec2(700, 320), Vec2(620, 390), Vec2(540, 320)),
+            waypoints=(Vec2(620, mid - 40), Vec2(700, mid + 20), Vec2(620, mid + 80), Vec2(540, mid + 20)),
             thrust=228.0,
             max_speed=98.0,
             drop_kind=PowerUpKind.THRUST_BOOST,

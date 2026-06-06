@@ -2,12 +2,18 @@ from gravity_ho_matey.levels.level_registry import LEVEL_BUILDERS, build_level
 
 
 def test_all_registered_levels_build() -> None:
+    from gravity_ho_matey.levels.level_data import SOLAR_STRIP_HEIGHT
+
     for level_id in LEVEL_BUILDERS:
         world = build_level(level_id)
-        assert world.config.width == 960
-        assert world.config.height == 640
+        assert world.config.viewport_width == 960
+        assert world.config.viewport_height == 640
         assert len(world.beacons) >= 3
         assert len(world.wells) >= 3
+        if level_id == "cove":
+            assert world.config.height == 640
+        if level_id == "solar":
+            assert world.config.height == SOLAR_STRIP_HEIGHT
 
 
 def test_solar_level_is_open_space_layout() -> None:

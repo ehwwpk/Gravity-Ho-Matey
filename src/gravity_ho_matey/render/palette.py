@@ -40,3 +40,37 @@ HUD_ALERT_BG = "#180608"
 HUD_SCANLINE = "#0a1218"
 HUD_LOOT_BG = "#081810"
 HUD_LOOT_NEW = "#7cff7a"
+
+# Chase / perspective presentation
+CHASE_FLOOR_TOP = "#0a1628"
+CHASE_FLOOR_BOTTOM = "#040810"
+CHASE_GRID_LOW = "#2a5080"
+CHASE_GRID_MID = "#6b48c0"
+CHASE_GRID_HIGH = "#b040ff"
+CHASE_GRID_SHIP = "#7cffea"
+CHASE_STAR_FAR = "#3a5570"
+CHASE_STAR_NEAR = "#8ec8ff"
+CHASE_STAR_GLOW = "#4a90c8"
+CHASE_SPEED_STREAK = "#66e8ff"
+CHASE_SPEED_STREAK_BOOST = "#c58cff"
+CHASE_FOG_BLACK_HOLE = ("#1a0830", "#2a1050", "#4a1880", "#6b30a8", "#8b40cc")
+CHASE_FOG_PLANET = ("#1a2840", "#2a4870", "#3a68a0", "#6bc0ff")
+CHASE_FOG_WELL = ("#2a1040", "#4a2080", "#7a40b0", "#c58cff")
+CHASE_WALL_FACE = "#3a2e28"
+CHASE_WALL_CAP = "#9b7b4e"
+CHASE_WALL_RAIL = "#6b5340"
+CHASE_ENGINE_GLOW = "#ff9a4a"
+CHASE_ENGINE_CORE = "#ffb347"
+CHASE_VIGNETTE = "#020408"
+CHASE_BEACON_PILLAR = "#53ffd0"
+CHASE_ENEMY_FOG = ("#2a0810", "#4a1020", "#6a2830")
+
+# Helm v2 — grid-native threat + ribbon (red = death only)
+HELM_THREAT_LETHAL = "#ff4455"
+HELM_THREAT_HEAVY = "#e89848"
+HELM_RIBBON_SAFE = "#66e8ff"
+HELM_RIBBON_FADE = "#3a7898"
+
+# Holo tactical walls (shared language with chase rails)
+HOLO_WALL_FILL = "#1a2840"
+HOLO_WALL_EDGE = "#53a8c8"

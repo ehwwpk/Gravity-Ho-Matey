@@ -10,12 +10,10 @@ from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 
 def build_cove_run_level() -> GameWorld:
     walls = [
-        # Outer cove rocks.
         Wall(Rect(0, 0, CANVAS_WIDTH, 22)),
         Wall(Rect(0, CANVAS_HEIGHT - 22, CANVAS_WIDTH, 22)),
         Wall(Rect(0, 0, 22, CANVAS_HEIGHT)),
         Wall(Rect(CANVAS_WIDTH - 22, 0, 22, CANVAS_HEIGHT)),
-        # Light interior obstacles (~70% fewer maze walls than original).
         Wall(Rect(145, 490, 250, 34)),
         Wall(Rect(650, 300, 34, 245)),
     ]
@@ -35,6 +33,8 @@ def build_cove_run_level() -> GameWorld:
         config=WorldConfig(
             width=CANVAS_WIDTH,
             height=CANVAS_HEIGHT,
+            viewport_width=CANVAS_WIDTH,
+            viewport_height=CANVAS_HEIGHT,
             level_theme="cove",
             level_name="Smuggler's Cove",
         ),
@@ -46,49 +46,55 @@ def build_cove_run_level() -> GameWorld:
     )
 
 
+SOLAR_STRIP_HEIGHT = 1680
+
+
 def build_solar_crossing_level() -> GameWorld:
-    """Level 2 — open star chart with a central black hole and planetary wells."""
-    cx, cy = CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2
+    """Level 2 — vertical star strip; free forward/back flight with central singularity."""
+    cx = CANVAS_WIDTH / 2
+    strip_h = SOLAR_STRIP_HEIGHT
     walls = [
         Wall(Rect(0, 0, CANVAS_WIDTH, 18)),
-        Wall(Rect(0, CANVAS_HEIGHT - 18, CANVAS_WIDTH, 18)),
-        Wall(Rect(0, 0, 18, CANVAS_HEIGHT)),
-        Wall(Rect(CANVAS_WIDTH - 18, 0, 18, CANVAS_HEIGHT)),
+        Wall(Rect(0, strip_h - 18, CANVAS_WIDTH, 18)),
+        Wall(Rect(0, 0, 18, strip_h)),
+        Wall(Rect(CANVAS_WIDTH - 18, 0, 18, strip_h)),
     ]
     wells = [
         GravityWell(
-            Vec2(cx, cy),
+            Vec2(cx, strip_h * 0.5),
             strength=52000,
             radius=155,
             label="Singularity",
             kind="black_hole",
             maw_radius=22,
         ),
-        GravityWell(Vec2(cx, 118), strength=19000, radius=78, label="Scorched Prince", kind="planet"),
-        GravityWell(Vec2(755, 248), strength=24000, radius=92, label="Verdant Shell", kind="planet"),
-        GravityWell(Vec2(205, 455), strength=21000, radius=82, label="Rust Belt", kind="planet"),
-        GravityWell(Vec2(795, 495), strength=27000, radius=118, label="Jolly Giant", kind="planet"),
-        GravityWell(Vec2(175, 195), strength=20000, radius=76, label="Ice Halo", kind="planet"),
+        GravityWell(Vec2(cx, 180), strength=19000, radius=78, label="Scorched Prince", kind="planet"),
+        GravityWell(Vec2(755, strip_h * 0.38), strength=24000, radius=92, label="Verdant Shell", kind="planet"),
+        GravityWell(Vec2(205, strip_h * 0.62), strength=21000, radius=82, label="Rust Belt", kind="planet"),
+        GravityWell(Vec2(795, strip_h * 0.72), strength=27000, radius=118, label="Jolly Giant", kind="planet"),
+        GravityWell(Vec2(175, strip_h * 0.28), strength=20000, radius=76, label="Ice Halo", kind="planet"),
     ]
     beacons = [
-        Beacon(Vec2(915, 320)),
-        Beacon(Vec2(480, 595)),
-        Beacon(Vec2(165, 520)),
+        Beacon(Vec2(915, strip_h * 0.22)),
+        Beacon(Vec2(480, strip_h * 0.52)),
+        Beacon(Vec2(165, strip_h * 0.78)),
     ]
     return GameWorld(
         config=WorldConfig(
             width=CANVAS_WIDTH,
-            height=CANVAS_HEIGHT,
+            height=strip_h,
+            viewport_width=CANVAS_WIDTH,
+            viewport_height=CANVAS_HEIGHT,
             gravity_scale=0.45,
             turn_rate=5.2,
             thrust=255.0,
             level_theme="solar",
             level_name="Singularity Crossing",
         ),
-        ship=Ship(pos=Vec2(52, 320), angle=0.05),
+        ship=Ship(pos=Vec2(52, 120), angle=1.52),
         walls=walls,
         wells=wells,
         beacons=beacons,
-        finish_gate=FinishGate(Rect(895, 285, 50, 50)),
-        enemies=solar_patrol_enemies(),
+        finish_gate=FinishGate(Rect(895, strip_h - 90, 50, 50)),
+        enemies=solar_patrol_enemies(strip_h),
     )

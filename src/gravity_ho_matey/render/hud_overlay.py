@@ -4,8 +4,10 @@ import tkinter as tk
 
 from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE, MAX_LIVES
 from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_HUD_TAGS, POWERUP_LABELS, PowerUpKind
-from gravity_ho_matey.gameplay.session import LOOT_TOAST_SECONDS
+from gravity_ho_matey.gameplay.session import LOOT_PULSE_SECONDS, LOOT_TOAST_SECONDS
 from gravity_ho_matey.gameplay.world import GameWorld
+from gravity_ho_matey.render.camera import CameraMode
+from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
 
 
@@ -29,35 +31,38 @@ class SciFiHudOverlay:
         loot_toast_kind: PowerUpKind | None = None,
         loot_toast_is_new: bool = False,
         loot_toast_ttl: float = 0.0,
+        camera_mode: CameraMode | None = None,
+        camera_mode_flash: bool = False,
     ) -> None:
-        width = world.config.width
+        width = world.config.viewport_width
         solar = world.config.level_theme == "solar"
         accent = palette.HUD_ACCENT_SOLAR if solar else palette.HUD_ACCENT
         dim = palette.HUD_DIM
         frame = palette.HUD_FRAME
         bg = palette.HUD_BG
+        cargo_highlight = loot_toast_kind if loot_toast_ttl > 0.0 else None
 
         canvas.create_rectangle(0, 0, width, self.PANEL_H, fill=bg, outline="")
         canvas.create_line(0, self.PANEL_H, width, self.PANEL_H, fill=accent, width=1)
         self._scanline(canvas, width)
 
-        cargo_highlight = loot_toast_kind if loot_toast_ttl > 0.0 else None
-
         self._panel(canvas, 8, 6, 148, 42, frame, accent)
         self._label(canvas, 16, 12, "CAPTAIN", dim)
         self._draw_lives(canvas, 16, 24, campaign.lives, accent, palette.HUD_LIFE_EMPTY)
 
-        self._panel(canvas, 162, 6, 148, 42, frame, accent)
+        self._panel(canvas, 162, 6, 168, 42, frame, accent)
         self._label(canvas, 170, 12, "HULL INTEGRITY", dim)
         self._draw_hull_chunks(canvas, 170, 24, campaign.hull_chunks, CHUNKS_PER_LIFE, accent, palette.HUD_HULL_EMPTY)
+        if campaign.powerups:
+            self._draw_hull_fittings(canvas, 170, 38, campaign.powerups, dim, cargo_highlight)
 
-        self._panel(canvas, 316, 6, 128, 42, frame, accent)
-        self._label(canvas, 324, 12, "NAV BEACONS", dim)
+        self._panel(canvas, 336, 6, 128, 42, frame, accent)
+        self._label(canvas, 344, 12, "NAV BEACONS", dim)
         remaining = world.beacons_remaining
         total = len(world.beacons)
         beacon_color = palette.BEACON if remaining else palette.BEACON_COLLECTED
         canvas.create_text(
-            324,
+            344,
             30,
             anchor="w",
             text=f"{remaining:02d} / {total:02d}",
@@ -65,10 +70,10 @@ class SciFiHudOverlay:
             font=("Courier New", 14, "bold"),
         )
 
-        self._panel(canvas, 450, 6, 118, 42, frame, accent)
-        self._label(canvas, 458, 12, "CHRONO", dim)
+        self._panel(canvas, 470, 6, 118, 42, frame, accent)
+        self._label(canvas, 478, 12, "CHRONO", dim)
         canvas.create_text(
-            458,
+            478,
             30,
             anchor="w",
             text=f"{world.elapsed:05.1f}s",
@@ -76,12 +81,12 @@ class SciFiHudOverlay:
             font=("Courier New", 14, "bold"),
         )
 
-        self._panel(canvas, 574, 6, 118, 42, frame, accent)
-        self._label(canvas, 582, 12, "REACTOR", dim)
+        self._panel(canvas, 594, 6, 118, 42, frame, accent)
+        self._label(canvas, 602, 12, "REACTOR", dim)
         boost_pct = int(world.ship.boost_energy * 100)
         boost_color = palette.HUD_BOOST if boost_pct > 25 else palette.HUD_WARN
-        canvas.create_text(582, 30, anchor="w", text=f"{boost_pct:3d}%", fill=boost_color, font=("Courier New", 14, "bold"))
-        self._boost_bar(canvas, 582, 38, 100, 6, world.ship.boost_energy, accent, dim)
+        canvas.create_text(602, 30, anchor="w", text=f"{boost_pct:3d}%", fill=boost_color, font=("Courier New", 14, "bold"))
+        self._boost_bar(canvas, 602, 38, 100, 6, world.ship.boost_energy, accent, dim)
 
         cargo_x = width - 156
         cargo_frame = self._powerup_color(cargo_highlight) if cargo_highlight else accent
@@ -98,9 +103,6 @@ class SciFiHudOverlay:
             dim,
             highlight_kind=cargo_highlight,
         )
-
-        level_tag = world.config.level_name.upper()
-        canvas.create_text(width // 2, 10, text=level_tag, fill=dim, font=self.FONT_TITLE)
 
         if world.invuln_remaining > 0.0:
             shield_alpha = "#66e8ff" if int(world.elapsed * 12) % 2 == 0 else "#2a8aa8"
@@ -135,6 +137,70 @@ class SciFiHudOverlay:
                 loot_toast_ttl,
             )
 
+    def draw_playfield_chrome(
+        self,
+        canvas: tk.Canvas,
+        world: GameWorld,
+        hud_top: float,
+        *,
+        camera_mode: CameraMode | None = None,
+        camera_mode_flash: bool = False,
+    ) -> None:
+        """Sector + camera badges on the playfield — never stacked on command panels."""
+        width = world.config.viewport_width
+        solar = world.config.level_theme == "solar"
+        accent = palette.HUD_ACCENT_SOLAR if solar else palette.HUD_ACCENT
+        dim = palette.HUD_DIM
+        y = hud_top + 8
+        level_tag = world.config.level_name.upper()
+        self._badge(
+            canvas,
+            10,
+            y,
+            anchor="nw",
+            text=f"◈ {level_tag}",
+            fill=accent,
+            font=self.FONT_TITLE,
+        )
+        if camera_mode is not None:
+            mode_color = accent if camera_mode_flash else dim
+            self._badge(
+                canvas,
+                width - 10,
+                y,
+                anchor="ne",
+                text=f"◈ {camera_mode.hud_label} ◈",
+                fill=mode_color,
+                font=self.FONT_SMALL,
+            )
+
+    @staticmethod
+    def _badge(
+        canvas: tk.Canvas,
+        x: float,
+        y: float,
+        *,
+        anchor: str,
+        text: str,
+        fill: str,
+        font: tuple[str, int, str],
+    ) -> None:
+        pad_x, pad_y = 6, 3
+        tid = canvas.create_text(x, y, anchor=anchor, text=text, fill=fill, font=font)
+        bx0, by0, bx1, by1 = canvas.bbox(tid)
+        if bx0 is None:
+            return
+        canvas.create_rectangle(
+            bx0 - pad_x,
+            by0 - pad_y,
+            bx1 + pad_x,
+            by1 + pad_y,
+            fill=palette.HUD_BG,
+            outline=fill,
+            width=1,
+        )
+        canvas.tag_raise(tid)
+
     @staticmethod
     def _powerup_color(kind: PowerUpKind) -> str:
         return {
@@ -153,8 +219,9 @@ class SciFiHudOverlay:
         ttl: float,
     ) -> None:
         color = self._powerup_color(kind)
-        pulse = int((LOOT_TOAST_SECONDS - ttl) * 10) % 2 == 0 if is_new else False
-        border = color if pulse or not is_new else palette.HUD_LOOT_NEW
+        elapsed = LOOT_TOAST_SECONDS - ttl
+        pulse = is_new and elapsed < LOOT_PULSE_SECONDS and int(elapsed * 2.5) % 2 == 0
+        border = palette.HUD_LOOT_NEW if pulse else color
         label = POWERUP_LABELS[kind].upper()
         tag = POWERUP_HUD_TAGS[kind]
         headline = "◈ LOOT ACQUIRED ◈" if is_new else "◈ SUPPLY SECURED ◈"
@@ -180,8 +247,7 @@ class SciFiHudOverlay:
         )
 
     def _scanline(self, canvas: tk.Canvas, width: int) -> None:
-        for y in range(0, self.PANEL_H, 4):
-            canvas.create_line(0, y, width, y, fill=palette.HUD_SCANLINE)
+        hp.draw_scanlines(canvas, 0, 0, width, self.PANEL_H)
 
     def _panel(
         self,
@@ -193,12 +259,10 @@ class SciFiHudOverlay:
         frame: str,
         accent: str,
     ) -> None:
-        canvas.create_rectangle(x, y, x + w, y + h, outline=frame, width=1, fill="")
-        canvas.create_line(x + 4, y + 2, x + 18, y + 2, fill=accent)
-        canvas.create_line(x + w - 18, y + h - 2, x + w - 4, y + h - 2, fill=accent)
+        hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent)
 
     def _label(self, canvas: tk.Canvas, x: float, y: float, text: str, color: str) -> None:
-        canvas.create_text(x, y, anchor="w", text=text, fill=color, font=self.FONT_SMALL)
+        hp.draw_panel_title(canvas, x, y, text, color=color)
 
     def _draw_lives(
         self,
@@ -253,6 +317,29 @@ class SciFiHudOverlay:
         canvas.create_rectangle(x, y, x + w, y + h, outline=bg, fill=bg)
         canvas.create_rectangle(x, y, x + w * max(0.0, min(1.0, fraction)), y + h, outline="", fill=fill)
 
+    def _draw_hull_fittings(
+        self,
+        canvas: tk.Canvas,
+        x: float,
+        y: float,
+        powerups: set[PowerUpKind],
+        dim: str,
+        highlight_kind: PowerUpKind | None,
+    ) -> None:
+        if not powerups:
+            canvas.create_text(x, y, anchor="w", text="FITTINGS: —", fill=dim, font=self.FONT_SMALL)
+            return
+        canvas.create_text(x, y, anchor="w", text="FITTINGS:", fill=dim, font=self.FONT_SMALL)
+        chip_x = x + 58
+        for kind in sorted(powerups, key=lambda k: k.name):
+            color = self._powerup_color(kind)
+            tag = POWERUP_HUD_TAGS[kind]
+            if highlight_kind is kind:
+                canvas.create_rectangle(chip_x - 2, y - 2, chip_x + 44, y + 10, outline=color, width=1)
+            canvas.create_rectangle(chip_x, y, chip_x + 40, y + 8, fill=color, outline=dim, width=1)
+            canvas.create_text(chip_x + 4, y + 1, anchor="w", text=tag, fill=palette.HUD_BG, font=self.FONT_SMALL)
+            chip_x += 46
+
     def _draw_cargo(
         self,
         canvas: tk.Canvas,
@@ -264,18 +351,23 @@ class SciFiHudOverlay:
         *,
         highlight_kind: PowerUpKind | None = None,
     ) -> None:
-        if highlight_kind is not None:
-            canvas.create_text(
-                x,
-                y + 4,
-                anchor="w",
-                text=POWERUP_HUD_TAGS[highlight_kind],
-                fill=self._powerup_color(highlight_kind),
-                font=("Courier New", 14, "bold"),
-            )
-            return
         if not powerups:
             canvas.create_text(x, y + 6, anchor="w", text="EMPTY", fill=dim, font=self.FONT)
             return
-        labels = [POWERUP_HUD_TAGS[kind] for kind in sorted(powerups, key=lambda k: k.name)]
-        canvas.create_text(x, y + 6, anchor="w", text=" · ".join(labels), fill=accent, font=self.FONT)
+        chip_x = x
+        for kind in sorted(powerups, key=lambda k: k.name):
+            color = self._powerup_color(kind)
+            label = POWERUP_HUD_TAGS[kind]
+            active = highlight_kind is kind
+            if active:
+                canvas.create_rectangle(chip_x - 2, y + 2, chip_x + 68, y + 18, outline=color, width=2)
+            canvas.create_rectangle(chip_x, y + 4, chip_x + 64, y + 16, fill=color, outline=accent if active else dim, width=1)
+            canvas.create_text(
+                chip_x + 4,
+                y + 6,
+                anchor="w",
+                text=label,
+                fill=palette.HUD_BG,
+                font=self.FONT,
+            )
+            chip_x += 70
