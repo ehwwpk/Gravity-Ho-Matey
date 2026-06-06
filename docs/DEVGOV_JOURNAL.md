@@ -2,13 +2,42 @@
 
 Living log of how DevGov helps (or doesn't) while building this Python game. The agent maintains this file across sessions.
 
-**Workflow (agent):**
-1. Before edits → `devgov_check` (MCP) with honest `--task`
-2. After edits → `devgov_run` (MCP; user approval OK)
-3. Always read `Artifacts/DevGov/agent/session_context.json` when MCP caps or times out (disk wins)
-4. Append dated entries below after each meaningful DevGov interaction
+**Workflow (agent — locked):**
+1. **Before commit** (when code changed) → `devgov check --task "…"` then implement → `devgov run` → read `Artifacts/DevGov/agent/session_context.json`
+2. **After every** check / plan / run → append a dated journal entry below with an honest tag
+3. **MCP first**, CLI fallback if MCP times out or server disconnected; **disk T0 wins** over capped JSON
+4. **Never** tag `+EV` for DevGov if the agent skipped check/run on that diff, or only ran after push on a clean tree
+5. **Reload Cursor** after `devgov doctor --setup-cursor` (MCP won't appear until reload)
+6. Tags: `+EV` (clear win) · `neutral` (correct behavior, minor friction, or expected limits) · `-EV` (miss, skip, or real friction)
 
-**Tags:** `+EV` (clear win) · `neutral` · `-EV` (friction / miss)
+**Install / MCP refresh (human, occasional):**
+```bash
+pip install -e C:\Users\evanh\source\DevGov_clean --upgrade
+devgov doctor --setup-cursor --repo .
+```
+Then reload Cursor and confirm **devgov** MCP is enabled in Settings → Tools & MCP.
+
+---
+
+## 2026-06-06 — DevGov upgrade, MCP refresh, journal lock-in
+
+### +EV · `doctor --setup-cursor` refreshed project MCP config
+Reinstalled editable DevGov from `DevGov_clean`, ran `devgov doctor --setup-cursor --repo .` — merged server into `.cursor/mcp.json` with `DEVGOV_MCP_EMIT_ACTIVITY=1` and `DEVGOV_REUSE_ANALYSIS=1`. Rule file already present.
+
+### +EV · CLI check fast on clean tree (~2s)
+`devgov check --task "Post-push clean tree…"` → LOW risk, honest `no_changes_detected`, T0 schema **1.2.13**. No false pytest plan when diff empty.
+
+### neutral · `devgov run` on clean tree exits 12 (by design)
+After push, run correctly **did not** re-execute ruff/pytest — `run.empty_worktree_no_verification` in T0. Not a green run; prior proof is `last_run_executed_steps_summary` from older sessions. Agent ran manual `pytest` (146 passed) for sanity only.
+
+### -EV · Agent shipped `a45ee71` without DevGov on that diff
+Large commit (30 files: chase mirror, patrol fire, holo briefing, tap boost) went straight to `git commit` + push per user request — **no** pre-commit check/run on that changeset. Violates locked workflow; can't claim DevGov gated that release.
+
+### -EV · MCP tools unavailable until Cursor reload
+After doctor merge, agent MCP folder had **no** devgov server (Adobe only); `CallMcpTool` failed. Pattern unchanged: reload Cursor after setup; use CLI until MCP reconnects.
+
+### neutral · Journal workflow tightened
+Locked rules: honest +/-EV tags, run-before-commit, no +EV when skipped, reload after doctor. Agent commits to append after every DevGov interaction going forward.
 
 ---
 
