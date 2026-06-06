@@ -20,35 +20,45 @@ The renderer can read game state, but gameplay should not import Tkinter.
 
 ## Scene model
 
-- `TitleScene`: static title screen and controls.
-- `PlayScene`: owns a `GameWorld`, updates simulation, and handles restart/title shortcuts.
-- `EndScene`: win/loss screen with restart/title flow.
+- `TitleScene`: static title screen; starts a new campaign via `game_flow.start_play`.
+- `PlayScene`: owns per-level `GameWorld` + cross-level `CampaignState`; handles win/loss transitions.
+- `EndScene`: win/loss screen; advances campaign, retries level, or returns to title on game over.
+
+Scene transitions that start gameplay should go through `scenes/game_flow.start_play` so campaign wiring stays consistent. Scene modules use **lazy imports** inside methods to avoid import cycles (`game_flow` ↔ `play` ↔ `end`).
+
+## Campaign progress
+
+`gameplay/progress.py` tracks which levels are selectable from the title screen. Beating a level unlocks the next entry in `LEVEL_ORDER`. Level 2 direct select is gated until Cove is cleared at least once (session-persistent for the process lifetime).
+
+## Campaign vs level state
+
+| Object | Lifetime | Owns |
+|--------|----------|------|
+| `CampaignState` | Whole campaign (3 lives, collected power-ups) | lives, `powerups` set |
+| `GameWorld` | Single level attempt | ship, enemies, pickups, beacons, projectiles |
+
+`gameplay/session.wire_world_for_campaign()` applies carried bonuses and connects pickup collection to the campaign. This keeps `CampaignState` free of `GameWorld` imports.
 
 ## Gameplay model
 
-`GameWorld` owns mutable state:
+`GameWorld` owns mutable per-level state:
 
-- `Ship`
-- `Projectile` list
-- `Wall` list
-- `GravityWell` list
-- `Beacon` list
-- `FinishGate`
-- `GameStatus`
+- `Ship`, `Projectile`, `PatrolEnemy`, `PowerUpPickup`
+- `Wall`, `GravityWell`, `Beacon`, `FinishGate`
+- `GameStatus`, optional `on_powerup_collected` callback
 
-`WorldConfig` owns tuning constants.
+`WorldConfig` owns tuning constants and `level_theme` / `level_name`.
+
+## Levels
+
+- `level_registry.py`: `LEVEL_BUILDERS`, `LEVEL_ORDER`, `build_level()`, startup validation.
+- `level_data.py`: geometry and wells per level.
+- `solar_patrols.py`: enemy patrol definitions for level 2 only.
 
 ## Rendering model
 
-The Tk renderer converts world state into canvas primitives. No game rules should live here.
+The Tk renderer converts world + campaign HUD data into canvas primitives. No game rules live here.
 
 ## Tests
 
-The tests currently cover:
-
-- vector math
-- gravity force direction and strength shape
-- beacon collection and finish unlocking flow
-- projectile integration basics
-
-This test suite is intentionally small but establishes the right seams.
+Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, enemy patrol/combat, and registry alignment.

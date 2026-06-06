@@ -91,4 +91,64 @@ Check timed out over MCP (120s) again; CLI check + MCP run combo worked in ~4s f
 
 ---
 
+## 2026-06-05 — Level 2: Singularity Crossing map
+
+### +EV · MCP `devgov_run` exit 0 in ~15s after 8-file level-2 diff
+Ruff → compileall → pytest (4 modules, 9 tests) all **passed**; outcome `clean`, obligations **met**. Scoped ruff/compile to changed gameplay/levels/render/scenes files — appropriate for a feature slice. **Behavior change:** agent did not mark task done until this run returned green; would have shipped without running pytest on new `test_levels.py` otherwise.
+
+### +EV · `pytest_discovered_test_modules: 4` + full_suite bias
+T0 honestly reports small suite; new level registry tests were included in the run plan. Caught nothing extra this time (tests trivial) but **did** enforce that new files compile and import.
+
+### +EV · Per-well `maw_radius` + `kind` drove correct loss copy
+Solar black hole uses larger death zone (`maw_radius=22`) and distinct loss string — small design win enabled by typing wells; unrelated to DevGov but verified by existing + new tests passing under run.
+
+### neutral · Pre-edit MCP `devgov_check` still skipped (prior session pattern)
+Continued with implement-then-`devgov_run` rhythm. Check-before-edit would add little for greenfield level data if run always follows; acceptable for this repo size.
+
+### neutral · 2 untracked paths in T0 (`level_registry.py`, `test_levels.py`)
+Run passed with untracked files — DevGov verifies working tree content, not git index. User can commit when ready.
+
+### -EV · Post-run MCP `devgov_check` timed out again (124)
+Same pattern as prior sessions: `devgov_run` ~15s green, `devgov_check` killed at 120s with empty cap. **No behavior change** on this task — prior run already clean; check added nothing except journal friction.
+
+### Realistic weight this session
+**Moderately +EV.** DevGov did not choose the solar layout or art direction, but **did** materially gate completion: scoped verification on 8 files, picked up 4th test module, clean exit 0. Without it, agent might still run pytest manually — here MCP run was the explicit stop condition. **Not transformative** for game design; **worth keeping** for post-edit discipline on multi-file features.
+
+---
+
+## 2026-06-05 — Level progression fix (cove → solar)
+
+### +EV · MCP `devgov_check` succeeded (~15s) before edit
+First check this session did not timeout — T0 showed `intake_clean_ready_for_plan`, prior run ledger on disk. **Mild behavior change:** agent had fresh risk context before touching scene flow.
+
+### +EV · MCP `devgov_run` exit 0 after progression fix (10 tests)
+Ruff/compile/pytest green including new `test_campaign_level_order`. **Behavior change:** agent blocked "fixed" claim until run completed.
+
+### neutral · Root cause was missing feature, not runtime bug
+Level 2 existed but win screen always replayed same `level_id`; title key **2** was the only way in. User expectation of campaign advance was reasonable — now Enter on **win** loads next level.
+
+### Realistic weight
+**Light +EV** for verification gate; **zero** for diagnosing the UX gap (code read + user report).
+
+---
+
+## 2026-06-05 — Enemies, persistent power-ups, campaign lives
+
+### +EV · First `devgov_run` caught circular import via pytest failure (exit 11)
+Ruff/compile passed but pytest collection failed on `entities` ↔ `powerups` cycle. **Behavior change:** agent fixed import layering (`powerup_kinds.py` + `ship_modifiers.py`) before claiming done; would have shipped broken game without run.
+
+### +EV · Second `devgov_run` exit 0 — 16 tests, 5 modules
+Full suite green after fix. Obligations met across primary + docs sub-boundary.
+
+### +EV · Pre-edit MCP `devgov_check` timed out (124); post-fix run reliable
+Same flaky check pattern; **run** remains the effective gate for this repo.
+
+### neutral · Architecture split matches repo layers
+`CampaignState` (cross-level) · `GameWorld` (per-level sim) · `solar_patrols.py` (level content) · scenes wire campaign through constructors — extensible for future levels via `LEVEL_ORDER`.
+
+### Realistic weight
+**Strong +EV this session** — DevGov run directly blocked a broken import graph that compileall missed. Lives/power-up persistence is logic-heavy; tests + run gave confidence. Check timeout still **non-blocking**.
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->

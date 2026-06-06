@@ -5,6 +5,7 @@ from enum import Enum, auto
 
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
+from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 
 
 class GameStatus(Enum):
@@ -21,6 +22,9 @@ class Ship:
     radius: float = 12.0
     cooldown: float = 0.0
     boost_energy: float = 1.0
+    thrust_multiplier: float = 1.0
+    fire_cooldown_multiplier: float = 1.0
+    turn_rate_multiplier: float = 1.0
 
 
 @dataclass(slots=True)
@@ -31,12 +35,21 @@ class Projectile:
     radius: float = 4.0
 
 
+@dataclass(slots=True)
+class PowerUpPickup:
+    pos: Vec2
+    kind: PowerUpKind
+    radius: float = 11.0
+
+
 @dataclass(frozen=True, slots=True)
 class GravityWell:
     pos: Vec2
     strength: float
     radius: float
     label: str = ""
+    kind: str = "well"
+    maw_radius: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,3 +82,5 @@ class WorldConfig:
     projectile_speed: float = 315.0
     ship_fire_cooldown: float = 0.18
     well_maw_radius: float = 10.0
+    level_theme: str = "cove"
+    level_name: str = "Level"
