@@ -5,9 +5,11 @@ import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
+from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CHASE_SCREEN_HEADING, ViewCamera
+from gravity_ho_matey.render.chase_mirror import draw_rear_view_mirror
 from gravity_ho_matey.render.chase_threat import predict_path_with_threats
 
 # Instrument tuning — sensitive enough to read small pulls at cruise speed.
@@ -56,6 +58,7 @@ def draw_xwing_cockpit_hud(
     canvas: tk.Canvas,
     world: GameWorld,
     camera: ViewCamera,
+    field: GravityField,
     *,
     anchor_x: float,
     anchor_y: float,
@@ -83,7 +86,7 @@ def draw_xwing_cockpit_hud(
         vel.length(),
         world.config.max_ship_speed,
         slip=slip,
-        thrusting=world.ship.boost_energy < 0.98 and vel.length() > 20.0,
+        thrusting=world.ship.boost_flash > 0.0,
         accent=accent,
         dim=dim,
     )
@@ -96,6 +99,17 @@ def draw_xwing_cockpit_hud(
         g_total,
         accent=accent,
         dim=dim,
+    )
+    draw_rear_view_mirror(
+        canvas,
+        world,
+        camera,
+        field,
+        ship_pos=ship_pos,
+        ship_angle=ship_angle,
+        ship_vel=world.ship.vel,
+        hud_top=hud_top,
+        elapsed=world.elapsed,
     )
 
 

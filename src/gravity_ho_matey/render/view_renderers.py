@@ -84,13 +84,14 @@ class TacticalViewRenderer:
             if enemy.alive:
                 self._enemy(canvas, enemy.pos, enemy.radius, enemy.facing_angle, camera, ship_pos, hud_top)
         for projectile in world.projectiles:
-            self._projectile(canvas, projectile.pos, projectile.vel, camera, ship_pos, hud_top)
+            self._projectile(canvas, projectile, camera, ship_pos, hud_top)
         ship_screen = camera.world_to_screen(world.ship.pos, ship_pos, world.ship.angle)
         draw_ship(
             canvas,
             Vec2(ship_screen.x, ship_screen.y + hud_top),
             world.ship.angle,
             world.ship.boost_energy,
+            boost_burst=world.ship.boost_flash,
             invuln=world.invuln_remaining,
             elapsed=world.elapsed,
             scale=1.08 * camera.tactical_scale / 1.1,
@@ -120,13 +121,16 @@ class TacticalViewRenderer:
         spike = Vec2(x, y) + Vec2.from_angle(facing) * (radius + 5)
         canvas.create_line(x, y, spike.x, spike.y, fill=palette.ENEMY_EDGE, width=2)
 
-    def _projectile(self, canvas: tk.Canvas, pos: Vec2, vel: Vec2, camera: ViewCamera, ship_pos: Vec2, hud_top: int) -> None:
-        p = camera.world_to_screen(pos, ship_pos, 0.0)
+    def _projectile(self, canvas: tk.Canvas, projectile, camera: ViewCamera, ship_pos: Vec2, hud_top: int) -> None:
+        p = camera.world_to_screen(projectile.pos, ship_pos, 0.0)
         x, y = p.x, p.y + hud_top
-        canvas.create_oval(x - 4, y - 4, x + 4, y + 4, fill=palette.PROJECTILE, outline="")
+        color = palette.HOSTILE_PROJECTILE if projectile.hostile else palette.PROJECTILE
+        r = 3.5 if projectile.hostile else 4.0
+        canvas.create_oval(x - r, y - r, x + r, y + r, fill=color, outline="#fff2e8" if projectile.hostile else "")
+        vel = projectile.vel
         if vel.length_sq() > 1.0:
-            tail = Vec2(x, y) - vel.normalized() * 14
-            canvas.create_line(tail.x, tail.y, x, y, fill=palette.PROJECTILE)
+            tail = Vec2(x, y) - vel.normalized() * (16 if projectile.hostile else 14)
+            canvas.create_line(tail.x, tail.y, x, y, fill=color, width=2 if projectile.hostile else 1)
 
     def _grid(self, canvas: tk.Canvas, width: int, height: int, y_offset: int, camera: ViewCamera) -> None:
         step = int(48 / max(1.0, camera.tactical_scale * 0.85))
@@ -183,8 +187,8 @@ class PerspectiveViewRenderer:
         ship_pos = world.ship.pos
         ship_angle = world.ship.angle
         elapsed = world.elapsed
-        thrusting = world.ship.boost_energy < 0.98 and world.ship.vel.length() > 20.0
-        camera.chase_thrust_boost = 1.1 if thrusting else 1.0
+        thrusting = world.ship.boost_flash > 0.0
+        camera.chase_thrust_boost = 1.12 if thrusting else 1.0
 
         canvas.create_rectangle(0, 0, vw, vh, fill=palette.BACKGROUND, outline="")
 
@@ -213,11 +217,13 @@ class PerspectiveViewRenderer:
         gate_center = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         gp = camera.world_to_screen(gate_center, ship_pos, ship_angle)
         if gp.visible:
-            sprites.append((gp.depth, "gate", (Vec2(gp.x, gp.y), world.finish_unlocked)))
+            gate_size = max(gate.w, gate.h)
+            sprites.append((gp.depth, "gate", (Vec2(gp.x, gp.y), world.finish_unlocked, gate_size, gp.depth)))
         for beacon in world.beacons:
             p = camera.world_to_screen(beacon.pos, ship_pos, ship_angle)
             if p.visible:
-                sprites.append((p.depth, "beacon", (Vec2(p.x, p.y), beacon)))
+                b_scale = max(0.35, camera.perspective_scale(p.depth) / camera.focal_length)
+                sprites.append((p.depth, "beacon", (Vec2(p.x, p.y), beacon, b_scale)))
         for pickup in world.pickups:
             p = camera.world_to_screen(pickup.pos, ship_pos, ship_angle)
             if p.visible:
@@ -249,11 +255,19 @@ class PerspectiveViewRenderer:
                     default_maw=world.config.well_maw_radius,
                 )
             elif kind == "gate":
-                pos, unlocked = payload
-                draw_chase_gate(canvas, pos, unlocked=unlocked, solar=solar)
+                pos, unlocked, gate_size, depth = payload
+                g_scale = max(0.35, camera.perspective_scale(depth) / camera.focal_length)
+                draw_chase_gate(
+                    canvas,
+                    pos,
+                    unlocked=unlocked,
+                    solar=solar,
+                    gate_size=gate_size,
+                    depth_scale=g_scale,
+                )
             elif kind == "beacon":
-                pos, beacon = payload
-                draw_chase_beacon(canvas, pos, beacon, elapsed=elapsed)
+                pos, beacon, b_scale = payload
+                draw_chase_beacon(canvas, pos, beacon, elapsed=elapsed, depth_scale=b_scale)
             elif kind == "pickup":
                 pos, kind_enum = payload
                 draw_chase_pickup(canvas, pos, kind_enum)
@@ -262,7 +276,7 @@ class PerspectiveViewRenderer:
                 draw_chase_enemy(canvas, pos, radius=enemy.radius, facing=enemy.facing_angle, scale=scale)
             elif kind == "projectile":
                 pos, projectile = payload
-                draw_chase_projectile(canvas, pos, projectile.vel)
+                draw_chase_projectile(canvas, pos, projectile.vel, hostile=projectile.hostile)
 
         anchor_x, anchor_y = camera.chase_anchor()
         draw_speed_vignette(canvas, camera, world.ship.vel.length())
@@ -273,6 +287,7 @@ class PerspectiveViewRenderer:
             Vec2(anchor_x, anchor_y),
             display_angle,
             world.ship.boost_energy,
+            boost_burst=world.ship.boost_flash,
             invuln=world.invuln_remaining,
             elapsed=elapsed,
             scale=CHASE_SHIP_SCALE,
@@ -281,6 +296,7 @@ class PerspectiveViewRenderer:
             canvas,
             world,
             camera,
+            field,
             anchor_x=anchor_x,
             anchor_y=anchor_y,
             ship_pos=ship_pos,

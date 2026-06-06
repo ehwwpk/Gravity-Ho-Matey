@@ -172,7 +172,7 @@ class TitleScreenOverlay:
         rows = [
             ("A / D  ·  ← / →", "Rotate sail"),
             ("W  ·  ↑", "Thrust"),
-            ("Shift", "Boost reactor"),
+            ("Shift (tap)", "Reactor burst — nose kick"),
             ("Space", "Fire curved cannon"),
             ("R", "Restart current chart"),
             ("Esc", "Return to station"),

@@ -174,8 +174,9 @@ def draw_ship(
     canvas: tk.Canvas,
     pos: Vec2,
     angle: float,
-    boost: float,
+    boost_energy: float,
     *,
+    boost_burst: float = 0.0,
     invuln: float = 0.0,
     elapsed: float = 0.0,
     scale: float = 1.0,
@@ -190,9 +191,10 @@ def draw_ship(
     mast = pos - Vec2.from_angle(angle) * (4 * scale)
     sail_tip = mast + Vec2.from_angle(angle + 1.55) * (9 * scale)
     canvas.create_line(mast.x, mast.y, sail_tip.x, sail_tip.y, fill=palette.SHIP_TRIM, width=3)
-    if boost < 0.98:
+    if boost_burst > 0.0:
         flame = pos - Vec2.from_angle(angle) * (20 * scale)
-        canvas.create_line(pos.x, pos.y, flame.x, flame.y, fill="#ff7a4a", width=3)
+        width = 3 + int(2 * min(1.0, boost_burst / 0.35))
+        canvas.create_line(pos.x, pos.y, flame.x, flame.y, fill="#ff7a4a", width=width)
 
 
 def draw_velocity_trail(canvas: tk.Canvas, ship_pos: Vec2, ship_vel: Vec2, screen_pos: Vec2) -> None:

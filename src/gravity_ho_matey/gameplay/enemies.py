@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass, field
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.entities import GravityWell
+from gravity_ho_matey.gameplay.enemy_aim import lead_aim_direction
+from gravity_ho_matey.gameplay.entities import GravityWell, Projectile
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 
@@ -21,6 +23,14 @@ class PatrolEnemy:
     waypoint_index: int = 0
     facing_angle: float = 0.0
     alive: bool = True
+    can_shoot: bool = False
+    fire_cooldown: float = 0.0
+    fire_interval: float = 2.85
+    shot_speed: float = 228.0
+    engage_range: float = 440.0
+    min_range: float = 70.0
+    aim_lead_factor: float = 0.68
+    aim_spread_rad: float = 0.055
 
     def __post_init__(self) -> None:
         if not self.waypoints:
@@ -65,3 +75,41 @@ class PatrolEnemy:
 
         if self.vel.length_sq() > 1e-9:
             self.facing_angle = math.atan2(self.vel.y, self.vel.x)
+
+    def tick_combat(self, dt: float) -> None:
+        if self.fire_cooldown > 0.0:
+            self.fire_cooldown = max(0.0, self.fire_cooldown - dt)
+
+    def try_fire(self, ship_pos: Vec2, ship_vel: Vec2) -> Projectile | None:
+        if not self.can_shoot or not self.alive or self.fire_cooldown > 0.0:
+            return None
+
+        to_ship = ship_pos - self.pos
+        dist = to_ship.length()
+        if dist < self.min_range or dist > self.engage_range:
+            return None
+
+        aim_dir = lead_aim_direction(
+            self.pos,
+            ship_pos,
+            ship_vel * self.aim_lead_factor,
+            self.shot_speed,
+            refine_passes=1,
+        )
+        if aim_dir is None:
+            return None
+
+        spread = (random.random() * 2.0 - 1.0) * self.aim_spread_rad
+        aim_dir = aim_dir.rotated(spread)
+
+        self.fire_cooldown = self.fire_interval
+        self.facing_angle = math.atan2(aim_dir.y, aim_dir.x)
+        muzzle = self.pos + aim_dir * (self.radius + 7.0)
+        inherit = self.vel * 0.12 if self.vel.length_sq() > 1.0 else Vec2()
+        return Projectile(
+            pos=muzzle,
+            vel=aim_dir * self.shot_speed + inherit,
+            ttl=2.1,
+            radius=3.5,
+            hostile=True,
+        )

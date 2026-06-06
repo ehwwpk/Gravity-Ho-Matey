@@ -97,6 +97,7 @@ class TkRenderer:
         field: GravityField,
         *,
         campaign: CampaignState,
+        upcoming_level_id: str,
         cleared_level_id: str,
         elapsed: float,
     ) -> None:
@@ -106,6 +107,7 @@ class TkRenderer:
             world,
             field,
             campaign=campaign,
+            upcoming_level_id=upcoming_level_id,
             cleared_level_id=cleared_level_id,
             elapsed=elapsed,
         )

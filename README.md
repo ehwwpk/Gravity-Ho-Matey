@@ -63,7 +63,7 @@ python -m gravity_ho_matey
 
 - `A` / `D` or `Left` / `Right`: rotate
 - `W` or `Up`: thrust
-- `Shift`: boost
+- `Shift` (tap): reactor burst — instant speed kick in the direction you're pointing (~32% of max speed; costs reactor charge)
 - `Space`: fire
 - `R`: restart level
 - `Esc`: back to title

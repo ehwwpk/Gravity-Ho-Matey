@@ -293,4 +293,26 @@ Tk `TclError` (missing `tk.tcl`) in this shell — environmental; 91 other tests
 
 ---
 
+## 2026-06-02 — Solar patrol battery fire
+
+### Enemy shooting (level 2 only)
+- `PatrolEnemy.can_shoot` on all Singularity Crossing skiffs; ~2.0–2.5s cooldown between shots
+- Predictive lead via quadratic intercept (`enemy_aim.py`); hostile `Projectile` shares gravity sim with player shots
+- **1 hull chunk per hit** (`DamageSource.ENEMY_PROJECTILE`); invuln blocks; red hostile tracers in tactical + chase
+
+---
+
+## 2026-06-02 — Chase inertia + gate/beacon parity
+
+### Velocity lag (21px max)
+- World slides forward/back under fixed ship rig when accelerating/braking; `chase_anchor()` unchanged
+- `update_chase_velocity()` in play loop; resets on mode toggle (`V`)
+
+### Entity parity (gates + beacons)
+- Shared glyphs in `entity_viz.py`; chase draws same portal/marker art as tactical
+- Faint floor fog glow under glyph (green beacon, blue solar gate) for depth without new icon language
+- Enemy/pickup parity deferred
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->

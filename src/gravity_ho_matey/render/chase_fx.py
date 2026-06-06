@@ -100,7 +100,7 @@ def draw_speed_streaks(
     ux, uy = dx / length, dy / length
     px, py = -uy, ux
 
-    thrusting = world.ship.boost_energy < 0.98
+    thrusting = world.ship.boost_flash > 0.0
     count = min(18, int(6 + speed / 22.0))
     color = palette.CHASE_SPEED_STREAK_BOOST if thrusting else palette.CHASE_SPEED_STREAK
     horizon = camera.chase_horizon_y()
@@ -130,7 +130,7 @@ def draw_engine_bloom(
         r = 14 + i * 8
         color = palette.CHASE_ENGINE_CORE if i == 0 else palette.CHASE_ENGINE_GLOW
         canvas.create_oval(anchor_x - r, anchor_y - r * 0.4, anchor_x + r, anchor_y + r * 0.9, fill="", outline=color, width=2 - i)
-    if thrusting and boost_energy < 0.98:
+    if thrusting and boost_energy > 0.02:
         flame_y = anchor_y + 22
         canvas.create_line(anchor_x, anchor_y + 8, anchor_x, flame_y, fill="#ff7a4a", width=4)
         canvas.create_oval(anchor_x - 8, flame_y - 4, anchor_x + 8, flame_y + 10, fill=palette.CHASE_ENGINE_GLOW, outline="")

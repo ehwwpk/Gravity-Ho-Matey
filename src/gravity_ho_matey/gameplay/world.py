@@ -27,7 +27,7 @@ class ControlIntent:
     rotate_left: bool = False
     rotate_right: bool = False
     thrust: bool = False
-    boost: bool = False
+    boost_tap: bool = False
     fire: bool = False
 
 
@@ -68,8 +68,8 @@ class GameWorld:
 
         self._tick_invuln(dt)
         self._update_ship(dt, intent)
-        self._update_projectiles(dt)
         self._update_enemies(dt)
+        self._update_projectiles(dt)
         self._collect_beacons()
         self._collect_pickups()
         self._check_enemy_collisions()
@@ -102,18 +102,36 @@ class GameWorld:
         if intent.rotate_right:
             self.ship.angle += turn_rate * dt
 
+        if self.ship.boost_flash > 0.0:
+            self.ship.boost_flash = max(0.0, self.ship.boost_flash - dt)
+        self.ship.boost_energy = min(
+            1.0,
+            self.ship.boost_energy + self.config.boost_regen_rate * dt,
+        )
+
         accel = gravity_acceleration_at(self.ship.pos, self.wells) * self.config.gravity_scale
         if intent.thrust:
-            multiplier = self.config.boost_multiplier if intent.boost and self.ship.boost_energy > 0.05 else 1.0
             thrust = self.config.thrust * self.ship.thrust_multiplier
-            accel += Vec2.from_angle(self.ship.angle) * (thrust * multiplier)
-            if multiplier > 1.0:
-                self.ship.boost_energy = max(0.0, self.ship.boost_energy - 0.45 * dt)
-        else:
-            self.ship.boost_energy = min(1.0, self.ship.boost_energy + 0.18 * dt)
+            accel += Vec2.from_angle(self.ship.angle) * thrust
 
         self.ship.vel = (self.ship.vel + accel * dt) * self.config.drag
-        self.ship.vel = self.ship.vel.clamped_length(self.config.max_ship_speed)
+
+        if intent.boost_tap and self.ship.boost_energy >= self.config.boost_energy_cost:
+            forward = Vec2.from_angle(self.ship.angle)
+            burst = (
+                self.config.max_ship_speed
+                * self.config.boost_burst_fraction
+                * self.ship.thrust_multiplier
+            )
+            burst += max(0.0, self.ship.vel.dot(forward)) * 0.12
+            self.ship.vel = self.ship.vel + forward * burst
+            self.ship.boost_energy = max(0.0, self.ship.boost_energy - self.config.boost_energy_cost)
+            self.ship.boost_flash = self.config.boost_flash_seconds
+
+        speed_cap = self.config.max_ship_speed * (
+            self.config.boost_overspeed_cap if self.ship.boost_flash > 0.0 else 1.0
+        )
+        self.ship.vel = self.ship.vel.clamped_length(speed_cap)
         self.ship.pos = self.ship.pos + self.ship.vel * dt
         self.ship.cooldown = max(0.0, self.ship.cooldown - dt)
 
@@ -124,7 +142,7 @@ class GameWorld:
         direction = Vec2.from_angle(self.ship.angle)
         muzzle = self.ship.pos + direction * (self.ship.radius + 8.0)
         velocity = self.ship.vel * 0.35 + direction * self.config.projectile_speed
-        self.projectiles.append(Projectile(pos=muzzle, vel=velocity))
+        self.projectiles.append(Projectile(pos=muzzle, vel=velocity, hostile=False))
         self.ship.cooldown = self.config.ship_fire_cooldown * self.ship.fire_cooldown_multiplier
 
     def _update_projectiles(self, dt: float) -> None:
@@ -142,12 +160,17 @@ class GameWorld:
             if any(wall.rect.intersects_circle(projectile.pos, projectile.radius) for wall in self.walls):
                 self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
                 continue
-            if self._projectile_hits_enemy(projectile):
+            if projectile.hostile:
+                if self._projectile_hits_ship(projectile):
+                    continue
+            elif self._projectile_hits_enemy(projectile):
                 continue
             kept.append(projectile)
         self.projectiles = kept
 
     def _projectile_hits_enemy(self, projectile: Projectile) -> bool:
+        if projectile.hostile:
+            return False
         for enemy in self.enemies:
             if not enemy.alive:
                 continue
@@ -162,16 +185,30 @@ class GameWorld:
                 return True
         return False
 
+    def _projectile_hits_ship(self, projectile: Projectile) -> bool:
+        if not projectile.hostile or self.status is not GameStatus.RUNNING:
+            return False
+        if (self.ship.pos - projectile.pos).length() > self.ship.radius + projectile.radius:
+            return False
+        self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
+        self._register_ship_hit(DamageSource.ENEMY_PROJECTILE)
+        return True
+
     def _update_enemies(self, dt: float) -> None:
         for enemy in self.enemies:
-            if enemy.alive:
-                enemy.integrate(
-                    dt,
-                    self.wells,
-                    gravity_scale=self.config.gravity_scale,
-                    drag=self.config.drag,
-                    well_maw_radius=self.config.well_maw_radius,
-                )
+            if not enemy.alive:
+                continue
+            enemy.tick_combat(dt)
+            enemy.integrate(
+                dt,
+                self.wells,
+                gravity_scale=self.config.gravity_scale,
+                drag=self.config.drag,
+                well_maw_radius=self.config.well_maw_radius,
+            )
+            shot = enemy.try_fire(self.ship.pos, self.ship.vel)
+            if shot is not None:
+                self.projectiles.append(shot)
 
     def _prune_dead_enemies(self) -> None:
         self.enemies = [enemy for enemy in self.enemies if enemy.alive]

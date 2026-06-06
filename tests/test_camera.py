@@ -126,6 +126,39 @@ class ViewCameraHostileTests(unittest.TestCase):
         camera.update_chase_heading(-math.pi / 2 + 0.2, 0.016)
         self.assertGreater(camera.turn_rate, 0.0)
 
+    def test_velocity_lag_shifts_world_not_anchor(self) -> None:
+        config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640)
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        ship = Vec2(500, 500)
+        angle = -math.pi / 2
+        ahead = Vec2(500, 300)
+        neutral = camera.world_to_screen(ahead, ship, angle)
+        ax, ay = camera.chase_anchor()
+        camera.velocity_lag_y = 21.0
+        lagged = camera.world_to_screen(ahead, ship, angle)
+        self.assertAlmostEqual(ax, camera.chase_anchor()[0])
+        self.assertAlmostEqual(ay, camera.chase_anchor()[1])
+        self.assertAlmostEqual(lagged.y, neutral.y + 21.0, places=1)
+
+    def test_velocity_lag_tracks_forward_speed(self) -> None:
+        config = WorldConfig(width=960, height=640, max_ship_speed=330.0)
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        forward_vel = Vec2.from_angle(-math.pi / 2) * 280.0
+        for _ in range(30):
+            camera.update_chase_velocity(forward_vel, -math.pi / 2, config, 0.05)
+        self.assertGreater(camera.velocity_lag_y, 12.0)
+
+    def test_velocity_lag_resets_on_mode_cycle(self) -> None:
+        config = WorldConfig(width=960, height=640, max_ship_speed=330.0)
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        vel = Vec2.from_angle(-math.pi / 2) * 300.0
+        for _ in range(20):
+            camera.update_chase_velocity(vel, -math.pi / 2, config, 0.05)
+        self.assertGreater(camera.velocity_lag_y, 0.0)
+        camera.cycle_mode()
+        self.assertEqual(camera.velocity_lag_y, 0.0)
+
     def test_mode_cycle_toggles_tactical_and_chase_only(self) -> None:
         camera = ViewCamera()
         self.assertEqual(camera.mode, CameraMode.TACTICAL)

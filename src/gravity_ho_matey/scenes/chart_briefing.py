@@ -33,6 +33,7 @@ class ChartBriefingScene(Scene):
             self._preview,
             self._field,
             campaign=self.campaign,
+            upcoming_level_id=self.upcoming_level_id,
             cleared_level_id=self.cleared_level_id,
             elapsed=self.elapsed,
         )

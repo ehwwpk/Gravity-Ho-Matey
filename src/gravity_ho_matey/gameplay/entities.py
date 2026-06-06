@@ -22,6 +22,7 @@ class Ship:
     radius: float = 12.0
     cooldown: float = 0.0
     boost_energy: float = 1.0
+    boost_flash: float = 0.0
     thrust_multiplier: float = 1.0
     fire_cooldown_multiplier: float = 1.0
     turn_rate_multiplier: float = 1.0
@@ -33,6 +34,7 @@ class Projectile:
     vel: Vec2
     ttl: float = 2.3
     radius: float = 4.0
+    hostile: bool = False
 
 
 @dataclass(slots=True)
@@ -78,7 +80,11 @@ class WorldConfig:
     gravity_scale: float = 0.5
     turn_rate: float = 5.0
     thrust: float = 250.0
-    boost_multiplier: float = 1.85
+    boost_burst_fraction: float = 0.32
+    boost_energy_cost: float = 0.22
+    boost_regen_rate: float = 0.14
+    boost_overspeed_cap: float = 1.12
+    boost_flash_seconds: float = 0.35
     drag: float = 0.988
     max_ship_speed: float = 330.0
     projectile_speed: float = 315.0
