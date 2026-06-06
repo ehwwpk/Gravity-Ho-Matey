@@ -37,7 +37,7 @@ Scene transitions that start gameplay should go through `scenes/game_flow.start_
 | `CampaignState` | Whole campaign (3 lives, collected power-ups) | lives, `hull_chunks`, `powerups` set |
 | `GameWorld` | Single level attempt | ship, enemies, pickups, beacons, projectiles, invuln timer |
 
-`gameplay/session.wire_world_for_campaign()` applies carried bonuses and connects pickup collection to the campaign. `capture_level_spawn()` + `respawn_ship_at_spawn()` handle in-level chip respawns with 0.66s invulnerability. `ensure_active_life_hull()` refills hull only when entering play with zero chunks (new life); partial hull carries between levels.
+`gameplay/session.wire_world_for_campaign()` applies carried bonuses and connects pickup collection to the campaign. `capture_level_spawn()` + `respawn_ship_at_spawn()` handle in-level chip respawns with 1s invulnerability. `ensure_active_life_hull()` refills hull only when entering play with zero chunks (new life); partial hull carries between levels.
 
 ## Damage model
 

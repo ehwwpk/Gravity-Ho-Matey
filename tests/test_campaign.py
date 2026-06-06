@@ -78,6 +78,22 @@ class EnemyTests(unittest.TestCase):
         enemy.integrate(0.05, [well], gravity_scale=0.5, drag=1.0)
         self.assertGreater(enemy.vel.y, -80)
 
+    def test_patrol_resists_black_hole_pull_more_than_passive_drift(self) -> None:
+        well = GravityWell(Vec2(480, 320), strength=52000, radius=155, kind="black_hole", maw_radius=22)
+        passive = PatrolEnemy(waypoints=(Vec2(480, 260), Vec2(480, 260)), thrust=0.0, max_speed=200.0)
+        passive.pos = Vec2(480, 260)
+        passive.vel = Vec2(0, 40)
+
+        evasive = PatrolEnemy(waypoints=(Vec2(480, 260), Vec2(480, 260)), thrust=235.0, max_speed=105.0)
+        evasive.pos = Vec2(480, 260)
+        evasive.vel = Vec2(0, 40)
+
+        for _ in range(25):
+            passive.integrate(0.05, [well], gravity_scale=0.45, drag=0.988, well_maw_radius=10.0)
+            evasive.integrate(0.05, [well], gravity_scale=0.45, drag=0.988, well_maw_radius=10.0)
+
+        self.assertLess(evasive.pos.y, passive.pos.y)
+
     def test_projectile_kills_enemy_and_drops_pickup(self) -> None:
         enemy = PatrolEnemy(
             waypoints=(Vec2(50, 50), Vec2(60, 50)),

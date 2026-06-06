@@ -7,7 +7,7 @@ from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
 from gravity_ho_matey.gameplay.world import GameWorld
 
-INVULN_SECONDS = 0.66
+INVULN_SECONDS = 1.0
 
 
 def capture_level_spawn(world: GameWorld) -> None:

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import GravityWell
-from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
+from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 
 
@@ -36,6 +36,7 @@ class PatrolEnemy:
         *,
         gravity_scale: float,
         drag: float,
+        well_maw_radius: float = 10.0,
         arrive_radius: float = 22.0,
     ) -> None:
         if not self.alive or not self.waypoints:
@@ -49,6 +50,12 @@ class PatrolEnemy:
             to_target = target - self.pos
 
         accel = gravity_acceleration_at(self.pos, wells) * gravity_scale
+        accel += hazard_escape_acceleration_at(
+            self.pos,
+            wells,
+            gravity_scale=gravity_scale,
+            default_maw_radius=well_maw_radius,
+        )
         if to_target.length_sq() > 1e-9:
             accel += to_target.normalized() * self.thrust
 

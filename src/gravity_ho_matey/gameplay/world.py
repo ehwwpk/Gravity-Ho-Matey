@@ -156,6 +156,7 @@ class GameWorld:
                     self.wells,
                     gravity_scale=self.config.gravity_scale,
                     drag=self.config.drag,
+                    well_maw_radius=self.config.well_maw_radius,
                 )
 
     def _prune_dead_enemies(self) -> None:
