@@ -11,8 +11,8 @@ from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 # Chase rig tuned like a low drone: ~10 units behind, ~15 units elevated (racing feel).
 CHASE_BACK = 95.0
 CHASE_LIFT = 145.0
-CHASE_FOCAL = 400.0
-CHASE_HORIZON_FRAC = 0.32
+CHASE_FOCAL = 440.0
+CHASE_HORIZON_FRAC = 0.26
 CHASE_SHIP_ANCHOR_FRAC = 0.76
 CHASE_SHIP_SCALE = 1.12
 CHASE_SCREEN_HEADING = -math.pi / 2.0
@@ -60,10 +60,14 @@ class ViewCamera:
     chase_thrust_boost: float = 1.0
     tactical_scale: float = 1.0
     _smooth_center: Vec2 = Vec2()
+    _last_ship_angle: float = 0.0
+    turn_rate: float = 0.0
+    _chase_heading_ready: bool = False
 
     def cycle_mode(self) -> CameraMode:
         self.mode = self.mode.next_mode()
         self.mode_flash_ttl = 1.4
+        self._chase_heading_ready = False
         return self.mode
 
     def tick(self, dt: float) -> None:
@@ -99,6 +103,23 @@ class ViewCamera:
             )
         self.center = self._smooth_center
 
+    def update_chase_heading(self, ship_angle: float, dt: float) -> None:
+        """Track smoothed turn rate for chase banking / HUD (presentation only)."""
+        if self.mode is not CameraMode.CHASE:
+            self.turn_rate = 0.0
+            self._last_ship_angle = ship_angle
+            self._chase_heading_ready = False
+            return
+        if not self._chase_heading_ready:
+            self._last_ship_angle = ship_angle
+            self._chase_heading_ready = True
+            return
+        delta = _angle_delta(ship_angle - self._last_ship_angle)
+        instant = delta / max(dt, 1.0 / 240.0)
+        blend = 1.0 - math.exp(-18.0 * max(dt, 1.0 / 120.0))
+        self.turn_rate = self.turn_rate + (instant - self.turn_rate) * blend
+        self._last_ship_angle = ship_angle
+
     def _tactical_center_for(self, ship_pos: Vec2, config: WorldConfig) -> Vec2:
         vw = config.viewport_width
         vh = config.viewport_height
@@ -128,7 +149,7 @@ class ViewCamera:
     def _project_chase(self, world_pos: Vec2, ship_pos: Vec2, ship_angle: float) -> ProjectedPoint:
         """Racing chase: camera behind + above ship; forward stays toward top of screen."""
         forward = Vec2.from_angle(ship_angle)
-        right = forward.rotated(-math.pi / 2.0)
+        right = forward.rotated(math.pi / 2.0)
         cam_pos = ship_pos - forward * self.chase_back
         rel = world_pos - cam_pos
         ahead = rel.dot(forward)
@@ -164,3 +185,12 @@ def tactical_scale_for(config: WorldConfig) -> float:
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
+
+
+def _angle_delta(radians: float) -> float:
+    """Shortest signed delta in (-pi, pi]."""
+    while radians > math.pi:
+        radians -= math.tau
+    while radians <= -math.pi:
+        radians += math.tau
+    return radians

@@ -65,9 +65,11 @@ CHASE_VIGNETTE = "#020408"
 CHASE_BEACON_PILLAR = "#53ffd0"
 CHASE_ENEMY_FOG = ("#2a0810", "#4a1020", "#6a2830")
 
-# Helm v2 — grid-native threat + ribbon (red = death only)
+# Helm — cockpit HUD + floor lethal ticks (no ribbon lines)
 HELM_THREAT_LETHAL = "#ff4455"
 HELM_THREAT_HEAVY = "#e89848"
+HELM_HUD_ACCENT = "#66e8ff"
+HELM_HUD_DIM = "#3a5878"
 HELM_RIBBON_SAFE = "#66e8ff"
 HELM_RIBBON_FADE = "#3a7898"
 

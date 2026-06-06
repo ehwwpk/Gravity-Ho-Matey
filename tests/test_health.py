@@ -106,8 +106,18 @@ class HealthCampaignTests(unittest.TestCase):
 
 
 class HealthWorldTests(unittest.TestCase):
-    def test_out_of_bounds_is_chip_not_instant_campaign_loss(self) -> None:
+    def test_open_bounds_ship_survives_off_map(self) -> None:
         world = tiny_world(ship_pos=Vec2(-5, 100))
+        world._check_loss()
+        self.assertEqual(world.status, GameStatus.RUNNING)
+
+    def test_closed_bounds_chip_when_off_map(self) -> None:
+        world = tiny_world(ship_pos=Vec2(-5, 100))
+        world.config = WorldConfig(
+            width=world.config.width,
+            height=world.config.height,
+            open_bounds=False,
+        )
         world._check_loss()
         self.assertEqual(world.status, GameStatus.SHIP_HIT)
         self.assertEqual(world.last_damage.source, DamageSource.OUT_OF_BOUNDS)
@@ -180,6 +190,7 @@ class HealthWorldTests(unittest.TestCase):
     def test_chip_then_respawn_allows_movement_same_update_cycle(self) -> None:
         campaign = CampaignState.new()
         world = tiny_world(ship_pos=Vec2(-5, 100))
+        world.config = WorldConfig(width=200, height=200, open_bounds=False)
         world._check_loss()
         result = campaign.apply_damage(world.last_damage)  # type: ignore[arg-type]
         self.assertFalse(result.life_lost)
@@ -193,6 +204,7 @@ class HealthIntegrationTests(unittest.TestCase):
     def test_three_boundary_scrapes_cost_one_life_not_three(self) -> None:
         campaign = CampaignState.new()
         world = tiny_world(ship_pos=Vec2(-5, 100))
+        world.config = WorldConfig(width=200, height=200, open_bounds=False)
         lives_spent = 0
         for _ in range(3):
             world.ship.pos = Vec2(-5, 100)

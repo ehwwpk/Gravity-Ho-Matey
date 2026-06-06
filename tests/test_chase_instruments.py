@@ -24,6 +24,21 @@ class ChaseHelmTests(unittest.TestCase):
         drift = bank_angle_for_chase(Vec2(120, -20), angle)
         self.assertNotAlmostEqual(straight, drift, places=3)
 
+    def test_bank_tilts_with_turn_rate(self) -> None:
+        angle = -math.pi / 2
+        idle = bank_angle_for_chase(Vec2.from_angle(angle) * 100, angle, turn_rate=0.0)
+        turning = bank_angle_for_chase(Vec2.from_angle(angle) * 100, angle, turn_rate=120.0)
+        self.assertNotAlmostEqual(idle, turning, places=3)
+
+    def test_g_frame_splits_forward_and_lateral(self) -> None:
+        from gravity_ho_matey.render.chase_helm import _ship_frame_accel
+
+        world = build_cove_run_level()
+        world.ship.pos = Vec2(480, 320)
+        g_fwd, g_lat, total = _ship_frame_accel(world, -math.pi / 2)
+        self.assertGreater(total, 0.0)
+        self.assertNotAlmostEqual(g_fwd, g_lat, places=0)
+
     def test_predict_path_curves_under_gravity(self) -> None:
         world = build_cove_run_level()
         world.ship.vel = Vec2(40, -80)
@@ -40,8 +55,12 @@ class ChaseHelmTests(unittest.TestCase):
         samples = predict_path_with_threats(world, steps=8, step_dt=0.05)
         self.assertTrue(any(level is ThreatLevel.LETHAL for _, level in samples))
 
-    def test_wall_threat_detects_near_boundary(self) -> None:
+    def test_wall_threat_detects_near_wall(self) -> None:
+        from gravity_ho_matey.core.geometry import Rect
+        from gravity_ho_matey.gameplay.entities import Wall
+
         world = build_cove_run_level()
+        world.walls = [Wall(Rect(0, 0, 960, 22))]
         world.ship.pos = Vec2(480, 18)
         world.ship.vel = Vec2(0, 120)
         dist, closing = nearest_wall_threat(world)

@@ -107,6 +107,25 @@ class ViewCameraHostileTests(unittest.TestCase):
             self.assertTrue(projected.visible)
             self.assertAlmostEqual(projected.x, ax, delta=4.0)
 
+    def test_chase_lateral_matches_ship_right_and_left(self) -> None:
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        ship = Vec2(500, 500)
+        angle = -math.pi / 2
+        ax, _ = camera.chase_anchor()
+        east = camera.world_to_screen(Vec2(620, 500), ship, angle)
+        west = camera.world_to_screen(Vec2(380, 500), ship, angle)
+        self.assertTrue(east.visible)
+        self.assertTrue(west.visible)
+        self.assertGreater(east.x, ax)
+        self.assertLess(west.x, ax)
+
+    def test_chase_turn_rate_tracks_heading_delta(self) -> None:
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.update_chase_heading(-math.pi / 2, 0.016)
+        camera.update_chase_heading(-math.pi / 2 + 0.2, 0.016)
+        self.assertGreater(camera.turn_rate, 0.0)
+
     def test_mode_cycle_toggles_tactical_and_chase_only(self) -> None:
         camera = ViewCamera()
         self.assertEqual(camera.mode, CameraMode.TACTICAL)

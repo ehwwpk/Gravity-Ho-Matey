@@ -219,7 +219,7 @@ class GameWorld:
     def _check_loss(self) -> None:
         if self.status is not GameStatus.RUNNING:
             return
-        if not self._point_in_bounds(self.ship.pos, margin=0):
+        if not self.config.open_bounds and not self._point_in_bounds(self.ship.pos, margin=0):
             self._register_ship_hit(DamageSource.OUT_OF_BOUNDS)
             return
         if any(wall.rect.intersects_circle(self.ship.pos, self.ship.radius) for wall in self.walls):

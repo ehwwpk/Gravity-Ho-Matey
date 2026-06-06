@@ -8,9 +8,10 @@ from gravity_ho_matey.gameplay.entities import GravityWell
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
 
-# Chase: 3 rings on the floor plane — same projection as the gravity grid (no screen ovals).
+# Chase: floor rings — segment-stitched (never chord through behind-camera collapse).
 CHASE_RING_FRACS = (1.0, 0.72, 0.44)
-_FLOOR_SEGMENTS = 40
+_FLOOR_SEGMENTS = 48
+_MAX_SEGMENT_PX = 160.0
 _LETHAL_KINDS = frozenset({"black_hole", "planet"})
 
 
@@ -20,23 +21,29 @@ def project_floor_ring(
     world_radius: float,
     ship_pos: Vec2,
     ship_angle: float,
-) -> list[tuple[float, float]]:
-    """Sample a world-space floor circle through the chase camera — matches grid vertices."""
+    *,
+    horizon: float,
+) -> list[tuple[float, float] | None]:
+    """Sample a floor circle; None breaks arcs (behind cam / below horizon)."""
     if world_radius <= 0.5:
         return []
-    pts: list[tuple[float, float]] = []
+    pts: list[tuple[float, float] | None] = []
     for i in range(_FLOOR_SEGMENTS + 1):
         a = (i / _FLOOR_SEGMENTS) * math.tau
         wp = center + Vec2(math.cos(a), math.sin(a)) * world_radius
         p = camera.world_to_screen(wp, ship_pos, ship_angle)
-        pts.append((p.x, p.y))
+        if not p.visible or p.y < horizon - 2.0:
+            pts.append(None)
+        else:
+            pts.append((p.x, p.y))
     return pts
 
 
-def floor_ring_span(pts: list[tuple[float, float]]) -> float:
-    if len(pts) < 2:
+def floor_ring_span(pts: list[tuple[float, float] | None]) -> float:
+    visible = [p for p in pts if p is not None]
+    if len(visible) < 2:
         return 0.0
-    xs = [x for x, _ in pts]
+    xs = [x for x, _ in visible]
     return max(xs) - min(xs)
 
 
@@ -53,11 +60,12 @@ def draw_chase_well(
     ship_angle: float,
     default_maw: float,
 ) -> None:
-    """Gravity wells as floor discs — one projection truth shared with the purple grid."""
     _ = elapsed, pos, scale
     horizon = camera.chase_horizon_y()
 
-    outer_pts = project_floor_ring(camera, well.pos, well.radius, ship_pos, ship_angle)
+    outer_pts = project_floor_ring(
+        camera, well.pos, well.radius, ship_pos, ship_angle, horizon=horizon,
+    )
     if not _ring_on_floor(outer_pts, horizon):
         return
 
@@ -78,7 +86,9 @@ def draw_chase_well(
         label_color = "#caaaff"
 
     for frac in CHASE_RING_FRACS:
-        pts = project_floor_ring(camera, well.pos, well.radius * frac, ship_pos, ship_angle)
+        pts = project_floor_ring(
+            camera, well.pos, well.radius * frac, ship_pos, ship_angle, horizon=horizon,
+        )
         if not _ring_on_floor(pts, horizon):
             continue
         width = 2 if frac >= 0.72 else 1
@@ -86,41 +96,90 @@ def draw_chase_well(
 
     if well.kind in _LETHAL_KINDS:
         maw = well.maw_radius if well.maw_radius is not None else default_maw
-        maw_pts = project_floor_ring(camera, well.pos, maw * 1.05, ship_pos, ship_angle)
+        maw_pts = project_floor_ring(
+            camera, well.pos, maw * 1.05, ship_pos, ship_angle, horizon=horizon,
+        )
         if _ring_on_floor(maw_pts, horizon):
             _stroke_ring(canvas, maw_pts, palette.HELM_THREAT_LETHAL, 2)
-            _stroke_ring(canvas, maw_pts, "#ff8899", 1)
 
     core_r = max(10.0, min(22.0, well.radius * 0.09))
     if well.kind in _LETHAL_KINDS:
         maw = well.maw_radius if well.maw_radius is not None else default_maw
         core_r = max(8.0, min(18.0, maw * 0.85))
-    core_pts = project_floor_ring(camera, well.pos, core_r, ship_pos, ship_angle)
+    core_pts = project_floor_ring(
+        camera, well.pos, core_r, ship_pos, ship_angle, horizon=horizon,
+    )
     if _ring_on_floor(core_pts, horizon):
-        flat = _flat_points(core_pts)
-        canvas.create_polygon(*flat, fill=core_fill, outline=core_edge or core_fill, width=1)
+        _fill_ring(canvas, core_pts, core_fill, core_edge or core_fill)
 
     if well.label and depth < camera.focal_length * 2.5 and floor_ring_span(outer_pts) >= 24.0:
-        cx = sum(x for x, _ in outer_pts) / len(outer_pts)
-        top_y = min(y for _, y in outer_pts)
-        font_size = max(7, min(10, int(7 + floor_ring_span(outer_pts) * 0.018)))
-        canvas.create_text(cx, top_y - 8, text=well.label, fill=label_color, font=("Courier", font_size))
+        visible = [p for p in outer_pts if p is not None]
+        if visible:
+            cx = sum(x for x, _ in visible) / len(visible)
+            top_y = min(y for _, y in visible)
+            font_size = max(7, min(10, int(7 + floor_ring_span(outer_pts) * 0.018)))
+            canvas.create_text(cx, top_y - 8, text=well.label, fill=label_color, font=("Courier", font_size))
 
 
-def _ring_on_floor(pts: list[tuple[float, float]], horizon: float) -> bool:
-    if len(pts) < 4:
+def _ring_on_floor(pts: list[tuple[float, float] | None], horizon: float) -> bool:
+    visible = [p for p in pts if p is not None]
+    if len(visible) < 4:
         return False
-    avg_y = sum(y for _, y in pts) / len(pts)
+    avg_y = sum(y for _, y in visible) / len(visible)
     return avg_y >= horizon + 2.0
 
 
-def _stroke_ring(canvas: tk.Canvas, pts: list[tuple[float, float]], color: str, width: int) -> None:
-    flat = _flat_points(pts)
-    canvas.create_line(*flat, fill=color, width=width, smooth=True)
+def _stroke_ring(
+    canvas: tk.Canvas,
+    pts: list[tuple[float, float] | None],
+    color: str,
+    width: int,
+) -> None:
+    for ax, ay, bx, by in _ring_segments(pts):
+        canvas.create_line(ax, ay, bx, by, fill=color, width=width)
 
 
-def _flat_points(pts: list[tuple[float, float]]) -> list[float]:
+def _fill_ring(
+    canvas: tk.Canvas,
+    pts: list[tuple[float, float] | None],
+    fill: str,
+    outline: str,
+) -> None:
+    visible = [p for p in pts if p is not None]
+    if len(visible) < 3:
+        return
     flat: list[float] = []
-    for x, y in pts:
+    for x, y in visible:
         flat.extend((x, y))
-    return flat
+    canvas.create_polygon(*flat, fill=fill, outline=outline, width=1)
+
+
+def _ring_segments(pts: list[tuple[float, float] | None]) -> list[tuple[float, float, float, float]]:
+    """Short arc segments only — no wrap chords, no (0,0) spikes."""
+    segments: list[tuple[float, float, float, float]] = []
+    prev: tuple[float, float] | None = None
+    first: tuple[float, float] | None = None
+    last: tuple[float, float] | None = None
+    max_sq = _MAX_SEGMENT_PX * _MAX_SEGMENT_PX
+
+    for pt in pts:
+        if pt is None:
+            prev = None
+            continue
+        if first is None:
+            first = pt
+        if prev is not None:
+            dx = pt[0] - prev[0]
+            dy = pt[1] - prev[1]
+            dist_sq = dx * dx + dy * dy
+            if 0.25 < dist_sq <= max_sq:
+                segments.append((prev[0], prev[1], pt[0], pt[1]))
+        prev = pt
+        last = pt
+
+    if first is not None and last is not None and last != first:
+        dx = first[0] - last[0]
+        dy = first[1] - last[1]
+        if dx * dx + dy * dy <= max_sq and dx * dx + dy * dy > 0.25:
+            segments.append((last[0], last[1], first[0], first[1]))
+    return segments

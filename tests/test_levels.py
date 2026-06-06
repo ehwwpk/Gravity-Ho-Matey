@@ -16,9 +16,17 @@ def test_all_registered_levels_build() -> None:
             assert world.config.height == SOLAR_STRIP_HEIGHT
 
 
+def test_all_registered_levels_have_no_walls() -> None:
+    for level_id in LEVEL_BUILDERS:
+        world = build_level(level_id)
+        assert world.walls == []
+        assert world.config.open_bounds is True
+
+
 def test_solar_level_is_open_space_layout() -> None:
     world = build_level("solar")
-    assert len(world.walls) == 4
+    assert len(world.walls) == 0
+    assert world.config.open_bounds is True
     assert len(world.beacons) == 3
 
 

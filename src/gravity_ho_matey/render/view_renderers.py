@@ -95,11 +95,6 @@ class TacticalViewRenderer:
             elapsed=world.elapsed,
             scale=1.08 * camera.tactical_scale / 1.1,
         )
-        from gravity_ho_matey.render.chase_helm import draw_tactical_helm_cues
-
-        draw_tactical_helm_cues(
-            canvas, world, camera, ship_pos=ship_pos, ship_angle=world.ship.angle, hud_top=hud_top,
-        )
         draw_edge_hints(canvas, world, camera, hud_top=hud_top)
         draw_explosions(
             canvas,
@@ -173,16 +168,11 @@ class PerspectiveViewRenderer:
             draw_chase_floor_gradient,
             draw_chase_sky,
             draw_engine_bloom,
-            draw_speed_streaks,
             draw_speed_vignette,
         )
-        from gravity_ho_matey.render.chase_ground import draw_chase_gravity_grid
+        from gravity_ho_matey.render.chase_ground import draw_chase_gravity_heatmap
         from gravity_ho_matey.render.chase_walls import collect_wall_rails, draw_wall_rails
-        from gravity_ho_matey.render.chase_helm import (
-            bank_angle_for_chase,
-            draw_drift_reticle,
-            draw_inertial_ribbon,
-        )
+        from gravity_ho_matey.render.chase_helm import bank_angle_for_chase, draw_xwing_cockpit_hud
         from gravity_ho_matey.render.chase_threat import wall_rail_urgency
         from gravity_ho_matey.render.chase_wells import draw_chase_well
 
@@ -201,7 +191,7 @@ class PerspectiveViewRenderer:
         draw_chase_sky(canvas, camera, world)
 
         draw_chase_floor_gradient(canvas, camera)
-        draw_chase_gravity_grid(canvas, field, camera, world, ship_pos, ship_angle, elapsed=elapsed, step=1)
+        draw_chase_gravity_heatmap(canvas, field, camera, world, ship_pos, ship_angle, step=2)
 
         wall_rails = collect_wall_rails(
             world.walls,
@@ -212,8 +202,6 @@ class PerspectiveViewRenderer:
             world.config.height,
         )
         draw_wall_rails(canvas, wall_rails, solar=solar, urgency=wall_rail_urgency(world))
-
-        draw_inertial_ribbon(canvas, world, camera, ship_pos=ship_pos, ship_angle=ship_angle)
 
         sprites: list[tuple[float, str, object]] = []
         for well in world.wells:
@@ -277,18 +265,9 @@ class PerspectiveViewRenderer:
                 draw_chase_projectile(canvas, pos, projectile.vel)
 
         anchor_x, anchor_y = camera.chase_anchor()
-        draw_speed_streaks(
-            canvas,
-            camera,
-            world,
-            anchor_x=anchor_x,
-            anchor_y=anchor_y,
-            ship_pos=ship_pos,
-            ship_angle=ship_angle,
-        )
         draw_speed_vignette(canvas, camera, world.ship.vel.length())
         draw_engine_bloom(canvas, anchor_x, anchor_y, boost_energy=world.ship.boost_energy, thrusting=thrusting)
-        display_angle = bank_angle_for_chase(world.ship.vel, ship_angle)
+        display_angle = bank_angle_for_chase(world.ship.vel, ship_angle, turn_rate=camera.turn_rate)
         draw_ship(
             canvas,
             Vec2(anchor_x, anchor_y),
@@ -298,7 +277,7 @@ class PerspectiveViewRenderer:
             elapsed=elapsed,
             scale=CHASE_SHIP_SCALE,
         )
-        draw_drift_reticle(
+        draw_xwing_cockpit_hud(
             canvas,
             world,
             camera,
@@ -306,6 +285,7 @@ class PerspectiveViewRenderer:
             anchor_y=anchor_y,
             ship_pos=ship_pos,
             ship_angle=ship_angle,
+            hud_top=hud_top,
         )
         draw_edge_hints(canvas, world, camera, hud_top=hud_top)
         draw_explosions(canvas, world.explosions.active, project=lambda p: camera.world_to_screen(p, ship_pos, ship_angle))

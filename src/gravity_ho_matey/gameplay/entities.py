@@ -86,3 +86,4 @@ class WorldConfig:
     well_maw_radius: float = 10.0
     level_theme: str = "cove"
     level_name: str = "Level"
+    open_bounds: bool = True

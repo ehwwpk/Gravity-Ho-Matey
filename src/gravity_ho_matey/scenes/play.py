@@ -51,6 +51,7 @@ class PlayScene(Scene):
 
         self.camera.tick(dt)
         self.camera.update_follow(self.world.ship.pos, self.world.config, dt)
+        self.camera.update_chase_heading(self.world.ship.angle, dt)
 
         if self.hud_alert_ttl > 0.0:
             self.hud_alert_ttl = max(0.0, self.hud_alert_ttl - dt)

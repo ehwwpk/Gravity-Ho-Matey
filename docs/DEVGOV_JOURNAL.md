@@ -231,4 +231,66 @@ Tk `TclError` (missing `tk.tcl`) in this shell — environmental; 91 other tests
 
 ---
 
+## 2026-06-02 — Open boundaries: remove all level walls
+
+### Change
+- **Cove + Solar:** `walls=[]` — no perimeter rails, no interior obstacles
+- **`WorldConfig.open_bounds=True`** (default) — ship does not die leaving the chart; gravity/maws/enemies still lethal
+- **`_check_loss`:** OOB chip only when `open_bounds=False` (tests / future closed arenas)
+
+### Verification
+- `test_all_registered_levels_have_no_walls`
+- `test_open_bounds_ship_survives_off_map` / `test_closed_bounds_chip_when_off_map`
+- Chase wall render tests use synthetic `Wall` fixtures (levels ship wall-free)
+
+---
+
+## 2026-06-02 — Chase follow view: X-wing HUD + tactical gravity parity
+
+### Removed (distraction)
+- **Inertial ribbon** — world-space line chain connecting forecast path points
+- **Tactical helm cues** — same ribbon on overview mode
+- **Drift reticle** world lines — replaced by screen-fixed cockpit elements
+
+### Added
+- **`draw_xwing_cockpit_hud`** — horizon rake, corner brackets, nose crosshair, velocity pip (slip warning arc when drifting)
+- **`draw_lethal_floor_ticks`** — up to 4 unconnected red diamonds on floor only when forecast hits death (no cyan/orange spaghetti)
+- **`draw_chase_gravity_heatmap`** — purple floor wash matching tactical threat coloring, chase perspective projection
+- **Denser chase grid** — step=1, less horizon fade, stronger ahead emphasis, wider FOV (`CHASE_FOCAL=440`, `CHASE_HORIZON_FRAC=0.26`)
+
+### Realistic weight
+**Strong +EV** — chase finally shares the tactical “purple sea” read; HUD is screen-fixed like a fighter canopy, not world clutter.
+
+---
+
+## 2026-06-02 — Revert chase well bowls; HUD instruments v4
+
+### Reverted (looked inverted / broken)
+- `deform_floor_point`, meridian scars, radial funnel on wells + heatmap
+- `chase_depth.py` removed — wells back to clean `project_floor_ring` → `world_to_screen` only (same as presentation commit)
+
+### HUD v4 (larger + more sensitive)
+- **G-ball** 46px, `_G_REF=145`, FWD/AFT/L/R labels, axis bars, numeric F/R components, ring color by load
+- **Velocity** wide bar + large numeric + quarter ticks; **SLIP** slider; **BOOST** strip when thrusting
+- Turn-rate tick on banked horizon
+
+---
+
+## 2026-06-02 — Chase feel: fix inverted lateral, gravity bowls, HUD v3
+
+### Fix — inverted left/right in follow cam
+- Chase camera `right` vector used `rotated(-π/2)` (left-handed) — world lateral was mirrored vs tactical
+- Now `rotated(+π/2)`; ship-right objects map screen-right
+
+### Organic turn response
+- `camera.turn_rate` smoothed from heading delta (no first-frame spike on mode switch)
+- Ship bank blends slip + live turn rate — matches input while drifting
+
+### X-wing HUD v3
+- Banked artificial horizon, canopy frame + chin struts
+- Targeting computer reticle, speed tape (left), g-force tape (right)
+- Gravity pull arrow (G vector)
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->

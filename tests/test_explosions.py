@@ -67,7 +67,7 @@ class ExplosionWorldTests(unittest.TestCase):
 
     def test_ship_hit_spawns_struck_fx(self) -> None:
         world = GameWorld(
-            config=WorldConfig(width=200, height=200),
+            config=WorldConfig(width=200, height=200, open_bounds=False),
             ship=Ship(pos=Vec2(-5, 50)),
             walls=[],
             wells=[],

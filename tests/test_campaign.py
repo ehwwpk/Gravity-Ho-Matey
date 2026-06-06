@@ -158,7 +158,7 @@ class ProgressTests(unittest.TestCase):
 class LossCopyTests(unittest.TestCase):
     def test_solar_theme_uses_space_flavor_loss_copy(self) -> None:
         world = GameWorld(
-            config=WorldConfig(width=200, height=200, level_theme="solar"),
+            config=WorldConfig(width=200, height=200, level_theme="solar", open_bounds=False),
             ship=Ship(pos=Vec2(-5, 20)),
             walls=[],
             wells=[],

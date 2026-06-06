@@ -2,21 +2,13 @@ from __future__ import annotations
 
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.entities import Beacon, FinishGate, GravityWell, Ship, Wall, WorldConfig
+from gravity_ho_matey.gameplay.entities import Beacon, FinishGate, GravityWell, Ship, WorldConfig
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.solar_patrols import solar_patrol_enemies
 from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 
 
 def build_cove_run_level() -> GameWorld:
-    walls = [
-        Wall(Rect(0, 0, CANVAS_WIDTH, 22)),
-        Wall(Rect(0, CANVAS_HEIGHT - 22, CANVAS_WIDTH, 22)),
-        Wall(Rect(0, 0, 22, CANVAS_HEIGHT)),
-        Wall(Rect(CANVAS_WIDTH - 22, 0, 22, CANVAS_HEIGHT)),
-        Wall(Rect(145, 490, 250, 34)),
-        Wall(Rect(650, 300, 34, 245)),
-    ]
     wells = [
         GravityWell(Vec2(240, 420), strength=34000, radius=210, label="Black Rum Eddy"),
         GravityWell(Vec2(470, 295), strength=42000, radius=235, label="Dead Star Reef"),
@@ -37,9 +29,10 @@ def build_cove_run_level() -> GameWorld:
             viewport_height=CANVAS_HEIGHT,
             level_theme="cove",
             level_name="Smuggler's Cove",
+            open_bounds=True,
         ),
         ship=Ship(pos=Vec2(80, 70), angle=0.58),
-        walls=walls,
+        walls=[],
         wells=wells,
         beacons=beacons,
         finish_gate=FinishGate(Rect(880, 550, 54, 54)),
@@ -53,12 +46,6 @@ def build_solar_crossing_level() -> GameWorld:
     """Level 2 — vertical star strip; free forward/back flight with central singularity."""
     cx = CANVAS_WIDTH / 2
     strip_h = SOLAR_STRIP_HEIGHT
-    walls = [
-        Wall(Rect(0, 0, CANVAS_WIDTH, 18)),
-        Wall(Rect(0, strip_h - 18, CANVAS_WIDTH, 18)),
-        Wall(Rect(0, 0, 18, strip_h)),
-        Wall(Rect(CANVAS_WIDTH - 18, 0, 18, strip_h)),
-    ]
     wells = [
         GravityWell(
             Vec2(cx, strip_h * 0.5),
@@ -90,9 +77,10 @@ def build_solar_crossing_level() -> GameWorld:
             thrust=255.0,
             level_theme="solar",
             level_name="Singularity Crossing",
+            open_bounds=True,
         ),
         ship=Ship(pos=Vec2(52, 120), angle=1.52),
-        walls=walls,
+        walls=[],
         wells=wells,
         beacons=beacons,
         finish_gate=FinishGate(Rect(895, strip_h - 90, 50, 50)),
