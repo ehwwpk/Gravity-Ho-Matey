@@ -150,6 +150,7 @@ def draw_fighter_ship(
     scale: float,
     rig: LightRig,
     boost_burst: float = 0.0,
+    planetside_boost: bool = False,
     powerup_stacks: PowerUpStacks | None = None,
 ) -> None:
     stacks = powerup_stacks or PowerUpStacks()
@@ -212,11 +213,14 @@ def draw_fighter_ship(
     )
 
     if boost_burst > 0.0:
-        flame_len = (16.0 + 3.0 * stacks.get(PowerUpKind.THRUST_BOOST, 0)) * scale * (
-            0.85 + 0.35 * min(1.0, boost_burst / 0.35)
-        )
-        width = max(2, int(2 + 2 * min(1.0, boost_burst / 0.35) + stacks.get(PowerUpKind.THRUST_BOOST, 0)))
+        burst_norm = 0.55 if planetside_boost else 0.35
+        burst_t = min(1.0, boost_burst / burst_norm)
+        flame_scale = 0.85 + (0.75 if planetside_boost else 0.35) * burst_t
+        flame_len = (16.0 + 3.0 * stacks.get(PowerUpKind.THRUST_BOOST, 0)) * scale * flame_scale
+        width = max(2, int(2 + (4 if planetside_boost else 2) * burst_t + stacks.get(PowerUpKind.THRUST_BOOST, 0)))
         core = "#ffb060" if boost_burst > 0.12 else "#ff9048"
+        if planetside_boost:
+            core = "#ffd080" if boost_burst > 0.12 else "#ffb848"
         if stacks.get(PowerUpKind.THRUST_BOOST, 0):
             core = lerp_hex(core, palette.PICKUP_THRUST, 0.45)
         for eng in _ENGINE_LOCAL:
@@ -224,6 +228,22 @@ def draw_fighter_ship(
             tail = (ex - forward.x * flame_len, ey - forward.y * flame_len)
             canvas.create_line(ex, ey, tail[0], tail[1], fill=core, width=width)
             canvas.create_line(ex, ey, tail[0], tail[1], fill="#fff0c0", width=max(1, width - 1))
+            if planetside_boost and burst_t > 0.25:
+                outer_tail = (
+                    ex - forward.x * flame_len * 1.35,
+                    ey - forward.y * flame_len * 1.35,
+                )
+                canvas.create_line(ex, ey, outer_tail[0], outer_tail[1], fill="#ff6020", width=max(1, width - 1))
+                bloom_r = (5.0 + 4.0 * burst_t) * scale
+                canvas.create_oval(
+                    ex - bloom_r,
+                    ey - bloom_r,
+                    ex + bloom_r,
+                    ey + bloom_r,
+                    fill="",
+                    outline="#ff9040",
+                    width=1,
+                )
 
 
 def draw_friendly_fighter_ship(

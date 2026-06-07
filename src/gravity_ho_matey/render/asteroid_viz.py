@@ -22,10 +22,47 @@ CHASE_ASTEROID_LATERAL_REACH = 1320.0
 CHASE_ASTEROID_BEHIND_REACH = 420.0
 CHASE_ASTEROID_MIN_AHEAD = 6.0
 CHASE_ASTEROID_SCREEN_MARGIN = 260.0
+ORBITAL_ASTEROID_THREAT_RADIUS = 520.0
 
 
-def asteroid_in_chase_view(asteroid: Asteroid, ship_pos: Vec2, ship_angle: float) -> bool:
+def asteroid_threat_drawable(
+    asteroid: Asteroid,
+    ship_pos: Vec2,
+    *,
+    threat_radius: float = ORBITAL_ASTEROID_THREAT_RADIUS,
+) -> bool:
+    """Bypass render cull when a rock is close enough to collide."""
+    dist = (asteroid.pos - ship_pos).length()
+    return dist <= threat_radius + asteroid.approximate_radius()
+
+
+def asteroid_in_play_view(
+    asteroid: Asteroid,
+    ship_pos: Vec2,
+    *,
+    viewport_width: float,
+    viewport_height: float,
+    margin: float = 80.0,
+    threat_radius: float = 0.0,
+) -> bool:
+    """Skip drawing rocks far off-screen — they still exist and collide when you reach them."""
+    if threat_radius > 0.0 and asteroid_threat_drawable(asteroid, ship_pos, threat_radius=threat_radius):
+        return True
+    half_w = viewport_width * 0.58 + margin
+    half_h = viewport_height * 0.58 + margin
+    return abs(asteroid.pos.x - ship_pos.x) <= half_w and abs(asteroid.pos.y - ship_pos.y) <= half_h
+
+
+def asteroid_in_chase_view(
+    asteroid: Asteroid,
+    ship_pos: Vec2,
+    ship_angle: float,
+    *,
+    threat_radius: float = 0.0,
+) -> bool:
     """Forward-biased chase cull — much farther ahead than tactical box culling."""
+    if threat_radius > 0.0 and asteroid_threat_drawable(asteroid, ship_pos, threat_radius=threat_radius):
+        return True
     rel = asteroid.pos - ship_pos
     forward = Vec2.from_angle(ship_angle)
     right = forward.rotated(math.pi / 2.0)
@@ -37,20 +74,6 @@ def asteroid_in_chase_view(asteroid: Asteroid, ship_pos: Vec2, ship_angle: float
     if ahead > CHASE_ASTEROID_FORWARD_REACH + pad:
         return False
     return lateral <= CHASE_ASTEROID_LATERAL_REACH + pad
-
-
-def asteroid_in_play_view(
-    asteroid: Asteroid,
-    ship_pos: Vec2,
-    *,
-    viewport_width: float,
-    viewport_height: float,
-    margin: float = 80.0,
-) -> bool:
-    """Skip drawing rocks far off-screen — they still exist and collide when you reach them."""
-    half_w = viewport_width * 0.58 + margin
-    half_h = viewport_height * 0.58 + margin
-    return abs(asteroid.pos.x - ship_pos.x) <= half_w and abs(asteroid.pos.y - ship_pos.y) <= half_h
 
 
 def _combat_crater_count(asteroid: Asteroid) -> int | None:
@@ -69,9 +92,10 @@ def draw_tactical_asteroid(
     rig: LightRig,
     ship_pos: Vec2 | None = None,
     ship_angle: float = 0.0,
+    material_kind: str = "asteroid",
 ) -> None:
     anchor = ship_pos if ship_pos is not None else Vec2()
-    material = material_for("asteroid", theme=rig.theme, view=rig.view)
+    material = material_for(material_kind, theme=rig.theme, view=rig.view)
     screen_points: list[tuple[float, float]] = []
     for vert in asteroid.world_vertices():
         p = camera.world_to_screen(vert, anchor, ship_angle)
@@ -137,20 +161,32 @@ def chase_asteroid_screen_outline(
     camera: ViewCamera,
     ship_pos: Vec2,
     ship_angle: float,
+    *,
+    threat_radius: float = 0.0,
 ) -> tuple[list[tuple[float, float]], float, float] | None:
     """Rigid-body chase projection — extended frustum for belt readability."""
-    if not asteroid_in_chase_view(asteroid, ship_pos, ship_angle):
+    threat_near = threat_radius > 0.0 and asteroid_threat_drawable(
+        asteroid, ship_pos, threat_radius=threat_radius,
+    )
+    if not threat_near and not asteroid_in_chase_view(
+        asteroid, ship_pos, ship_angle, threat_radius=threat_radius,
+    ):
         return None
+    margin = CHASE_ASTEROID_SCREEN_MARGIN
+    min_ahead = CHASE_ASTEROID_MIN_AHEAD
+    if threat_near:
+        margin = max(margin, threat_radius * 0.45)
+        min_ahead = -threat_radius * 0.25
     center = camera.world_to_chase_screen(
         asteroid.pos,
         ship_pos,
         ship_angle,
-        min_ahead=CHASE_ASTEROID_MIN_AHEAD,
-        screen_margin=CHASE_ASTEROID_SCREEN_MARGIN,
+        min_ahead=min_ahead,
+        screen_margin=margin,
     )
-    if not center.visible:
+    if not threat_near and not center.visible:
         return None
-    if center.y < camera.chase_horizon_y() - CHASE_ASTEROID_SCREEN_MARGIN * 0.5:
+    if not threat_near and center.y < camera.chase_horizon_y() - CHASE_ASTEROID_SCREEN_MARGIN * 0.5:
         return None
 
     forward = Vec2.from_angle(ship_angle)
@@ -182,12 +218,17 @@ def collect_chase_asteroid_sprites(
     ship_angle: float,
     *,
     cull: bool = True,
+    threat_radius: float = 0.0,
 ) -> list[tuple[float, list[tuple[float, float]], Asteroid, float]]:
     sprites: list[tuple[float, list[tuple[float, float]], Asteroid, float]] = []
     for asteroid in asteroids:
-        if cull and not asteroid_in_chase_view(asteroid, ship_pos, ship_angle):
+        if cull and not asteroid_in_chase_view(
+            asteroid, ship_pos, ship_angle, threat_radius=threat_radius,
+        ):
             continue
-        projected = chase_asteroid_screen_outline(asteroid, camera, ship_pos, ship_angle)
+        projected = chase_asteroid_screen_outline(
+            asteroid, camera, ship_pos, ship_angle, threat_radius=threat_radius,
+        )
         if projected is None:
             continue
         screen_points, display_scale, depth = projected
@@ -243,8 +284,9 @@ def draw_chase_asteroids(
     *,
     rig: LightRig,
     ship_angle: float = 0.0,
+    material_kind: str = "asteroid",
 ) -> None:
-    base_material = material_for("asteroid", theme=rig.theme, view=rig.view)
+    base_material = material_for(material_kind, theme=rig.theme, view=rig.view)
     for _depth, screen_points, asteroid, display_scale in sprites:
         depth_fade = chase_depth_fade(_depth)
         material = depth_faded_material(base_material, depth_fade)

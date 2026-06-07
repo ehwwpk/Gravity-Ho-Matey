@@ -277,6 +277,22 @@ class ViewCamera:
         )
         return ProjectedPoint(x=screen_x, y=screen_y, depth=ahead, visible=visible)
 
+    def chase_threat_screen(
+        self,
+        world_pos: Vec2,
+        ship_pos: Vec2,
+        ship_angle: float,
+        threat_range: float,
+    ) -> ProjectedPoint:
+        """Extended chase frustum for in-range combat threats off-screen."""
+        return self.world_to_chase_screen(
+            world_pos,
+            ship_pos,
+            ship_angle,
+            min_ahead=-threat_range * 0.5,
+            screen_margin=threat_range * 0.45,
+        )
+
     def perspective_scale(self, depth: float) -> float:
         safe = max(depth, self.min_depth)
         return self.focal_length / safe

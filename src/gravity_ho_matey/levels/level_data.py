@@ -7,15 +7,18 @@ from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.asteroid_placements import build_cove_asteroids, build_solar_asteroids
 from gravity_ho_matey.levels.drift_belt_asteroids import build_drift_belt_asteroids
 from gravity_ho_matey.levels.drift_belt_layout import build_drift_layout
-from gravity_ho_matey.gameplay.boost_pad import BoostPad
-from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
 from gravity_ho_matey.levels.drift_enemies import drift_squid_enemies
 from gravity_ho_matey.gameplay.chart_bounds import COVE_CHART_MARGIN_FRAC
-from gravity_ho_matey.levels.level_profiles import chart_sector_config, membrane_strip_config, open_sector_config, skirmish_arena_config
-from gravity_ho_matey.levels.membrane_enemies import membrane_road_squids
-from gravity_ho_matey.levels.membrane_escorts import membrane_friendly_fighters
-from gravity_ho_matey.levels.membrane_layout import all_void_wells, build_membrane_layout
-from gravity_ho_matey.levels.membrane_props import build_membrane_props
+from gravity_ho_matey.levels.level_profiles import (
+    chart_sector_config,
+    open_sector_config,
+    protection_arena_config,
+    skirmish_arena_config,
+)
+from gravity_ho_matey.levels.guard_asteroids import build_guard_asteroids
+from gravity_ho_matey.levels.guard_layout import build_guard_layout
+from gravity_ho_matey.levels.guard_stations import relay_friendly_stations
+from gravity_ho_matey.gameplay.wave_director import WaveDirector
 from gravity_ho_matey.levels.solar_patrols import solar_patrol_enemies
 from gravity_ho_matey.levels.siege_asteroids import siege_spiral_asteroids
 from gravity_ho_matey.levels.siege_enemies import siege_roster_patrols
@@ -23,6 +26,10 @@ from gravity_ho_matey.levels.siege_escorts import siege_friendly_fighters
 from gravity_ho_matey.levels.siege_layout import ROSTER_KILL_QUOTA, build_siege_layout
 from gravity_ho_matey.levels.siege_station import siege_hostile_station
 from gravity_ho_matey.gameplay.tractor_beam import TractorBeamState
+from gravity_ho_matey.gameplay.brood_moon_mission import BroodMoonState
+from gravity_ho_matey.levels.brood_moon_layout import build_brood_moon_orbital_layout
+from gravity_ho_matey.levels.brood_moon_asteroids import orbital_debris_asteroids
+from gravity_ho_matey.levels.level_profiles import brood_moon_orbital_config
 from gravity_ho_matey.settings import CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
 
 
@@ -123,31 +130,20 @@ def build_drift_belt_level() -> GameWorld:
     )
 
 
-def build_membrane_run_level() -> GameWorld:
-    """Level 4 — braided boost highways through a gravity membrane; Mega Squid boss."""
-    layout = build_membrane_layout()
-    config = membrane_strip_config(theme="rift", name="The Membrane Run", width=layout.width, height=layout.height)
-    pads = [
-        BoostPad(
-            pos=Vec2(p.pos.x, p.pos.y),
-            tangent=Vec2(p.tangent.x, p.tangent.y),
-            radius=p.radius,
-            kick_speed=p.kick_speed,
-        )
-        for p in layout.boost_pads
-    ]
+def build_relay_hold_level() -> GameWorld:
+    """Level 4 — defend the relay station through three timed assault waves."""
+    layout = build_guard_layout()
+    config = protection_arena_config(theme="rift", name="Relay Hold", width=layout.width, height=layout.height)
     return GameWorld(
         config=config,
         ship=_spawn_ship_copy(layout.spawn_ship),
-        asteroids=build_membrane_props(layout, config),
-        wells=all_void_wells(layout),
+        asteroids=build_guard_asteroids(layout, config),
+        wells=list(layout.wells),
         beacons=[],
         finish_gate=layout.finish_gate,
-        enemies=membrane_road_squids(layout),
-        membrane_layout=layout,
-        boost_pads=pads,
-        mega_squid=MegaSquidBoss(pos=Vec2(layout.boss_anchor.x, layout.boss_anchor.y), anchor=layout.boss_anchor),
-        allies=membrane_friendly_fighters(layout),
+        friendly_stations=relay_friendly_stations(layout),
+        guard_layout=layout,
+        wave_director=WaveDirector(),
     )
 
 
@@ -176,3 +172,19 @@ def build_siege_line_level() -> GameWorld:
         roster_enemies_total=config.roster_kill_quota,
         roster_enemies_remaining=config.roster_kill_quota,
     )
+
+
+def build_brood_moon_level() -> GameWorld:
+    """Level 6 — land on the Brood Moon, tag beacons, rupture egg pods, RTB dock."""
+    layout = build_brood_moon_orbital_layout()
+    config = brood_moon_orbital_config(width=layout.width, height=layout.height)
+    world = GameWorld(
+        config=config,
+        ship=_spawn_ship_copy(layout.spawn_ship),
+        asteroids=orbital_debris_asteroids(layout, config),
+        wells=list(layout.wells),
+        beacons=[],
+        finish_gate=layout.finish_gate,
+        brood_moon=BroodMoonState(layout=layout),
+    )
+    return world

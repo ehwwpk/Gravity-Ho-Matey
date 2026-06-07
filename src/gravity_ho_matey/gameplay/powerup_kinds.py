@@ -15,6 +15,9 @@ class PowerUpKind(Enum):
     WEAPON_LASER = auto()
     WEAPON_SHOTGUN = auto()
     WEAPON_EXPLOSIVE = auto()
+    WEAPON_ADV_LASER = auto()
+    WEAPON_ADV_SHOTGUN = auto()
+    WEAPON_ADV_EXPLOSIVE = auto()
 
 
 POWERUP_LABELS: dict[PowerUpKind, str] = {
@@ -29,6 +32,9 @@ POWERUP_LABELS: dict[PowerUpKind, str] = {
     PowerUpKind.WEAPON_LASER: "Phase Lance — piercing bursts pass through hostiles",
     PowerUpKind.WEAPON_SHOTGUN: "Scatter Cannon — twin bolts with slight spread",
     PowerUpKind.WEAPON_EXPLOSIVE: "Nova Shell — slow slugs, wide blast radius",
+    PowerUpKind.WEAPON_ADV_LASER: "Prismatic Overcharge — deeper pierce, faster beam",
+    PowerUpKind.WEAPON_ADV_SHOTGUN: "Triple Tap — 3 bolts: twin spread + center slug",
+    PowerUpKind.WEAPON_ADV_EXPLOSIVE: "Supernova Shell — faster rocket, wider blast",
 }
 
 POWERUP_HUD_TAGS: dict[PowerUpKind, str] = {
@@ -43,4 +49,7 @@ POWERUP_HUD_TAGS: dict[PowerUpKind, str] = {
     PowerUpKind.WEAPON_LASER: "LANCE",
     PowerUpKind.WEAPON_SHOTGUN: "SCATTER",
     PowerUpKind.WEAPON_EXPLOSIVE: "NOVA",
+    PowerUpKind.WEAPON_ADV_LASER: "LANCE+",
+    PowerUpKind.WEAPON_ADV_SHOTGUN: "TRIPLE",
+    PowerUpKind.WEAPON_ADV_EXPLOSIVE: "SUPER",
 }

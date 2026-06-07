@@ -8,6 +8,7 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
 from gravity_ho_matey.gameplay.enemy_aim import lead_aim_direction
 from gravity_ho_matey.gameplay.entities import Asteroid, GravityWell, Projectile
+from gravity_ho_matey.gameplay.friendly_fighter import FriendlyFighter
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
 from gravity_ho_matey.gameplay.spawn_director import SpawnDirector
 from gravity_ho_matey.gameplay.station_kinds import StationFaction
@@ -34,6 +35,7 @@ class SpaceStation:
     pos: Vec2
     anchor: Vec2
     faction: StationFaction = StationFaction.HOSTILE
+    station_label: str = "STN"
     hits_max: int = STATION_HITS_MAX
     hits_remaining: int = STATION_HITS_MAX
     radius: float = STATION_RADIUS
@@ -50,6 +52,7 @@ class SpaceStation:
     can_spawn: bool = True
     spawn_bay_open: float = 0.0
     wobble: float = 0.0
+    next_wing_id: int = 0
     _pending_spawn_interval: float = STATION_SPAWN_INTERVAL
     director: SpawnDirector = field(default_factory=lambda: SpawnDirector(max_alive=3, global_cooldown=4.0))
 
@@ -149,6 +152,62 @@ class SpaceStation:
             hostile=True,
         )
 
+    def _pick_friendly_gun_target(self, enemies: list, boss, *, prioritize_boss: bool = True) -> tuple[Vec2, Vec2] | None:
+        best_pos: Vec2 | None = None
+        best_vel = Vec2()
+        best_dist = self.gun_range + 1.0
+        if prioritize_boss and boss is not None and getattr(boss, "alive", False):
+            pos = getattr(boss, "pos", None)
+            if pos is not None:
+                dist = (pos - self.pos).length()
+                if dist <= self.gun_range:
+                    best_pos = pos
+                    best_vel = getattr(boss, "vel", Vec2())
+                    best_dist = dist
+        for enemy in enemies:
+            if not getattr(enemy, "alive", True):
+                continue
+            pos = getattr(enemy, "pos", None)
+            if pos is None:
+                continue
+            dist = (pos - self.pos).length()
+            if dist < best_dist:
+                best_pos = pos
+                best_vel = getattr(enemy, "vel", Vec2())
+                best_dist = dist
+        if best_pos is None:
+            return None
+        return best_pos, best_vel
+
+    def try_fire_at_hostiles(self, enemies: list, *, boss=None, prioritize_boss: bool = True) -> Projectile | None:
+        if not self.alive or self.faction is not StationFaction.FRIENDLY or self.gun_cooldown > 0.0:
+            return None
+        picked = self._pick_friendly_gun_target(enemies, boss, prioritize_boss=prioritize_boss)
+        if picked is None:
+            return None
+        target_pos, target_vel = picked
+        aim_dir = lead_aim_direction(
+            self.pos,
+            target_pos,
+            target_vel * 0.72,
+            self.gun_shot_speed,
+            refine_passes=2,
+        )
+        if aim_dir is None:
+            return None
+        spread = (random.random() * 2.0 - 1.0) * 0.018
+        aim_dir = aim_dir.rotated(spread)
+        self.gun_cooldown = self.gun_interval
+        self.facing_angle = math.atan2(aim_dir.y, aim_dir.x)
+        muzzle = self.pos + aim_dir * (self.radius + 14.0)
+        return Projectile(
+            pos=muzzle,
+            vel=aim_dir * self.gun_shot_speed,
+            ttl=2.4,
+            radius=3.8,
+            hostile=False,
+        )
+
     def tick_tractor(
         self,
         dt: float,
@@ -199,4 +258,28 @@ class SpaceStation:
             fire_cooldown=0.8,
             engage_range=480.0,
             skirmish_roster_id=None,
+        )
+
+    def tick_friendly_spawns(self, dt: float, alive_station_fighters: int) -> FriendlyFighter | None:
+        if not self.alive or not self.can_spawn or self.faction is not StationFaction.FRIENDLY:
+            return None
+        self.director.tick(dt)
+        self.spawn_timer += dt
+        if self.spawn_timer < self._pending_spawn_interval:
+            return None
+        if not self.director.can_spawn(alive_station_fighters):
+            return None
+        self.spawn_timer = 0.0
+        self._pending_spawn_interval = self.spawn_interval + (random.random() * 2.0 - 1.0) * self.spawn_jitter
+        self.director.record_spawn()
+        self.spawn_bay_open = 0.55
+        launch = Vec2.from_angle(self.facing_angle) * (self.radius + 36.0)
+        spawn_pos = self.pos + launch
+        wing_id = self.next_wing_id
+        self.next_wing_id += 1
+        return FriendlyFighter(
+            wing_id=wing_id,
+            pos=Vec2(spawn_pos.x, spawn_pos.y),
+            angle=self.facing_angle,
+            fire_cooldown=0.45,
         )

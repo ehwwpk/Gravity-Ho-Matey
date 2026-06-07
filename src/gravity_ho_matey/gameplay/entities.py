@@ -25,6 +25,7 @@ class Ship:
     cooldown: float = 0.0
     boost_energy: float = 1.0
     boost_flash: float = 0.0
+    boost_jolt: float = 0.0
     thrust_multiplier: float = 1.0
     boost_tap_multiplier: float = 1.0
     fire_cooldown_multiplier: float = 1.0
@@ -129,6 +130,7 @@ class WorldConfig:
     max_asteroids: int = 48
     exit_requires_boss: bool = False
     exit_requires_roster_clear: bool = False
+    protection_mission: bool = False
     roster_kill_quota: int = 0
-    pad_overspeed_cap: float = 1.18
-    pad_flash_seconds: float = 0.42
+    brood_moon_mission: bool = False
+    surface_wrap: bool = False

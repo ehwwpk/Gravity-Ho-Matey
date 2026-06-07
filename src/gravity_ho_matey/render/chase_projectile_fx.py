@@ -49,6 +49,21 @@ def _bolt_palette(projectile: Projectile) -> tuple[str, str, str, str]:
     )
 
 
+def tactical_bolt_style(projectile: Projectile) -> tuple[str, str, float]:
+    """Tactical-view bolt fill, tail, and radius — mirrors chase doctrine colors."""
+    if projectile.hostile:
+        return palette.HOSTILE_PROJECTILE, palette.HOSTILE_PROJECTILE, 3.5
+    core, mid, tail, _glow = _bolt_palette(projectile)
+    r = 4.0
+    if projectile.weapon_track is WeaponTrack.EXPLOSIVE:
+        r = 5.5
+    elif projectile.weapon_track is WeaponTrack.SHOTGUN:
+        r = 3.8
+    elif projectile.weapon_track is WeaponTrack.LASER:
+        r = 3.2
+    return mid, tail, r
+
+
 def _screen_streak(
     projectile: Projectile,
     head: Vec2,
@@ -56,6 +71,7 @@ def _screen_streak(
     camera: ViewCamera,
     ship_pos: Vec2,
     ship_angle: float,
+    extended_tail: bool = False,
 ) -> tuple[float, float, float, float, float]:
     """Return head/tail screen coords and unit direction (ux, uy)."""
     speed = projectile.vel.length()
@@ -71,7 +87,16 @@ def _screen_streak(
         streak_len = min(72.0, 20.0 + speed * 0.2)
 
     tail_world = projectile.pos - projectile.vel.normalized() * streak_len
-    tail_pt = camera.world_to_screen(tail_world, ship_pos, ship_angle)
+    if extended_tail and projectile.hostile:
+        tail_pt = camera.world_to_chase_screen(
+            tail_world,
+            ship_pos,
+            ship_angle,
+            min_ahead=-260.0,
+            screen_margin=280.0,
+        )
+    else:
+        tail_pt = camera.world_to_screen(tail_world, ship_pos, ship_angle)
     dx = head.x - tail_pt.x
     dy = head.y - tail_pt.y
     length = math.hypot(dx, dy)
@@ -93,6 +118,7 @@ def _draw_tapered_bolt(
     tail: str,
     glow: str,
     hostile: bool,
+    track: WeaponTrack | None = None,
 ) -> None:
     if length < 2.0:
         canvas.create_oval(hx - 2, hy - 2, hx + 2, hy + 2, fill=core, outline="")
@@ -142,10 +168,22 @@ def _draw_tapered_bolt(
             width=1,
         )
 
-    head_r = 4.5 if hostile else 3.8
-    canvas.create_oval(hx - head_r * 1.5, hy - head_r, hx + head_r * 1.5, hy + head_r * 0.65, fill="", outline=mid, width=1)
-    canvas.create_oval(hx - head_r, hy - head_r * 0.75, hx + head_r, hy + head_r * 0.55, fill=core, outline=mid, width=1)
-    canvas.create_oval(hx - 1.6, hy - 1.2, hx + 1.6, hy + 1.0, fill="#ffffff", outline="")
+    head_r = 5.5 if track is WeaponTrack.EXPLOSIVE else 4.5 if hostile else 3.8
+    if track is WeaponTrack.EXPLOSIVE:
+        canvas.create_oval(hx - head_r * 1.8, hy - head_r * 1.1, hx + head_r * 1.8, hy + head_r * 0.85, fill="", outline=mid, width=2)
+        canvas.create_oval(hx - head_r * 1.2, hy - head_r * 0.85, hx + head_r * 1.2, hy + head_r * 0.65, fill=mid, outline=core, width=1)
+        canvas.create_oval(hx - head_r * 0.45, hy - head_r * 0.35, hx + head_r * 0.45, hy + head_r * 0.3, fill=core, outline="")
+    elif track is WeaponTrack.LASER:
+        canvas.create_oval(hx - head_r * 1.6, hy - head_r, hx + head_r * 1.6, hy + head_r * 0.65, fill="", outline=palette.WEAPON_LASER_GLOW, width=1)
+        canvas.create_oval(hx - head_r, hy - head_r * 0.75, hx + head_r, hy + head_r * 0.55, fill=core, outline=mid, width=1)
+        canvas.create_oval(hx - 2.0, hy - 1.5, hx + 2.0, hy + 1.2, fill="#ffffff", outline="")
+    elif track is WeaponTrack.SHOTGUN:
+        canvas.create_oval(hx - head_r * 1.3, hy - head_r, hx + head_r * 1.3, hy + head_r * 0.7, fill=mid, outline=core, width=1)
+        canvas.create_oval(hx - 1.8, hy - 1.4, hx + 1.8, hy + 1.1, fill=core, outline="")
+    else:
+        canvas.create_oval(hx - head_r * 1.5, hy - head_r, hx + head_r * 1.5, hy + head_r * 0.65, fill="", outline=mid, width=1)
+        canvas.create_oval(hx - head_r, hy - head_r * 0.75, hx + head_r, hy + head_r * 0.55, fill=core, outline=mid, width=1)
+        canvas.create_oval(hx - 1.6, hy - 1.2, hx + 1.6, hy + 1.0, fill="#ffffff", outline="")
 
 
 def draw_chase_projectile(
@@ -156,6 +194,8 @@ def draw_chase_projectile(
     camera: ViewCamera,
     ship_pos: Vec2,
     ship_angle: float,
+    elapsed: float = 0.0,
+    extended_tail: bool = False,
 ) -> None:
     """Perspective-correct energy bolt — streak aligned via world→screen tail projection."""
     hx, hy, tx, ty, length = _screen_streak(
@@ -164,8 +204,18 @@ def draw_chase_projectile(
         camera=camera,
         ship_pos=ship_pos,
         ship_angle=ship_angle,
+        extended_tail=extended_tail,
     )
     core, mid, tail, glow = _bolt_palette(projectile)
+    track = projectile.weapon_track
+    if not projectile.hostile and track is WeaponTrack.EXPLOSIVE:
+        pulse = 0.65 + 0.35 * math.sin(elapsed * 14.0)
+        draw_ground_fog_glow(canvas, hx, hy + 2, 14.0 * pulse, (glow, mid), pulse=elapsed * 6.0)
+        canvas.create_oval(hx - 7 * pulse, hy - 5 * pulse, hx + 7 * pulse, hy + 5 * pulse, outline=core, width=2)
+    elif not projectile.hostile and track is WeaponTrack.LASER:
+        draw_ground_fog_glow(canvas, hx, hy + 2, 11.0, (glow, mid), pulse=0.0)
+    elif not projectile.hostile and track is WeaponTrack.SHOTGUN:
+        draw_ground_fog_glow(canvas, hx, hy + 2, 9.0, (glow, mid), pulse=0.0)
     _draw_tapered_bolt(
         canvas,
         hx=hx,
@@ -178,6 +228,7 @@ def draw_chase_projectile(
         tail=tail,
         glow=glow,
         hostile=projectile.hostile,
+        track=track if not projectile.hostile else None,
     )
 
 

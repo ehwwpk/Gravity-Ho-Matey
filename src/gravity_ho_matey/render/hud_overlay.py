@@ -28,6 +28,9 @@ class SciFiHudOverlay:
     FONT = ("Courier New", 10, "bold")
     FONT_SMALL = ("Courier New", 8)
     FONT_TITLE = ("Courier New", 9, "bold")
+    FONT_WAVE = ("Courier New", 12, "bold")
+    FONT_WAVE_ALERT = ("Courier New", 13, "bold")
+    FONT_WAVE_HINT = ("Courier New", 10, "bold")
 
     @staticmethod
     def playfield_top(
@@ -61,6 +64,7 @@ class SciFiHudOverlay:
         solar = world.config.level_theme == "solar"
         rift = world.config.level_theme == "rift"
         siege = world.config.level_theme == "siege"
+        brood = world.config.level_theme == "brood_moon"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
@@ -68,6 +72,8 @@ class SciFiHudOverlay:
             if rift
             else palette.SIEGE_HUD_ACCENT
             if siege
+            else palette.BROOD_MOON_HUD_ACCENT
+            if brood
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM
@@ -111,8 +117,57 @@ class SciFiHudOverlay:
                 fill=beacon_color,
                 font=("Courier New", 14, "bold"),
             )
+            if world.egg_pods:
+                pods_left = world.egg_pods_remaining
+                pod_total = len(world.egg_pods)
+                canvas.create_text(
+                    344,
+                    44,
+                    anchor="w",
+                    text=f"PODS {pods_left:02d} / {pod_total:02d}",
+                    fill=palette.HUD_WARN if pods_left else palette.GATE_OPEN,
+                    font=self.FONT_SMALL,
+                )
         else:
-            if siege and world.config.exit_requires_roster_clear:
+            if brood and world.brood_moon is not None:
+                from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
+
+                bm = world.brood_moon
+                self._label(canvas, 344, 12, "BROOD MOON", dim)
+                if bm.phase is BroodPhase.ORBITAL_RETURN and world.finish_unlocked:
+                    status_txt, status_color = "DOCK OPEN", palette.GATE_OPEN
+                elif bm.seal_complete:
+                    status_txt, status_color = "RTB", palette.GATE_OPEN
+                elif bm.on_surface and bm.objectives_complete:
+                    from gravity_ho_matey.levels.brood_moon_layout import SEAL_TRAVEL_DISTANCE
+
+                    pct = min(100, int(100 * bm.seal_travel / SEAL_TRAVEL_DISTANCE))
+                    status_txt = f"SEAL {pct:3d}%"
+                    status_color = palette.BROOD_MOON_HUD_ACCENT
+                elif bm.on_surface:
+                    status_txt = "NURSERY"
+                    status_color = palette.HUD_WARN
+                else:
+                    status_txt = "ORBIT"
+                    status_color = palette.BROOD_MOON_HUD_ACCENT
+                canvas.create_text(
+                    344,
+                    30,
+                    anchor="w",
+                    text=status_txt,
+                    fill=status_color,
+                    font=("Courier New", 11, "bold"),
+                )
+                if bm.hud_prompt:
+                    canvas.create_text(
+                        344,
+                        44,
+                        anchor="w",
+                        text=bm.hud_prompt[:22],
+                        fill=dim,
+                        font=self.FONT_SMALL,
+                    )
+            elif siege and world.config.exit_requires_roster_clear:
                 self._label(canvas, 344, 12, "HOSTILE ROSTER", dim)
                 defeated = world.roster_enemies_defeated
                 total = world.roster_enemies_total
@@ -138,23 +193,81 @@ class SciFiHudOverlay:
                         fill=palette.HUD_DIM,
                         font=self.FONT_SMALL,
                     )
-            elif rift:
-                self._label(canvas, 344, 12, "BROOD-MOTHER", dim)
-                if world.boss_cleared:
-                    boss_txt, boss_color = "PORTAL OPEN", palette.GATE_OPEN
-                elif world.mega_squid is not None and world.mega_squid.alive:
-                    hp = world.mega_squid.hits_remaining
-                    boss_txt, boss_color = f"BOSS {hp:02d} HP", palette.HUD_WARN
+            elif rift and world.config.protection_mission:
+                self._label(canvas, 344, 12, "RELAY HOLD", dim)
+                wave_font = self.FONT_WAVE
+                wave_y = 30
+                sub_font = self.FONT_SMALL
+                if world.finish_unlocked:
+                    wave_txt, wave_color = "EXTRACT OPEN", palette.GATE_OPEN
+                    relay_sub = "RTB · south pad"
+                    sub_color = palette.RIFT_HUD_ACCENT
+                elif world.protection_boss_intro_flash > 0.0:
+                    wave_txt, wave_color = "WAVE 3 / 3", palette.HUD_WARN
+                    wave_font = self.FONT_WAVE_ALERT
+                    relay_sub = "brood mother contact"
+                    sub_color = palette.RIFT_HUD_ACCENT
+                    sub_font = self.FONT_WAVE_HINT
+                elif world.wave_director is not None:
+                    director = world.wave_director
+                    inbound = director.inbound_copy()
+                    nudge = director.nudge_copy()
+                    wave = director.current_wave
+                    if nudge is not None:
+                        wave_txt = f"WAVE {director.nudge_wave} / 3"
+                        wave_color = palette.HUD_ACCENT if director.nudge_ttl > 0.35 else palette.HUD_WARN
+                        wave_font = self.FONT_WAVE_ALERT
+                        relay_sub = nudge.subtitle
+                        sub_font = self.FONT_WAVE_HINT
+                        sub_color = palette.HUD_ACCENT
+                    elif inbound is not None:
+                        wave_txt = f"WAVE {wave} / 3"
+                        wave_color = palette.HUD_WARN
+                        relay_sub = f"next · {inbound.subtitle}"
+                        sub_font = self.FONT_WAVE_HINT
+                        sub_color = palette.RIFT_HUD_ACCENT
+                    else:
+                        wave_txt = f"WAVE {wave} / 3"
+                        wave_color = palette.HUD_WARN
+                        relay_sub = None
+                        sub_color = palette.HUD_DIM
                 else:
-                    boss_txt, boss_color = "SEALED", palette.GATE_LOCKED
+                    wave_txt, wave_color = "STANDBY", palette.HUD_DIM
+                    relay_sub = None
+                    sub_color = palette.HUD_DIM
                 canvas.create_text(
                     344,
-                    30,
+                    wave_y,
                     anchor="w",
-                    text=boss_txt,
-                    fill=boss_color,
-                    font=("Courier New", 11, "bold"),
+                    text=wave_txt,
+                    fill=wave_color,
+                    font=wave_font,
                 )
+                if world.friendly_stations:
+                    relay = world.friendly_stations[0]
+                    relay_hp = relay.hits_remaining if relay.alive else 0
+                    if relay_sub:
+                        sub_txt = relay_sub
+                    elif (
+                        world.mega_squid is not None
+                        and world.mega_squid.alive
+                        and world.wave_director is not None
+                        and world.wave_director.current_wave >= 3
+                    ):
+                        sub_txt = "kill brood-mother"
+                        sub_color = palette.RIFT_HUD_ACCENT
+                        sub_font = self.FONT_WAVE_HINT
+                    else:
+                        sub_txt = f"RELAY {relay_hp:02d} HP"
+                        sub_color = palette.HUD_DIM
+                    canvas.create_text(
+                        344,
+                        44,
+                        anchor="w",
+                        text=sub_txt,
+                        fill=sub_color,
+                        font=sub_font,
+                    )
             else:
                 self._label(canvas, 344, 12, "EXIT VECTOR", dim)
                 canvas.create_text(
@@ -183,33 +296,6 @@ class SciFiHudOverlay:
         boost_color = palette.HUD_BOOST if boost_pct > 25 else palette.HUD_WARN
         canvas.create_text(602, 30, anchor="w", text=f"{boost_pct:3d}%", fill=boost_color, font=("Courier New", 14, "bold"))
         self._boost_bar(canvas, 602, 38, 100, 6, world.ship.boost_energy, accent, dim)
-
-        if rift and world.lane_probe is not None:
-            from gravity_ho_matey.gameplay.boost_lane import LaneState
-            from gravity_ho_matey.levels.membrane_layout import is_in_boss_stable_zone
-
-            in_stable = (
-                world.membrane_layout is not None
-                and is_in_boss_stable_zone(world.ship.pos, world.membrane_layout)
-            )
-            lane = world.lane_probe.state
-            if lane is LaneState.ON_RIBBON:
-                lane_txt, lane_color = "HIGHWAY", palette.RIFT_RIBBON_CORE
-            elif lane is LaneState.RUNOFF:
-                lane_txt, lane_color = "NEAR ROAD", palette.HUD_WARN
-            else:
-                lane_txt, lane_color = "OPEN SPACE", palette.HUD_DIM
-            self._badge(canvas, 720, 14, anchor="nw", text=f"LANE {lane_txt}", fill=lane_color, font=self.FONT_SMALL)
-            if in_stable:
-                self._badge(
-                    canvas,
-                    720,
-                    34,
-                    anchor="nw",
-                    text="BOSS ARENA",
-                    fill=palette.RIFT_STABLE_RING,
-                    font=self.FONT_SMALL,
-                )
 
         if world.squid_cling_timer > 0.0:
             from gravity_ho_matey.gameplay.squid_enemy import SQUID_CLING_DAMAGE_INTERVAL
@@ -347,6 +433,18 @@ class SciFiHudOverlay:
             )
             banner_y += self.CHART_BOUNDS_BANNER_H
 
+        if brood and world.brood_moon is not None and world.brood_moon.boss_intro_flash > 0.0:
+            flash_y = banner_y if banner_y > self.PANEL_H else self.PANEL_H
+            canvas.create_rectangle(0, flash_y, width, flash_y + self.ALERT_H, fill="#301040", outline="")
+            canvas.create_line(0, flash_y + self.ALERT_H, width, flash_y + self.ALERT_H, fill=palette.SQUID_CORE, width=1)
+            canvas.create_text(
+                width // 2,
+                flash_y + self.ALERT_H // 2,
+                text="◈ BROOD MOTHER INBOUND ◈",
+                fill=palette.SQUID_CORE,
+                font=("Courier New", 10, "bold"),
+            )
+
     def draw_playfield_chrome(
         self,
         canvas: tk.Canvas,
@@ -363,6 +461,7 @@ class SciFiHudOverlay:
         solar = world.config.level_theme == "solar"
         rift = world.config.level_theme == "rift"
         siege = world.config.level_theme == "siege"
+        brood = world.config.level_theme == "brood_moon"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
@@ -370,6 +469,8 @@ class SciFiHudOverlay:
             if rift
             else palette.SIEGE_HUD_ACCENT
             if siege
+            else palette.BROOD_MOON_HUD_ACCENT
+            if brood
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM
@@ -421,6 +522,16 @@ class SciFiHudOverlay:
                 fill=dim,
                 font=self.FONT_SMALL,
             )
+        if brood and world.brood_moon is not None:
+            self._draw_brood_interaction_charge(
+                canvas,
+                world,
+                width,
+                height,
+                hud_top,
+                accent=accent,
+                dim=dim,
+            )
 
     @staticmethod
     def _badge(
@@ -448,6 +559,79 @@ class SciFiHudOverlay:
             width=1,
         )
         canvas.tag_raise(tid)
+
+    def _draw_brood_interaction_charge(
+        self,
+        canvas: tk.Canvas,
+        world: GameWorld,
+        width: float,
+        height: float,
+        hud_top: float,
+        *,
+        accent: str,
+        dim: str,
+    ) -> None:
+        from gravity_ho_matey.gameplay.brood_moon_mission import (
+            BroodPhase,
+            in_landing_zone,
+            liftoff_blocked,
+        )
+        from gravity_ho_matey.levels.brood_moon_layout import LANDING_CHARGE_SECONDS, LIFTOFF_CHARGE_SECONDS
+
+        bm = world.brood_moon
+        if bm is None or bm.in_cinematic or bm.layout is None:
+            return
+
+        charge = 0.0
+        label = ""
+        active = False
+        if bm.phase is BroodPhase.ORBITAL and in_landing_zone(world.ship.pos, bm.layout):
+            charge = bm.landing_charge / max(1e-6, LANDING_CHARGE_SECONDS)
+            label = "LAND"
+            active = True
+        elif bm.phase is BroodPhase.SURFACE and bm.ascent_ready and not liftoff_blocked(world):
+            charge = bm.liftoff_charge / max(1e-6, LIFTOFF_CHARGE_SECONDS)
+            label = "ASCEND"
+            active = True
+        if not active:
+            return
+
+        cx = width * 0.5
+        cy = height - 72.0
+        outer_r = 34.0
+        inner_r = 26.0
+        canvas.create_oval(
+            cx - outer_r,
+            cy - outer_r,
+            cx + outer_r,
+            cy + outer_r,
+            outline=dim,
+            width=2,
+        )
+        start = 90.0
+        extent = -360.0 * max(0.0, min(1.0, charge))
+        if abs(extent) > 0.5:
+            canvas.create_arc(
+                cx - inner_r,
+                cy - inner_r,
+                cx + inner_r,
+                cy + inner_r,
+                start=start,
+                extent=extent,
+                style=tk.PIESLICE,
+                outline="",
+                fill=accent,
+            )
+        canvas.create_oval(
+            cx - inner_r,
+            cy - inner_r,
+            cx + inner_r,
+            cy + inner_r,
+            outline=accent,
+            width=2,
+        )
+        canvas.create_text(cx, cy - 4, text="E", fill=accent, font=("Courier New", 14, "bold"))
+        canvas.create_text(cx, cy + 12, text=label, fill=dim, font=self.FONT_SMALL)
 
     def _draw_chart_bounds_playfield_overlay(
         self,

@@ -9,8 +9,8 @@ def test_all_registered_levels_build() -> None:
         world = build_level(level_id)
         assert world.config.viewport_width == 960
         assert world.config.viewport_height == 640
-        assert len(world.beacons) >= 3 or level_id in ("drift", "rift", "siege")
-        assert len(world.wells) >= 3 or level_id in ("drift", "rift", "siege")
+        assert len(world.beacons) >= 3 or level_id in ("drift", "rift", "siege", "brood_moon")
+        assert len(world.wells) >= 3 or level_id in ("drift", "rift", "siege", "brood_moon")
         if level_id == "cove":
             assert world.config.height == 640
         if level_id == "solar":
@@ -19,9 +19,10 @@ def test_all_registered_levels_build() -> None:
             assert world.config.width == 4800
             assert world.config.height == 4800
         if level_id == "rift":
-            assert world.config.width == 2000
-            assert world.config.height == 5000
-            assert world.config.exit_requires_boss is True
+            assert world.config.width == 4000
+            assert world.config.height == 3200
+            assert world.config.protection_mission is True
+            assert len(world.friendly_stations) == 1
         if level_id == "siege":
             assert world.config.width == 5200
             assert world.config.height == 3200
@@ -29,12 +30,16 @@ def test_all_registered_levels_build() -> None:
             assert len(world.enemies) == 12
             assert len(world.allies) == 12
             assert world.space_station is not None
+        if level_id == "brood_moon":
+            assert world.config.width == 4800
+            assert world.config.brood_moon_mission is True
+            assert world.brood_moon is not None
 
 
 def test_all_registered_levels_have_asteroids() -> None:
     for level_id in LEVEL_BUILDERS:
         world = build_level(level_id)
-        min_rocks = 3 if level_id == "cove" else (100 if level_id == "drift" else 8)
+        min_rocks = 3 if level_id == "cove" else (100 if level_id == "drift" else (12 if level_id == "rift" else 8))
         assert len(world.asteroids) >= min_rocks
         assert world.config.open_bounds is True
 
@@ -102,7 +107,8 @@ def test_campaign_level_order() -> None:
     assert next_level_id("solar") == "drift"
     assert next_level_id("drift") == "rift"
     assert next_level_id("rift") == "siege"
-    assert next_level_id("siege") is None
+    assert next_level_id("siege") == "brood_moon"
+    assert next_level_id("brood_moon") is None
 
 
 def test_solar_level_has_patrol_enemies() -> None:

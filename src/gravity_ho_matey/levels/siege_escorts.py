@@ -8,7 +8,7 @@ from gravity_ho_matey.levels.siege_layout import ALLY_WING_COUNT, SiegeLayout
 
 
 def siege_friendly_fighters(layout: SiegeLayout) -> list[FriendlyFighter]:
-    """Twelve wing escorts on the west half near player spawn."""
+    """Twelve wing escorts — wide stagger east of spawn, closer to the skirmish line."""
     spawn = layout.spawn_ship
     forward = Vec2.from_angle(spawn.angle)
     right = forward.rotated(math.pi / 2.0)
@@ -16,14 +16,14 @@ def siege_friendly_fighters(layout: SiegeLayout) -> list[FriendlyFighter]:
     for wing_id in range(ALLY_WING_COUNT):
         row = wing_id // 4
         col = wing_id % 4
-        lateral = (col - 1.5) * 78.0
-        trail = 55.0 + row * 62.0
-        jitter_x = (wing_id % 5) * 6.0 - 12.0
-        jitter_y = (wing_id % 3) * 8.0 - 8.0
+        lateral = (col - 1.5) * 118.0
+        advance = 310.0 + row * 98.0
+        jitter_x = (wing_id % 5) * 7.0 - 14.0
+        jitter_y = (wing_id % 3) * 10.0 - 10.0
         pos = (
             spawn.pos
             + right * (lateral + jitter_x)
-            - forward * (trail + jitter_y)
+            + forward * (advance + jitter_y)
         )
         allies.append(
             FriendlyFighter(

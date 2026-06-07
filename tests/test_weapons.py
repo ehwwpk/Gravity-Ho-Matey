@@ -11,15 +11,24 @@ from gravity_ho_matey.gameplay.enemies import PatrolEnemy
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.upgrade_config import RAPID_FIRE_COOLDOWN_MULT
 from gravity_ho_matey.gameplay.weapon_config import (
+    EXPLOSIVE_ADV_BLAST_RADIUS,
+    EXPLOSIVE_ADV_COOLDOWN_MULT,
+    EXPLOSIVE_ADV_SPEED_MULT,
     EXPLOSIVE_BLAST_RADIUS,
     EXPLOSIVE_COOLDOWN_MULT,
+    EXPLOSIVE_SPEED_MULT,
+    LASER_ADV_PIERCE_COUNT,
     LASER_PIERCE_COUNT,
+    SHOTGUN_ADV_PELLET_COUNT,
+    SHOTGUN_ADV_SIDE_SPREAD_RAD,
     SHOTGUN_PELLET_COUNT,
+    WEAPON_ADVANCED_PRICE,
     WEAPON_DOCTRINE_PRICE,
 )
 from gravity_ho_matey.gameplay.weapon_fire import player_fire_cooldown, spawn_player_shots
 from gravity_ho_matey.gameplay.weapon_combat import resolve_projectile_after_hit
 from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
+from gravity_ho_matey.gameplay.explosions import ExplosionKind
 from gravity_ho_matey.gameplay.world import GameWorld
 
 
@@ -32,6 +41,24 @@ class WeaponTrackShopTests(unittest.TestCase):
         self.assertFalse(campaign.can_purchase(PowerUpKind.WEAPON_SHOTGUN))
         self.assertFalse(campaign.can_purchase(PowerUpKind.WEAPON_EXPLOSIVE))
         self.assertFalse(campaign.can_purchase(PowerUpKind.WEAPON_LASER))
+
+    def test_weapon_advanced_requires_doctrine(self) -> None:
+        campaign = CampaignState()
+        campaign.jewels = 999
+        self.assertFalse(campaign.can_purchase(PowerUpKind.WEAPON_ADV_SHOTGUN))
+        self.assertTrue(campaign.try_purchase(PowerUpKind.WEAPON_SHOTGUN))
+        self.assertTrue(campaign.can_purchase(PowerUpKind.WEAPON_ADV_SHOTGUN))
+        self.assertFalse(campaign.can_purchase(PowerUpKind.WEAPON_ADV_LASER))
+        self.assertTrue(campaign.try_purchase(PowerUpKind.WEAPON_ADV_SHOTGUN))
+        self.assertTrue(campaign.weapon_advanced)
+        self.assertFalse(campaign.can_purchase(PowerUpKind.WEAPON_ADV_SHOTGUN))
+
+    def test_weapon_advanced_price(self) -> None:
+        campaign = CampaignState()
+        campaign.jewels = WEAPON_DOCTRINE_PRICE + WEAPON_ADVANCED_PRICE
+        self.assertTrue(campaign.try_purchase(PowerUpKind.WEAPON_EXPLOSIVE))
+        self.assertTrue(campaign.try_purchase(PowerUpKind.WEAPON_ADV_EXPLOSIVE))
+        self.assertEqual(campaign.jewels, 0)
 
     def test_weapon_doctrine_price(self) -> None:
         campaign = CampaignState()
@@ -63,6 +90,72 @@ class WeaponFireTests(unittest.TestCase):
         self.assertEqual(len(shots), SHOTGUN_PELLET_COUNT)
         angles = sorted(math.atan2(s.vel.y, s.vel.x) for s in shots)
         self.assertGreater(angles[1] - angles[0], 0.01)
+
+    def test_shotgun_advanced_spawns_three_with_center_shot(self) -> None:
+        shots = spawn_player_shots(
+            ship_pos=Vec2(100, 100),
+            ship_vel=Vec2(),
+            ship_angle=0.0,
+            ship_radius=12.0,
+            projectile_speed=300.0,
+            track=WeaponTrack.SHOTGUN,
+            advanced=True,
+        )
+        self.assertEqual(len(shots), SHOTGUN_ADV_PELLET_COUNT)
+        angles = sorted(math.atan2(s.vel.y, s.vel.x) for s in shots)
+        self.assertAlmostEqual(angles[1], 0.0, places=4)
+        self.assertAlmostEqual(angles[0], -SHOTGUN_ADV_SIDE_SPREAD_RAD, places=4)
+        self.assertAlmostEqual(angles[2], SHOTGUN_ADV_SIDE_SPREAD_RAD, places=4)
+
+    def test_laser_advanced_more_pierce(self) -> None:
+        base = spawn_player_shots(
+            ship_pos=Vec2(0, 0),
+            ship_vel=Vec2(),
+            ship_angle=0.0,
+            ship_radius=12.0,
+            projectile_speed=300.0,
+            track=WeaponTrack.LASER,
+            advanced=False,
+        )
+        adv = spawn_player_shots(
+            ship_pos=Vec2(0, 0),
+            ship_vel=Vec2(),
+            ship_angle=0.0,
+            ship_radius=12.0,
+            projectile_speed=300.0,
+            track=WeaponTrack.LASER,
+            advanced=True,
+        )
+        self.assertEqual(base[0].pierce_remaining, LASER_PIERCE_COUNT)
+        self.assertEqual(adv[0].pierce_remaining, LASER_ADV_PIERCE_COUNT)
+        self.assertGreater(adv[0].vel.length(), base[0].vel.length())
+
+    def test_explosive_advanced_faster_and_larger_blast(self) -> None:
+        base = spawn_player_shots(
+            ship_pos=Vec2(0, 0),
+            ship_vel=Vec2(),
+            ship_angle=0.0,
+            ship_radius=12.0,
+            projectile_speed=300.0,
+            track=WeaponTrack.EXPLOSIVE,
+            advanced=False,
+        )
+        adv = spawn_player_shots(
+            ship_pos=Vec2(0, 0),
+            ship_vel=Vec2(),
+            ship_angle=0.0,
+            ship_radius=12.0,
+            projectile_speed=300.0,
+            track=WeaponTrack.EXPLOSIVE,
+            advanced=True,
+        )
+        self.assertEqual(base[0].explosive_radius, EXPLOSIVE_BLAST_RADIUS)
+        self.assertEqual(adv[0].explosive_radius, EXPLOSIVE_ADV_BLAST_RADIUS)
+        self.assertGreater(adv[0].vel.length(), base[0].vel.length())
+        base_cd = player_fire_cooldown(0.18, 1.0, WeaponTrack.EXPLOSIVE, advanced=False)
+        adv_cd = player_fire_cooldown(0.18, 1.0, WeaponTrack.EXPLOSIVE, advanced=True)
+        self.assertLess(adv_cd, base_cd)
+        self.assertAlmostEqual(adv_cd / base_cd, EXPLOSIVE_ADV_COOLDOWN_MULT / EXPLOSIVE_COOLDOWN_MULT, places=4)
 
     def test_laser_has_pierce(self) -> None:
         shots = spawn_player_shots(
@@ -136,6 +229,8 @@ class WeaponCombatTests(unittest.TestCase):
         disposition = world._projectile_hits_enemy(projectile)
         self.assertEqual(disposition, "consume")
         self.assertEqual(len(world.enemies), 0)
+        kinds = {fx.kind for fx in world.explosions.active}
+        self.assertIn(ExplosionKind.NOVA_BLAST, kinds)
 
     def test_resolve_pierce_vs_consume(self) -> None:
         laser = Projectile(pos=Vec2(), vel=Vec2(), pierce_remaining=2)

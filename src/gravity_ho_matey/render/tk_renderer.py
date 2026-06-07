@@ -14,7 +14,12 @@ from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode, ViewCamera
 from gravity_ho_matey.render.chart_map_overlay import ChartMapOverlay
 from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
+from gravity_ho_matey.render.launch_countdown_overlay import draw_launch_countdown_strip, draw_playfield_reveal
+from gravity_ho_matey.render.level_intro_overlay import LevelIntroOverlay
+from gravity_ho_matey.render.brood_moon_transition_overlay import BroodMoonTransitionOverlay
+from gravity_ho_matey.render.startup_splash_overlay import StartupSplashOverlay
 from gravity_ho_matey.render.title_overlay import TitlePage, TitleScreenOverlay
+from gravity_ho_matey.render.shop_tree_view import ShopTreeView
 from gravity_ho_matey.render.view_renderers import PerspectiveViewRenderer, TacticalViewRenderer
 
 
@@ -24,6 +29,9 @@ class TkRenderer:
         self._hud = SciFiHudOverlay()
         self._title = TitleScreenOverlay()
         self._chart = ChartMapOverlay()
+        self._level_intro = LevelIntroOverlay()
+        self._startup_splash = StartupSplashOverlay()
+        self._brood_transition = BroodMoonTransitionOverlay()
         self._tactical = TacticalViewRenderer()
         self._perspective = PerspectiveViewRenderer()
 
@@ -34,22 +42,37 @@ class TkRenderer:
         self,
         *,
         page: TitlePage = TitlePage.WELCOME,
+        campaign: CampaignState | None = None,
         deploy_focus: int = 0,
+        deploy_scroll: float = 0.0,
         hover_id: str | None = None,
         elapsed: float = 0.0,
+        shop_open: bool = False,
+        shop_open_anim: float = 1.0,
+        shop_view: ShopTreeView | None = None,
+        codex: TitleCodexState | None = None,
     ) -> None:
+        from gravity_ho_matey.gameplay.campaign import CampaignState as _CampaignState
+        from gravity_ho_matey.render.title_codex import TitleCodexState as _TitleCodexState
+
         self.clear()
         self._title.draw(
             self.canvas,
             page=page,
+            campaign=campaign or _CampaignState.new(),
             solar_unlocked=is_level_selectable("solar"),
             drift_unlocked=is_level_selectable("drift"),
             rift_unlocked=is_level_selectable("rift"),
             siege_unlocked=is_level_selectable("siege"),
-            draw_ship=lambda cx, cy: self._draw_demo_ship(Vec2(cx, cy), angle=0.12, scale=1.55),
+            brood_unlocked=is_level_selectable("brood_moon"),
             deploy_focus=deploy_focus,
+            deploy_scroll=deploy_scroll,
             hover_id=hover_id,
             elapsed=elapsed,
+            shop_open=shop_open,
+            shop_open_anim=shop_open_anim,
+            shop_view=shop_view,
+            codex=codex or _TitleCodexState(),
         )
 
     def title_hit_test(self, x: float, y: float) -> str | None:
@@ -125,6 +148,22 @@ class TkRenderer:
                 font=("Courier", 28, "bold"),
             )
 
+    def draw_brood_transition(
+        self,
+        world: GameWorld,
+        *,
+        frame_image: tk.PhotoImage | None = None,
+    ) -> None:
+        self.clear()
+        bm = world.brood_moon
+        if bm is None:
+            return
+        self._brood_transition.draw(
+            self.canvas,
+            bm=bm,
+            frame_image=frame_image,
+        )
+
     def draw_chart_briefing(
         self,
         world: GameWorld,
@@ -137,6 +176,8 @@ class TkRenderer:
         hover_id: str | None = None,
         anim: float = 0.0,
         shop_open: bool = False,
+        shop_open_anim: float = 1.0,
+        shop_view: ShopTreeView | None = None,
     ) -> None:
         self.clear()
         self._chart.draw(
@@ -149,10 +190,109 @@ class TkRenderer:
             elapsed=elapsed,
             hover_id=hover_id,
             shop_open=shop_open,
+            shop_open_anim=shop_open_anim,
+            shop_view=shop_view,
         )
 
     def chart_hit_test(self, x: float, y: float) -> str | None:
         return self._chart.hits.hit(x, y)
+
+    def draw_level_intro(
+        self,
+        *,
+        level_id: str,
+        spec: object,
+        frame_image: object,
+        elapsed: float = 0.0,
+        playback_seconds: float = 1.0,
+        progress: float = 0.0,
+        hover_id: str | None = None,
+    ) -> None:
+        from gravity_ho_matey.narrative.level_intros import LevelIntroSpec
+
+        assert isinstance(spec, LevelIntroSpec)
+        self.clear()
+        self._level_intro.draw(
+            self.canvas,
+            level_id=level_id,
+            spec=spec,
+            frame_image=frame_image,  # type: ignore[arg-type]
+            elapsed=elapsed,
+            playback_seconds=playback_seconds,
+            progress=progress,
+            hover_id=hover_id,
+        )
+
+    def level_intro_hit_test(self, x: float, y: float) -> str | None:
+        return self._level_intro.hits.hit(x, y)
+
+    def draw_startup_splash(
+        self,
+        *,
+        frame_image: object,
+        elapsed: float,
+        playback_seconds: float,
+        progress: float,
+        show_skip_hint: bool,
+    ) -> None:
+        self.clear()
+        self._startup_splash.draw(
+            self.canvas,
+            frame_image=frame_image,  # type: ignore[arg-type]
+            elapsed=elapsed,
+            playback_seconds=playback_seconds,
+            progress=progress,
+            show_skip_hint=show_skip_hint,
+        )
+
+    def draw_launch_countdown(
+        self,
+        session: object,
+        *,
+        reveal: float,
+        digit: int,
+        step_index: int,
+        digits: tuple[int, ...],
+        step_elapsed: float,
+        step_seconds: float,
+        total_elapsed: float,
+        total_seconds: float,
+    ) -> None:
+        from gravity_ho_matey.scenes.play_session import PlaySession
+
+        assert isinstance(session, PlaySession)
+        self.draw_world(
+            session.world,
+            session.campaign,
+            session.camera,
+            session.gravity_field,
+        )
+        vw = session.camera.viewport_width
+        vh = session.camera.viewport_height
+        hud_top = SciFiHudOverlay.playfield_top()
+        draw_playfield_reveal(
+            self.canvas,
+            hud_top=hud_top,
+            vw=vw,
+            vh=vh,
+            reveal=reveal,
+            theme=session.world.config.level_theme,
+        )
+        draw_launch_countdown_strip(
+            self.canvas,
+            vw=vw,
+            vh=vh,
+            level_id=session.level_id,
+            theme=session.world.config.level_theme,
+            digits=digits,
+            step_index=step_index,
+            current_digit=digit,
+            step_elapsed=step_elapsed,
+            step_seconds=step_seconds,
+            reveal=reveal,
+            total_elapsed=total_elapsed,
+            total_seconds=total_seconds,
+        )
 
     def draw_end(
         self,

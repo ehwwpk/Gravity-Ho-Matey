@@ -31,3 +31,9 @@ class Scene:
 
     def on_pointer_motion(self, host: SceneHost, x: float, y: float) -> None:
         pass
+
+    def on_wheel(self, host: SceneHost, x: float, y: float, delta: int) -> None:
+        pass
+
+    def on_pointer_release(self, host: SceneHost, x: float, y: float, button: int) -> None:
+        pass

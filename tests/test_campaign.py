@@ -37,7 +37,7 @@ from gravity_ho_matey.gameplay.drone_config import DRONE_ARMORED_HITS_MAX
 from gravity_ho_matey.gameplay.shop_catalog import shop_price_for, shop_visible_catalog
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
-from gravity_ho_matey.scenes.chart_briefing import _kind_from_shop_hit
+from gravity_ho_matey.gameplay.shop_catalog import shop_kind_from_hit
 
 
 
@@ -65,10 +65,12 @@ def _world_with_asteroid(asteroid: Asteroid, ship_pos: Vec2 | None = None) -> Ga
 
 class CampaignTests(unittest.TestCase):
     def test_new_campaign_has_three_lives(self) -> None:
+        from gravity_ho_matey.settings import DEV_START_JEWELS
+
         campaign = CampaignState.new()
         self.assertEqual(campaign.lives, 3)
         self.assertEqual(campaign.hull_chunks, 3)
-        self.assertEqual(campaign.jewels, 0)
+        self.assertEqual(campaign.jewels, DEV_START_JEWELS)
         self.assertEqual(sum(campaign.powerup_stacks.values()), 0)
         self.assertEqual(campaign.rubber_hull_charges, 0)
 
@@ -177,6 +179,8 @@ class CampaignTests(unittest.TestCase):
         self.assertEqual(campaign.powerup_stacks[PowerUpKind.THRUST_BOOST], 0)
 
     def test_jewel_collection_requires_campaign_wiring(self) -> None:
+        from gravity_ho_matey.settings import DEV_START_JEWELS
+
         campaign = CampaignState.new()
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
@@ -189,14 +193,16 @@ class CampaignTests(unittest.TestCase):
         )
         world.update(0.016, ControlIntent())
         self.assertEqual(len(world.jewels), 1)
-        self.assertEqual(campaign.jewels, 0)
+        self.assertEqual(campaign.jewels, DEV_START_JEWELS)
 
         wire_world_for_campaign(world, campaign)
         world.update(0.016, ControlIntent())
         self.assertEqual(len(world.jewels), 0)
-        self.assertEqual(campaign.jewels, 1)
+        self.assertEqual(campaign.jewels, DEV_START_JEWELS + 1)
 
     def test_jewel_hud_callback_reports_amount(self) -> None:
+        from gravity_ho_matey.settings import DEV_START_JEWELS
+
         campaign = CampaignState.new()
         events: list[int] = []
         world = GameWorld(
@@ -215,7 +221,7 @@ class CampaignTests(unittest.TestCase):
         )
         world.update(0.016, ControlIntent())
         self.assertEqual(events, [2])
-        self.assertEqual(campaign.jewels, 2)
+        self.assertEqual(campaign.jewels, DEV_START_JEWELS + 2)
 
 
 class JewelDropTests(unittest.TestCase):
@@ -370,17 +376,20 @@ class RubberBouncePhysicsTests(unittest.TestCase):
 
 class ShopHitTests(unittest.TestCase):
     def test_shop_hit_id_round_trip(self) -> None:
-        self.assertEqual(_kind_from_shop_hit("shop_thrust_boost"), PowerUpKind.THRUST_BOOST)
-        self.assertEqual(_kind_from_shop_hit("shop_boost_tap"), PowerUpKind.BOOST_TAP)
-        self.assertEqual(_kind_from_shop_hit("shop_rubber_hull"), PowerUpKind.RUBBER_HULL)
-        self.assertEqual(_kind_from_shop_hit("shop_drone_wingman"), PowerUpKind.DRONE_WINGMAN)
-        self.assertEqual(_kind_from_shop_hit("shop_hull_reinforce"), PowerUpKind.HULL_REINFORCE)
-        self.assertEqual(_kind_from_shop_hit("shop_drone_repair"), PowerUpKind.DRONE_REPAIR)
-        self.assertEqual(_kind_from_shop_hit("shop_drone_armor"), PowerUpKind.DRONE_ARMOR)
-        self.assertEqual(_kind_from_shop_hit("shop_weapon_laser"), PowerUpKind.WEAPON_LASER)
-        self.assertEqual(_kind_from_shop_hit("shop_weapon_shotgun"), PowerUpKind.WEAPON_SHOTGUN)
-        self.assertEqual(_kind_from_shop_hit("shop_weapon_explosive"), PowerUpKind.WEAPON_EXPLOSIVE)
-        self.assertIsNone(_kind_from_shop_hit("launch"))
+        self.assertEqual(shop_kind_from_hit("shop_thrust_boost"), PowerUpKind.THRUST_BOOST)
+        self.assertEqual(shop_kind_from_hit("shop_boost_tap"), PowerUpKind.BOOST_TAP)
+        self.assertEqual(shop_kind_from_hit("shop_rubber_hull"), PowerUpKind.RUBBER_HULL)
+        self.assertEqual(shop_kind_from_hit("shop_drone_wingman"), PowerUpKind.DRONE_WINGMAN)
+        self.assertEqual(shop_kind_from_hit("shop_hull_reinforce"), PowerUpKind.HULL_REINFORCE)
+        self.assertEqual(shop_kind_from_hit("shop_drone_repair"), PowerUpKind.DRONE_REPAIR)
+        self.assertEqual(shop_kind_from_hit("shop_drone_armor"), PowerUpKind.DRONE_ARMOR)
+        self.assertEqual(shop_kind_from_hit("shop_weapon_laser"), PowerUpKind.WEAPON_LASER)
+        self.assertEqual(shop_kind_from_hit("shop_weapon_shotgun"), PowerUpKind.WEAPON_SHOTGUN)
+        self.assertEqual(shop_kind_from_hit("shop_weapon_explosive"), PowerUpKind.WEAPON_EXPLOSIVE)
+        self.assertEqual(shop_kind_from_hit("shop_weapon_adv_laser"), PowerUpKind.WEAPON_ADV_LASER)
+        self.assertEqual(shop_kind_from_hit("shop_weapon_adv_shotgun"), PowerUpKind.WEAPON_ADV_SHOTGUN)
+        self.assertEqual(shop_kind_from_hit("shop_weapon_adv_explosive"), PowerUpKind.WEAPON_ADV_EXPLOSIVE)
+        self.assertIsNone(shop_kind_from_hit("launch"))
 
 
 class HullReinforceShopTests(unittest.TestCase):

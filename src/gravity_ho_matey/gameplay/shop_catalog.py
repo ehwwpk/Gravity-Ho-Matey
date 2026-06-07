@@ -13,8 +13,8 @@ from gravity_ho_matey.gameplay.upgrade_config import (
     HULL_REINFORCE_MAX_PURCHASES,
     UPGRADE_MAX_STACKS,
 )
-from gravity_ho_matey.gameplay.weapon_config import WEAPON_DOCTRINE_PRICE
-from gravity_ho_matey.gameplay.weapon_kinds import is_weapon_powerup
+from gravity_ho_matey.gameplay.weapon_config import WEAPON_ADVANCED_PRICE, WEAPON_DOCTRINE_PRICE
+from gravity_ho_matey.gameplay.weapon_kinds import is_weapon_advanced_powerup, is_weapon_powerup
 
 if TYPE_CHECKING:
     from gravity_ho_matey.gameplay.campaign import CampaignState
@@ -115,8 +115,33 @@ DRONE_UPGRADE_CATALOG: tuple[ShopItem, ...] = (
     ),
 )
 
+WEAPON_ADVANCED_CATALOG: tuple[ShopItem, ...] = (
+    ShopItem(
+        PowerUpKind.WEAPON_ADV_LASER,
+        WEAPON_ADVANCED_PRICE,
+        POWERUP_HUD_TAGS[PowerUpKind.WEAPON_ADV_LASER],
+        POWERUP_LABELS[PowerUpKind.WEAPON_ADV_LASER],
+        max_stacks=1,
+    ),
+    ShopItem(
+        PowerUpKind.WEAPON_ADV_SHOTGUN,
+        WEAPON_ADVANCED_PRICE,
+        POWERUP_HUD_TAGS[PowerUpKind.WEAPON_ADV_SHOTGUN],
+        POWERUP_LABELS[PowerUpKind.WEAPON_ADV_SHOTGUN],
+        max_stacks=1,
+    ),
+    ShopItem(
+        PowerUpKind.WEAPON_ADV_EXPLOSIVE,
+        WEAPON_ADVANCED_PRICE,
+        POWERUP_HUD_TAGS[PowerUpKind.WEAPON_ADV_EXPLOSIVE],
+        POWERUP_LABELS[PowerUpKind.WEAPON_ADV_EXPLOSIVE],
+        max_stacks=1,
+    ),
+)
+
 _SHOP_BY_KIND = {
-    item.kind: item for item in (*WEAPON_DOCTRINE_CATALOG, *SHOP_CATALOG, *DRONE_UPGRADE_CATALOG)
+    item.kind: item
+    for item in (*WEAPON_DOCTRINE_CATALOG, *WEAPON_ADVANCED_CATALOG, *SHOP_CATALOG, *DRONE_UPGRADE_CATALOG)
 }
 
 
@@ -139,6 +164,16 @@ def shop_hit_id(kind: PowerUpKind) -> str:
     return f"shop_{kind.name.lower()}"
 
 
+def shop_kind_from_hit(hit: str) -> PowerUpKind | None:
+    if not hit.startswith("shop_"):
+        return None
+    suffix = hit.removeprefix("shop_").upper()
+    try:
+        return PowerUpKind[suffix]
+    except KeyError:
+        return None
+
+
 def shop_price_for(
     kind: PowerUpKind,
     *,
@@ -159,7 +194,7 @@ def shop_price_for(
         PowerUpKind.DRONE_REPAIR,
         PowerUpKind.DRONE_ARMOR,
         PowerUpKind.RAPID_FIRE,
-    ) or is_weapon_powerup(kind):
+    ) or is_weapon_powerup(kind) or is_weapon_advanced_powerup(kind):
         return item.base_price
     return item.base_price * (2**stacks)
 
@@ -172,6 +207,6 @@ def shop_at_max_stacks(kind: PowerUpKind, stacks: int) -> bool:
         return stacks >= HULL_REINFORCE_MAX_PURCHASES
     if kind is PowerUpKind.DRONE_ARMOR:
         return stacks >= 1
-    if is_weapon_powerup(kind):
+    if is_weapon_powerup(kind) or is_weapon_advanced_powerup(kind):
         return stacks >= 1
     return stacks >= item.max_stacks

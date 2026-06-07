@@ -66,9 +66,9 @@ class EndScene(Scene):
         host.set_scene(TitleScene())
 
     def _retry(self, host: SceneHost) -> None:
-        from gravity_ho_matey.scenes.game_flow import start_play
+        from gravity_ho_matey.scenes.game_flow import start_launch_countdown
 
-        host.set_scene(start_play(self.level_id, self.campaign))
+        host.set_scene(start_launch_countdown(self.level_id, self.campaign))
 
     def _next_chart(self, host: SceneHost) -> None:
         from gravity_ho_matey.scenes.game_flow import start_chart_briefing

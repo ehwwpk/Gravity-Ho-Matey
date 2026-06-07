@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-import math
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Beacon
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.beacon_viz import beacon_seed_from_pos, draw_beacon_play
 from gravity_ho_matey.render.camera import CHASE_BEACON_SCALE_FLOOR, CHASE_BEACON_VISUAL_BOOST
 from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
 from gravity_ho_matey.render.entity_viz import draw_gate_glyph
+from gravity_ho_matey.render.enemy_viz import draw_patrol_enemy_chase
 from gravity_ho_matey.render.lighting import LightRig
+from gravity_ho_matey.render.squid_viz import draw_squid_enemy_chase
 
 
 def draw_chase_beacon(
@@ -68,114 +70,53 @@ def draw_chase_enemy(
     canvas: tk.Canvas,
     pos: Vec2,
     *,
-    radius: float,
-    facing: float,
+    enemy,
+    camera,
+    ship_pos: Vec2,
+    ship_angle: float,
     scale: float,
+    rig: LightRig,
+    elapsed: float,
 ) -> None:
-    r = min(radius * scale, 28.0)
-    draw_ground_fog_glow(canvas, pos.x, pos.y + 4, r * 1.4, palette.CHASE_ENEMY_FOG[:2], pulse=0.0)
-    canvas.create_oval(pos.x - r, pos.y - r * 0.55, pos.x + r, pos.y + r * 0.35, fill=palette.ENEMY, outline=palette.ENEMY_EDGE, width=2)
-    spike = pos + Vec2.from_angle(facing) * (r + 4)
-    canvas.create_line(pos.x, pos.y, spike.x, spike.y, fill=palette.ENEMY_EDGE, width=2)
+    draw_patrol_enemy_chase(
+        canvas,
+        pos,
+        enemy,
+        camera=camera,
+        ship_pos=ship_pos,
+        ship_angle=ship_angle,
+        scale=scale,
+        rig=rig,
+        elapsed=elapsed,
+    )
 
 
 def draw_chase_squid(
     canvas: tk.Canvas,
     pos: Vec2,
     *,
-    radius: float,
-    tentacle_reach: float,
-    facing: float,
+    enemy: SquidEnemy,
     scale: float,
-    coiled: bool,
+    ship_world: Vec2,
+    ship_radius: float,
+    tip_screen: tuple[tuple[float, float], ...] | None,
+    rig: LightRig,
     elapsed: float,
-    ship_world: Vec2 | None = None,
-    tip_screen: tuple[tuple[float, float], ...] | None = None,
-    rig: LightRig | None = None,
 ) -> None:
-    r = min(radius * scale, 32.0)
-    reach_world = tentacle_reach * scale
-    pulse = 0.5 + 0.5 * math.sin(elapsed * 8.0 if coiled else elapsed * 4.0)
-    if coiled:
-        draw_ground_fog_glow(
-            canvas,
-            pos.x,
-            pos.y + 4,
-            (r + reach_world * 0.35) * (1.35 + pulse * 0.2),
-            palette.SQUID_WRAP_GLOW,
-            pulse=elapsed * 5.5,
-        )
-    else:
-        draw_ground_fog_glow(canvas, pos.x, pos.y + 4, r * 1.35, palette.SQUID_WRAP_GLOW[:2], pulse=0.0)
-
-    if tip_screen:
-        width = 3 if coiled else 2
-        for tx, ty in tip_screen:
-            mx = pos.x + (tx - pos.x) * 0.48
-            my = pos.y + (ty - pos.y) * 0.48
-            canvas.create_line(pos.x, pos.y, mx, my, tx, ty, fill=palette.SQUID_TENTACLE, width=width, smooth=True)
-    else:
-        tentacles = 8
-        for i in range(tentacles):
-            base_angle = facing + (math.tau * i / tentacles)
-            reach = reach_world * (1.55 + pulse * 0.22 if coiled else 1.18)
-            if coiled and ship_world is not None:
-                to_ship = ship_world - pos
-                if to_ship.length_sq() > 1e-6:
-                    coil_dir = to_ship.normalized()
-                    blend = 0.72
-                    dir_vec = (Vec2.from_angle(base_angle) * (1.0 - blend) + coil_dir * blend).normalized()
-                    tip = pos + dir_vec * reach
-                    mid = pos + dir_vec * (reach * 0.52)
-                else:
-                    tip = pos + Vec2.from_angle(base_angle) * reach
-                    mid = pos + Vec2.from_angle(base_angle) * (reach * 0.52)
-            else:
-                sway = math.sin(elapsed * 6.0 + i * 0.9) * (10.0 if coiled else 5.0)
-                tip = pos + Vec2.from_angle(base_angle) * reach + Vec2(sway, sway * 0.35)
-                mid = pos + Vec2.from_angle(base_angle) * (reach * 0.5) + Vec2(sway * 0.4, 0.0)
-            canvas.create_line(
-                pos.x,
-                pos.y,
-                mid.x,
-                mid.y,
-                tip.x,
-                tip.y,
-                fill=palette.SQUID_TENTACLE,
-                width=3 if coiled else 2,
-                smooth=True,
-            )
-    from gravity_ho_matey.render.squid_viz import draw_squid_body, draw_squid_body_lit
-
-    if rig is not None:
-        draw_squid_body_lit(canvas, pos.x, pos.y, radius=radius, scale=scale, rig=rig, kind="squid")
-    else:
-        r = min(radius * scale, 32.0)
-        draw_squid_body(canvas, pos.x, pos.y, radius=radius, scale=scale)
-        if coiled and ship_world is not None:
-            canvas.create_oval(
-                pos.x - r * 0.15,
-                pos.y - r * 0.12,
-                pos.x + r * 0.15,
-                pos.y + r * 0.1,
-                fill=palette.SQUID_TENTACLE,
-                outline="",
-            )
-        return
-    r = min(radius * scale, 32.0)
-    if coiled and ship_world is not None:
-        canvas.create_oval(
-            pos.x - r * 0.15,
-            pos.y - r * 0.12,
-            pos.x + r * 0.15,
-            pos.y + r * 0.1,
-            fill=palette.SQUID_TENTACLE,
-            outline="",
-        )
+    draw_squid_enemy_chase(
+        canvas,
+        pos,
+        enemy,
+        scale=scale,
+        ship_world=ship_world,
+        ship_radius=ship_radius,
+        tip_screen=tip_screen,
+        rig=rig,
+        elapsed=elapsed,
+    )
 
 
 def draw_chase_jewel(canvas: tk.Canvas, pos: Vec2, *, elapsed: float = 0.0) -> None:
-    from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
     from gravity_ho_matey.render.jewel_viz import draw_jewel_orb
 
     draw_ground_fog_glow(canvas, pos.x, pos.y + 4, 12, (palette.JEWEL_GLOW, palette.JEWEL_CORE), pulse=elapsed * 4.0)

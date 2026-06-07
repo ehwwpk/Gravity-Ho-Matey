@@ -7,6 +7,7 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+from gravity_ho_matey.render.asteroid_viz import ORBITAL_ASTEROID_THREAT_RADIUS
 
 
 def draw_edge_hints(
@@ -24,27 +25,163 @@ def draw_edge_hints(
     margin = 14.0
     ship = world.ship.pos
     ship_angle = world.ship.angle
+    wrap_w = float(world.config.width) if world.config.surface_wrap else 0.0
 
     hints: list[tuple[float, str, str]] = []
     for beacon in world.beacons:
         if beacon.collected:
             continue
-        _maybe_hint(hints, camera, beacon.pos, ship, ship_angle, "◈", palette.BEACON, vw, vh, play_top)
+        _maybe_hint(
+            hints,
+            camera,
+            beacon.pos,
+            ship,
+            ship_angle,
+            "◈",
+            palette.BEACON,
+            vw,
+            vh,
+            play_top,
+            wrap_width=wrap_w,
+        )
 
     if world.finish_unlocked:
         gate = world.finish_gate.rect
         gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         color = palette.GATE_OPEN
         tag = "GO"
-        _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top)
+        _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top, wrap_width=wrap_w)
     elif world.config.level_theme == "siege":
         gate = world.finish_gate.rect
         gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         _maybe_hint(hints, camera, gc, ship, ship_angle, "GT", palette.GATE_LOCKED, vw, vh, play_top)
+    elif world.config.level_theme == "rift":
+        gate = world.finish_gate.rect
+        gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
+        tag = "XT" if world.finish_unlocked else "PD"
+        color = palette.GATE_OPEN if world.finish_unlocked else palette.RIFT_PAD_COOLDOWN
+        _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top)
+    elif world.config.brood_moon_mission and world.brood_moon is not None:
+        from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
+
+        bm = world.brood_moon
+        if bm.phase is BroodPhase.ORBITAL and bm.layout is not None:
+            from gravity_ho_matey.gameplay.brood_moon_mission import landing_limb_hint
+
+            _maybe_hint(
+                hints,
+                camera,
+                landing_limb_hint(ship, bm.layout),
+                ship,
+                ship_angle,
+                "LD",
+                palette.BROOD_MOON_HUD_ACCENT,
+                vw,
+                vh,
+                play_top,
+            )
+            nearest_rock = _nearest_closing_asteroid(world, ship, ORBITAL_ASTEROID_THREAT_RADIUS)
+            if nearest_rock is not None:
+                _maybe_hint(
+                    hints,
+                    camera,
+                    nearest_rock,
+                    ship,
+                    ship_angle,
+                    "RK",
+                    palette.HOLO_ASTEROID_EDGE,
+                    vw,
+                    vh,
+                    play_top,
+                )
+        elif bm.phase is BroodPhase.ORBITAL_RETURN and not world.finish_unlocked:
+            gate = world.finish_gate.rect
+            gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
+            _maybe_hint(hints, camera, gc, ship, ship_angle, "DK", palette.GATE_LOCKED, vw, vh, play_top)
+        elif bm.on_surface:
+            from gravity_ho_matey.gameplay.friendly_fighter_config import PATROL_ENGAGE_RANGE
+            from gravity_ho_matey.gameplay.planetside_flight import PLANETSIDE_MAX_EDGE_HINTS, wrap_shortest_delta
+
+            alive_pods = [pod for pod in world.egg_pods if pod.alive]
+            if alive_pods:
+                ranked = sorted(
+                    alive_pods,
+                    key=lambda pod: wrap_shortest_delta(ship, pod.pos, wrap_w).length_sq(),
+                )
+                for pod in ranked[:PLANETSIDE_MAX_EDGE_HINTS]:
+                    _maybe_hint(
+                        hints,
+                        camera,
+                        pod.pos,
+                        ship,
+                        ship_angle,
+                        "EG",
+                        palette.SQUID_CORE,
+                        vw,
+                        vh,
+                        play_top,
+                        wrap_width=wrap_w,
+                    )
+
+            boss = world.mega_squid
+            if boss is not None and boss.alive:
+                _maybe_hint(
+                    hints,
+                    camera,
+                    boss.pos,
+                    ship,
+                    ship_angle,
+                    "BM",
+                    palette.SQUID_TENTACLE,
+                    vw,
+                    vh,
+                    play_top,
+                    wrap_width=wrap_w,
+                )
+
+            for enemy in world.enemies:
+                if not enemy.alive:
+                    continue
+                engage = getattr(enemy, "engage_range", PATROL_ENGAGE_RANGE)
+                if (enemy.pos - ship).length() > engage + 40.0:
+                    continue
+                _maybe_hint(
+                    hints, camera, enemy.pos, ship, ship_angle,
+                    "EN", palette.HOSTILE_PROJECTILE, vw, vh, play_top,
+                    wrap_width=wrap_w,
+                )
+                break
+            for projectile in world.projectiles:
+                if not projectile.hostile:
+                    continue
+                if (projectile.pos - ship).length() > 520.0:
+                    continue
+                _maybe_hint(
+                    hints, camera, projectile.pos, ship, ship_angle,
+                    "BL", palette.CHASE_BOLT_HOSTILE_CORE, vw, vh, play_top,
+                    wrap_width=wrap_w,
+                )
+                break
 
     hints.sort(key=lambda item: item[0])
-    for angle, tag, color in hints[:4]:
+    for angle, tag, color in hints[:8]:
         _draw_rim_chevron(canvas, cx, cy, angle, tag, color, vw, vh, play_top, margin)
+
+
+def _nearest_closing_asteroid(world: GameWorld, ship_pos: Vec2, radius: float) -> Vec2 | None:
+    best: Vec2 | None = None
+    best_dist = radius + 1.0
+    ship_vel = world.ship.vel
+    for asteroid in world.asteroids:
+        rel = asteroid.pos - ship_pos
+        dist = rel.length()
+        if dist > radius + asteroid.approximate_radius():
+            continue
+        closing = rel.normalized().dot(ship_vel - asteroid.vel)
+        if closing > -8.0 and dist < best_dist:
+            best = asteroid.pos
+            best_dist = dist
+    return best
 
 
 def _maybe_hint(
@@ -60,8 +197,14 @@ def _maybe_hint(
     hud_top: float,
     *,
     margin: float = 14.0,
+    wrap_width: float = 0.0,
 ) -> None:
-    p = camera.world_to_screen(world_pos, ship_pos, ship_angle)
+    hint_pos = world_pos
+    if wrap_width > 0.0:
+        from gravity_ho_matey.gameplay.planetside_flight import hint_world_pos
+
+        hint_pos = hint_world_pos(ship_pos, world_pos, wrap_width)
+    p = camera.world_to_screen(hint_pos, ship_pos, ship_angle)
     sx = p.x
     sy = p.y + (0.0 if camera.mode is CameraMode.CHASE else hud_top)
     if margin <= sx <= vw - margin and hud_top + margin <= sy <= vh - margin:

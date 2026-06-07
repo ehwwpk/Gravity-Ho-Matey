@@ -16,6 +16,9 @@ class ExplosionKind(Enum):
     ASTEROID_DESTROYED = auto()
     ASTEROID_BREAKUP = auto()
     JEWEL_COLLECT = auto()
+    NOVA_BLAST = auto()
+    LASER_PIERCE = auto()
+    REACTOR_BURST = auto()
 
 
 @dataclass(slots=True)
@@ -39,6 +42,7 @@ class Explosion:
     ring_age: float = 0.0
     flash_life: float = 0.12
     flash_age: float = 0.0
+    aoe_radius_world: float = 0.0
 
     @property
     def alive(self) -> bool:
@@ -59,10 +63,19 @@ _PRESETS: dict[ExplosionKind, tuple[int, float, float]] = {
     ExplosionKind.ASTEROID_DESTROYED: (14, 20.0, 0.2),
     ExplosionKind.ASTEROID_BREAKUP: (22, 38.0, 0.3),
     ExplosionKind.JEWEL_COLLECT: (18, 22.0, 0.32),
+    ExplosionKind.NOVA_BLAST: (36, 48.0, 0.42),
+    ExplosionKind.LASER_PIERCE: (8, 18.0, 0.14),
+    ExplosionKind.REACTOR_BURST: (16, 26.0, 0.24),
 }
 
 
-def spawn_explosion(kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> Explosion:
+def spawn_explosion(
+    kind: ExplosionKind,
+    pos: Vec2,
+    *,
+    scale: float = 1.0,
+    aoe_radius_world: float = 0.0,
+) -> Explosion:
     count, ring_max, ring_life = _PRESETS[kind]
     base_scale = {
         ExplosionKind.PROJECTILE_IMPACT: 0.55,
@@ -72,6 +85,9 @@ def spawn_explosion(kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> Ex
         ExplosionKind.ASTEROID_DESTROYED: 0.75,
         ExplosionKind.ASTEROID_BREAKUP: 1.05,
         ExplosionKind.JEWEL_COLLECT: 0.85,
+        ExplosionKind.NOVA_BLAST: 1.25,
+        ExplosionKind.LASER_PIERCE: 0.65,
+        ExplosionKind.REACTOR_BURST: 0.92,
     }[kind]
     scale = max(0.35, min(1.8, scale * base_scale))
 
@@ -81,12 +97,66 @@ def spawn_explosion(kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> Ex
         ring_max=ring_max * scale,
         ring_life=ring_life,
         flash_life=0.06 + ring_life * (0.25 if kind is ExplosionKind.JEWEL_COLLECT else 0.35),
+        aoe_radius_world=aoe_radius_world,
     )
     if kind is ExplosionKind.JEWEL_COLLECT:
         explosion.particles = _build_jewel_collect_particles(pos, max(6, int(count * scale)), scale)
+    elif kind is ExplosionKind.NOVA_BLAST:
+        explosion.particles = _build_nova_particles(pos, max(10, int(count * scale)), scale)
+    elif kind is ExplosionKind.LASER_PIERCE:
+        explosion.particles = _build_laser_pierce_particles(pos, max(4, int(count * scale)), scale)
     else:
         explosion.particles = _build_particles(pos, max(4, int(count * scale)), scale)
     return explosion
+
+
+def _build_nova_particles(origin: Vec2, count: int, scale: float) -> list[ExplosionParticle]:
+    particles: list[ExplosionParticle] = []
+    for i in range(count):
+        angle = random.uniform(0.0, math.tau)
+        speed = random.uniform(100.0, 320.0) * scale
+        if i % 4 == 0:
+            particle_type = "spark"
+            max_life = random.uniform(0.14, 0.32)
+            size = random.uniform(2.5, 5.5) * scale
+            speed *= 1.35
+        else:
+            particle_type = "ember"
+            max_life = random.uniform(0.22, 0.52)
+            size = random.uniform(4.0, 9.0) * scale
+        vel = Vec2(math.cos(angle) * speed, math.sin(angle) * speed)
+        particles.append(
+            ExplosionParticle(
+                pos=Vec2(origin.x, origin.y),
+                vel=vel,
+                life=max_life,
+                max_life=max_life,
+                size=size,
+                particle_type=particle_type,
+            )
+        )
+    return particles
+
+
+def _build_laser_pierce_particles(origin: Vec2, count: int, scale: float) -> list[ExplosionParticle]:
+    particles: list[ExplosionParticle] = []
+    for i in range(count):
+        angle = random.uniform(-0.4, 0.4)
+        speed = random.uniform(120.0, 280.0) * scale
+        max_life = random.uniform(0.08, 0.18)
+        size = random.uniform(1.8, 3.5) * scale
+        vel = Vec2(math.cos(angle) * speed, math.sin(angle) * speed * 0.35)
+        particles.append(
+            ExplosionParticle(
+                pos=Vec2(origin.x, origin.y),
+                vel=vel,
+                life=max_life,
+                max_life=max_life,
+                size=size,
+                particle_type="spark",
+            )
+        )
+    return particles
 
 
 def _build_jewel_collect_particles(origin: Vec2, count: int, scale: float) -> list[ExplosionParticle]:
@@ -177,8 +247,8 @@ def update_explosion(explosion: Explosion, dt: float) -> None:
 class ExplosionSystem:
     active: list[Explosion] = field(default_factory=list)
 
-    def spawn(self, kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> None:
-        self.active.append(spawn_explosion(kind, pos, scale=scale))
+    def spawn(self, kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0, aoe_radius_world: float = 0.0) -> None:
+        self.active.append(spawn_explosion(kind, pos, scale=scale, aoe_radius_world=aoe_radius_world))
 
     def update(self, dt: float) -> None:
         for explosion in self.active:

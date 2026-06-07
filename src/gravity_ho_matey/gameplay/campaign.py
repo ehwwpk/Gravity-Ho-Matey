@@ -23,7 +23,8 @@ from gravity_ho_matey.gameplay.upgrade_config import (
     HULL_REINFORCE_MAX_PURCHASES,
     RUBBER_HULL_BOUNCE_CHARGES,
 )
-from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack, is_weapon_powerup, weapon_track_from_kind
+from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack, is_weapon_advanced_powerup, is_weapon_powerup, weapon_track_from_kind
+from gravity_ho_matey.settings import DEV_START_JEWELS
 
 MAX_LIVES = 3
 CHUNKS_PER_LIFE = 3
@@ -42,10 +43,11 @@ class CampaignState:
     drone_wingman_hp: int = 0
     drone_wingman_pending: bool = False
     weapon_track: WeaponTrack | None = None
+    weapon_advanced: bool = False
 
     @classmethod
     def new(cls) -> CampaignState:
-        return cls(lives=MAX_LIVES, hull_chunks=CHUNKS_PER_LIFE, jewels=0)
+        return cls(lives=MAX_LIVES, hull_chunks=CHUNKS_PER_LIFE, jewels=DEV_START_JEWELS)
 
     @property
     def has_drone_contract(self) -> bool:
@@ -96,6 +98,13 @@ class CampaignState:
             return self.has_drone_contract and not self.drone_armored
         if is_weapon_powerup(kind):
             return self.weapon_track is None
+        if is_weapon_advanced_powerup(kind):
+            track = weapon_track_from_kind(kind)
+            return (
+                track is not None
+                and self.weapon_track is track
+                and not self.weapon_advanced
+            )
         stack_count = (
             self.hull_reinforce_purchases
             if kind is PowerUpKind.HULL_REINFORCE
@@ -135,6 +144,11 @@ class CampaignState:
             track = weapon_track_from_kind(kind)
             assert track is not None
             self.weapon_track = track
+        elif is_weapon_advanced_powerup(kind):
+            track = weapon_track_from_kind(kind)
+            assert track is not None
+            self.weapon_track = track
+            self.weapon_advanced = True
         else:
             self.powerup_stacks[kind] += 1
             if ship is not None:

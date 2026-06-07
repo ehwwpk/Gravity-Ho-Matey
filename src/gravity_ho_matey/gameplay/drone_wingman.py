@@ -108,6 +108,7 @@ class DroneWingman:
         *,
         player_pos: Vec2,
         asteroids: list[Asteroid] | None = None,
+        allow_boss: bool = True,
     ) -> ThreatTarget | None:
         """Prioritize imminent rocks, then hostiles threatening the player."""
         best: ThreatTarget | None = None
@@ -123,7 +124,7 @@ class DroneWingman:
                     best = target
                     best_score = score
 
-        if boss is not None and boss.alive:
+        if allow_boss and boss is not None and boss.alive:
             player_dist = (boss.pos - player_pos).length() - boss.radius * 0.35
             if player_dist <= self.engage_range + 120.0:
                 score = player_dist * 0.68 - 80.0

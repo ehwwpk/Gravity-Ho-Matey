@@ -2,10 +2,125 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
+import tkinter.font as tkfont
 from dataclasses import dataclass, field
 
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
+
+_FONT_CACHE: dict[tuple[str, int, str], tkfont.Font] = {}
+_HIDDEN_ROOT: tk.Misc | None = None
+
+
+def _hidden_root() -> tk.Misc | None:
+    global _HIDDEN_ROOT
+    if _HIDDEN_ROOT is not None:
+        try:
+            if _HIDDEN_ROOT.winfo_exists():
+                return _HIDDEN_ROOT
+        except tk.TclError:
+            pass
+        _HIDDEN_ROOT = None
+        _FONT_CACHE.clear()
+    try:
+        _HIDDEN_ROOT = tk.Tk()
+        _HIDDEN_ROOT.withdraw()
+    except tk.TclError:
+        return None
+    return _HIDDEN_ROOT
+
+
+def _estimate_char_width(font: tuple[str, int] | tuple[str, int, str]) -> float:
+    size = font[1] if len(font) > 1 else 10
+    return max(5.5, size * 0.58)
+
+
+def _font_for(spec: tuple[str, int] | tuple[str, int, str]) -> tkfont.Font | None:
+    family = spec[0]
+    size = spec[1]
+    weight = "bold" if len(spec) > 2 and spec[2] == "bold" else "normal"
+    key = (family, size, weight)
+    cached = _FONT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    root = _hidden_root()
+    if root is None:
+        return None
+    cached = tkfont.Font(root=root, family=family, size=size, weight=weight)
+    _FONT_CACHE[key] = cached
+    return cached
+
+
+def measure_text(text: str, font: tuple[str, int] | tuple[str, int, str]) -> float:
+    f = _font_for(font)
+    if f is not None:
+        try:
+            return float(f.measure(text))
+        except tk.TclError:
+            _FONT_CACHE.clear()
+    return len(text) * _estimate_char_width(font)
+
+
+def fit_text_to_width(text: str, max_width: float, font: tuple[str, int] | tuple[str, int, str]) -> str:
+    """Trim with ellipsis using real font metrics when Tk is available."""
+    if max_width <= 0 or not text:
+        return text
+    f = _font_for(font)
+    if f is None:
+        max_chars = max(4, int(max_width / _estimate_char_width(font)))
+        return truncate(text, max_chars)
+    try:
+        if f.measure(text) <= max_width:
+            return text
+        ell = "…"
+        if f.measure(ell) > max_width:
+            return ell
+        lo, hi = 0, len(text)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            candidate = text[:mid] + (ell if mid < len(text) else "")
+            if f.measure(candidate) <= max_width:
+                lo = mid
+            else:
+                hi = mid - 1
+        if lo >= len(text):
+            return text[:lo]
+        return text[:lo] + ell
+    except tk.TclError:
+        _FONT_CACHE.clear()
+        max_chars = max(4, int(max_width / _estimate_char_width(font)))
+        return truncate(text, max_chars)
+
+
+def wrap_text_lines(
+    text: str,
+    max_width: float,
+    font: tuple[str, int] | tuple[str, int, str],
+    *,
+    max_lines: int = 4,
+) -> list[str]:
+    """Word-wrap to pixel width."""
+    if max_width <= 0 or not text.strip():
+        return [""]
+    words = text.split()
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if measure_text(candidate, font) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+            if len(lines) >= max_lines:
+                break
+    if len(lines) < max_lines:
+        lines.append(fit_text_to_width(current, max_width, font))
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+    if len(lines) == max_lines and len(words) > sum(len(line.split()) for line in lines):
+        lines[-1] = fit_text_to_width(lines[-1], max_width, font)
+    return lines
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,13 +174,35 @@ def draw_fitted_text(
     anchor: str = "w",
     bold: bool = False,
 ) -> None:
-    """Single-line label clipped to pixel width via character estimate."""
+    """Single-line label clipped to pixel width via font metrics."""
     if max_width <= 0:
         return
-    size = font[1] if len(font) > 1 else 10
-    char_w = max(5.5, size * 0.58)
-    max_chars = max(4, int(max_width / char_w))
-    canvas.create_text(x, y, anchor=anchor, text=truncate(text, max_chars), fill=color, font=font)
+    if bold and len(font) == 2:
+        font = (font[0], font[1], "bold")
+    fitted = fit_text_to_width(text, max_width, font)
+    canvas.create_text(x, y, anchor=anchor, text=fitted, fill=color, font=font)
+
+
+def draw_wrapped_text(
+    canvas: tk.Canvas,
+    x: float,
+    y: float,
+    text: str,
+    *,
+    max_width: float,
+    line_height: float,
+    color: str,
+    font: tuple[str, int] | tuple[str, int, str],
+    max_lines: int = 3,
+    anchor: str = "nw",
+) -> float:
+    """Draw wrapped lines; return total height used."""
+    lines = wrap_text_lines(text, max_width, font, max_lines=max_lines)
+    cy = y
+    for line in lines:
+        canvas.create_text(x, cy, anchor=anchor, text=line, fill=color, font=font)
+        cy += line_height
+    return cy - y
 
 
 def draw_menu_button(
@@ -92,7 +229,16 @@ def draw_menu_button(
     hp.draw_panel(canvas, x, y, w, h, frame=border, accent=accent, fill=fill)
     text_color = accent if active else dim
     font = hp.FONT_BODY_BOLD if selected or hover else hp.FONT_BODY
-    canvas.create_text(x + w / 2, y + h / 2, text=label, fill=text_color, font=font)
+    draw_fitted_text(
+        canvas,
+        x + w / 2,
+        y + h / 2,
+        label,
+        max_width=w - 8,
+        color=text_color,
+        font=font,
+        anchor="center",
+    )
 
 
 def draw_level_row(

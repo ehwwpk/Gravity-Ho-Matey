@@ -8,13 +8,27 @@ from gravity_ho_matey.gameplay.upgrade_config import (
     RUBBER_HULL_BOUNCE_CHARGES,
 )
 from gravity_ho_matey.gameplay.weapon_kinds import (
+    WEAPON_TRACK_ADV_SHORT,
     WEAPON_TRACK_SHORT,
+    is_weapon_advanced_powerup,
     is_weapon_powerup,
+    weapon_advanced_kind_for_track,
+    weapon_kind_for_track,
     weapon_track_from_kind,
 )
 
 
 def shop_owned_status(campaign: CampaignState, kind: PowerUpKind) -> str:
+    if is_weapon_advanced_powerup(kind):
+        track = weapon_track_from_kind(kind)
+        if track is None:
+            return "Requires weapon doctrine"
+        if campaign.weapon_advanced and campaign.weapon_track is track:
+            return f"INSTALLED · {WEAPON_TRACK_ADV_SHORT[track]}"
+        if campaign.weapon_track is not track:
+            active = WEAPON_TRACK_SHORT[campaign.weapon_track] if campaign.weapon_track else "none"
+            return f"Requires {active} doctrine first"
+        return "Advanced tier for your weapon path"
     if is_weapon_powerup(kind):
         track = weapon_track_from_kind(kind)
         if campaign.weapon_track is track:
@@ -63,8 +77,61 @@ def shop_owned_status(campaign: CampaignState, kind: PowerUpKind) -> str:
     return "Not installed"
 
 
+def shop_card_hint(campaign: CampaignState, kind: PowerUpKind) -> str:
+    """One short status chip for skill-tree cards — full copy lives in the inspector."""
+    if is_weapon_advanced_powerup(kind):
+        track = weapon_track_from_kind(kind)
+        if campaign.weapon_advanced and campaign.weapon_track is track:
+            return "Installed"
+        if campaign.weapon_track is not track:
+            return "Locked"
+        return "Advanced tier"
+    if is_weapon_powerup(kind):
+        track = weapon_track_from_kind(kind)
+        if campaign.weapon_track is track:
+            return "Active doctrine"
+        if campaign.weapon_track is not None:
+            return "Locked"
+        return "Choose path"
+    if kind is PowerUpKind.RAPID_FIRE:
+        return "Installed" if campaign.powerup_stacks.get(PowerUpKind.RAPID_FIRE, 0) else "Fire-rate boost"
+    if kind is PowerUpKind.DRONE_WINGMAN:
+        if campaign.drone_wingman_pending:
+            return "Deploys next sector"
+        if campaign.drone_wingman_hp > 0:
+            return f"{campaign.drone_wingman_hp}/{campaign.drone_hits_max} HP"
+        return "Escort contract"
+    if kind is PowerUpKind.DRONE_REPAIR:
+        if not campaign.has_drone_contract:
+            return "Needs drone"
+        if campaign.drone_wingman_hp >= campaign.drone_hits_max and campaign.drone_wingman_hp > 0:
+            return "Full HP"
+        return "Restore escort"
+    if kind is PowerUpKind.DRONE_ARMOR:
+        return "Armored" if campaign.drone_armored else "+3 HP cap"
+    if kind is PowerUpKind.HULL_REINFORCE:
+        return f"{campaign.hull_reinforce_purchases}/{HULL_REINFORCE_MAX_PURCHASES} buys"
+    if kind is PowerUpKind.RUBBER_HULL:
+        if campaign.rubber_hull_charges > 0:
+            return f"{campaign.rubber_hull_charges} bounces"
+        return "Hull coating"
+    stacks = campaign.powerup_stacks.get(kind, 0)
+    item = shop_item_for(kind)
+    if item is not None and item.max_stacks is not None and stacks:
+        return f"Tier {stacks}/{item.max_stacks}"
+    if stacks:
+        return f"Owned ×{stacks}"
+    return ""
+
+
 def shop_button_label(campaign: CampaignState, kind: PowerUpKind) -> str:
     if not campaign.can_purchase(kind):
+        if is_weapon_advanced_powerup(kind):
+            track = weapon_track_from_kind(kind)
+            if campaign.weapon_advanced and campaign.weapon_track is track:
+                return "INSTALLED"
+            if campaign.weapon_track is not track:
+                return "LOCKED"
         if is_weapon_powerup(kind):
             if campaign.weapon_track is not None:
                 if weapon_track_from_kind(kind) is campaign.weapon_track:

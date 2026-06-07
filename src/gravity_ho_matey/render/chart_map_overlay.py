@@ -19,6 +19,7 @@ from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode
 from gravity_ho_matey.render.entity_viz import draw_gate_glyph
 from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button
+from gravity_ho_matey.render.shop_tree_view import ShopTreeView
 from gravity_ho_matey.render.world_draw import gravity_field_color
 
 # Layout aligned with SciFiHudOverlay command deck (960×640).
@@ -68,6 +69,8 @@ class ChartMapOverlay:
         elapsed: float = 0.0,
         hover_id: str | None = None,
         shop_open: bool = False,
+        shop_open_anim: float = 1.0,
+        shop_view: ShopTreeView | None = None,
     ) -> None:
         self.hits.clear()
         vw = world.config.viewport_width
@@ -76,6 +79,7 @@ class ChartMapOverlay:
         drift = world.config.level_theme == "drift"
         rift = world.config.level_theme == "rift"
         siege = world.config.level_theme == "siege"
+        brood = world.config.level_theme == "brood_moon"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
@@ -83,6 +87,8 @@ class ChartMapOverlay:
             if rift
             else palette.SIEGE_HUD_ACCENT
             if siege
+            else palette.BROOD_MOON_HUD_ACCENT
+            if brood
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM
@@ -94,10 +100,10 @@ class ChartMapOverlay:
             0,
             vw,
             vh,
-            fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.SIEGE_BG if siege else palette.BACKGROUND,
+            fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.SIEGE_BG if siege else palette.BROOD_MOON_BG if brood else palette.BACKGROUND,
             outline="",
         )
-        self._starfield(canvas, vw, vh, dense=solar or drift or rift or siege)
+        self._starfield(canvas, vw, vh, dense=solar or drift or rift or siege or brood)
         self._draw_command_bar(canvas, world, campaign, cleared_level_id, accent, dim, frame, bg)
         self._draw_status_banner(canvas, vw, cleared_level_id, upcoming_level_id, elapsed, accent, dim)
         body_top = _HEADER_H + _CLEARED_H + 8
@@ -141,8 +147,6 @@ class ChartMapOverlay:
             _SHOP_CTA_H,
             campaign,
             accent,
-            dim,
-            frame,
             hover_id,
             elapsed,
         )
@@ -156,6 +160,8 @@ class ChartMapOverlay:
                 hits=self.hits,
                 hover_id=hover_id,
                 elapsed=elapsed,
+                shop_open_anim=shop_open_anim,
+                shop_view=shop_view,
             )
 
     def _draw_command_bar(
@@ -359,15 +365,28 @@ class ChartMapOverlay:
                     ("", "4 black hole pockets"),
                     ("STATUS", "Ready to launch"),
                 ]
+            elif upcoming_level_id == "brood_moon":
+                rows = [
+                    ("OBJECTIVE", "Land on the Brood Moon"),
+                    ("", "Tag 3 surface beacons"),
+                    ("", "Rupture 8 egg pods"),
+                    ("", "Circumnav seal · quarantine dock"),
+                    ("OPTIONAL", "Brood-Mother hunt · jewels"),
+                    ("CONTROLS", "Hold E to land / ascend"),
+                    ("HAZARDS", "Squid nursery · alarm pods"),
+                    ("", "Boss locks liftoff nearby"),
+                    ("STATUS", "Ready to launch"),
+                ]
             elif upcoming_level_id == "rift":
                 rows = [
-                    ("OBJECTIVE", "Race boost braids north"),
-                    ("", "Kill Brood-Mother"),
-                    ("", "Portal opens on kill"),
-                    ("ALLIES", "2 wing escorts"),
-                    ("", "Cover fire · not ace pilots"),
-                    ("HAZARDS", "Void pockets off-lane"),
-                    ("", "Turbo pads · road squids"),
+                    ("OBJECTIVE", "Hold the relay station"),
+                    ("", "Survive 3 timed waves"),
+                    ("", "Kill Brood-Mother + swarm"),
+                    ("EXIT", "RTB to south extract pad"),
+                    ("ALLIES", "Station spawn bay"),
+                    ("", "Fighters drip from relay"),
+                    ("HAZARDS", "3 titan black holes"),
+                    ("", "Patrol + squid assault"),
                     ("STATUS", "Ready to launch"),
                 ]
             elif upcoming_level_id == "drift":
@@ -520,38 +539,20 @@ class ChartMapOverlay:
         h: float,
         campaign: CampaignState,
         accent: str,
-        dim: str,
-        frame: str,
         hover_id: str | None,
         elapsed: float,
     ) -> None:
-        x = _MARGIN
-        w = vw - 2 * _MARGIN
-        pulse = 0.72 + 0.28 * math.sin(elapsed * 3.2)
-        border = palette.JEWEL_CORE if hover_id == "shop_open" else accent
-        fill = "#122838" if hover_id == "shop_open" else "#0e2030"
-        canvas.create_rectangle(x, y, x + w, y + h, fill=fill, outline=border, width=2 if pulse > 0.88 else 1)
-        canvas.create_line(x + 6, y + 2, x + 36, y + 2, fill=palette.JEWEL_CORE if pulse > 0.8 else accent)
-        canvas.create_line(x + w - 36, y + h - 2, x + w - 6, y + h - 2, fill=palette.JEWEL_CORE if pulse > 0.8 else accent)
-        self.hits.add("shop_open", x, y, w, h)
-        label = f"◈  OPEN HOLO BAZAAR  ·  ★ {campaign.jewels} TREASURY  ·  CLICK TO TRADE FITTINGS  ◈"
-        draw_fitted_text(
+        self._shop.draw_bazaar_cta(
             canvas,
-            x + w / 2,
-            y + h / 2 - 1,
-            label,
-            max_width=w - 24,
-            color=palette.JEWEL_CORE if hover_id == "shop_open" else accent,
-            font=("Courier New", 11, "bold"),
-            anchor="center",
-        )
-        canvas.create_text(
-            x + w - 12,
-            y + h / 2,
-            anchor="e",
-            text="▶",
-            fill=border,
-            font=hp.FONT_BODY_BOLD,
+            x=_MARGIN,
+            y=y,
+            w=vw - 2 * _MARGIN,
+            h=h,
+            campaign=campaign,
+            hits=self.hits,
+            accent=accent,
+            hover_id=hover_id,
+            elapsed=elapsed,
         )
 
     def _draw_side_intel(
@@ -588,7 +589,11 @@ class ChartMapOverlay:
         if world.allies:
             alive_wings = sum(1 for a in world.allies if a.alive)
             intel_rows.append(("ALLIES", f"{alive_wings}/{len(world.allies)}"))
-        if world.space_station is not None and world.space_station.alive:
+        if world.friendly_stations:
+            for station in world.friendly_stations:
+                if station.alive:
+                    intel_rows.append((f"RELAY {station.station_label}", f"{station.hits_remaining} HP"))
+        elif world.space_station is not None and world.space_station.alive:
             intel_rows.append(("STATION", f"{world.space_station.hits_remaining} HP"))
         intel_rows.extend(
             [
@@ -671,15 +676,6 @@ class ChartMapOverlay:
         transform = self._map_transform(world, inner_x, inner_y, inner_w, inner_h)
         self._draw_map_field(canvas, field, transform)
         self._draw_map_entities(canvas, world, transform, dim, elapsed)
-        if world.membrane_layout is not None:
-            from gravity_ho_matey.render.membrane_viz import draw_membrane_holo_ribbons
-
-            def to_screen(pos):
-                sx = transform.origin_x + pos.x * transform.scale
-                sy = transform.origin_y - pos.y * transform.scale
-                return sx, sy
-
-            draw_membrane_holo_ribbons(canvas, world.membrane_layout, to_screen=to_screen, accent=accent)
         if transform.strip_window:
             self._draw_strip_window_chrome(canvas, world, transform, accent, dim)
         hp.draw_scanlines(canvas, inner_x, inner_y, inner_w, inner_h)
@@ -769,6 +765,7 @@ class ChartMapOverlay:
         from gravity_ho_matey.render.asteroid_viz import draw_map_asteroid_glyph
         from gravity_ho_matey.render.beacon_viz import beacon_seed_from_pos, draw_beacon_play
         from gravity_ho_matey.render.lighting import LightRig
+        from gravity_ho_matey.render.station_viz import draw_map_station_glyph
 
         map_rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=CameraMode.TACTICAL)
 
@@ -797,6 +794,23 @@ class ChartMapOverlay:
             else:
                 color = palette.WELL
             canvas.create_oval(mx - rr, my - rr, mx + rr, my + rr, outline=color, width=2)
+            if (
+                world.config.level_theme == "brood_moon"
+                and well.kind == "planet"
+                and world.brood_moon is not None
+                and world.brood_moon.layout is not None
+            ):
+                planet = world.brood_moon.layout.planet
+                inner_rr = max(3.0, planet.landing_band_inner * t.scale * 0.32)
+                outer_rr = max(4.0, planet.landing_band_outer * t.scale * 0.32)
+                canvas.create_oval(
+                    mx - inner_rr, my - inner_rr, mx + inner_rr, my + inner_rr,
+                    outline=palette.BROOD_MOON_HUD_ACCENT, width=1, dash=(3, 4),
+                )
+                canvas.create_oval(
+                    mx - outer_rr, my - outer_rr, mx + outer_rr, my + outer_rr,
+                    outline=palette.BROOD_MOON_VEIN, width=1, dash=(4, 3),
+                )
             if well.label and rr >= 6:
                 canvas.create_text(mx, my - rr - 6, text=well.label, fill=dim if well.kind != "planet" else palette.PLANET_LABEL, font=self.FONT_SMALL)
 
@@ -832,6 +846,44 @@ class ChartMapOverlay:
                 scale=glyph_scale,
             )
 
+        for station in world.friendly_stations:
+            if not station.alive:
+                continue
+            hit = self._world_to_map(station.pos, t)
+            if hit is None:
+                continue
+            draw_map_station_glyph(
+                canvas,
+                Vec2(hit[0], hit[1]),
+                station,
+                scale=max(0.22, min(0.55, glyph_scale * 0.55)),
+                rig=map_rig,
+            )
+        if world.space_station is not None and world.space_station.alive:
+            hit = self._world_to_map(world.space_station.pos, t)
+            if hit is not None:
+                draw_map_station_glyph(
+                    canvas,
+                    Vec2(hit[0], hit[1]),
+                    world.space_station,
+                    scale=max(0.22, min(0.55, glyph_scale * 0.55)),
+                    rig=map_rig,
+                )
+        if world.mega_squid is not None and world.mega_squid.alive:
+            hit = self._world_to_map(world.mega_squid.pos, t)
+            if hit is not None:
+                mx, my = hit
+                rr = max(7.0, world.mega_squid.radius * t.scale * 0.42)
+                canvas.create_oval(
+                    mx - rr,
+                    my - rr,
+                    mx + rr,
+                    my + rr,
+                    outline=palette.SQUID_CORE,
+                    width=2,
+                )
+                canvas.create_text(mx, my - rr - 6, text="BOSS", fill=palette.SQUID_CORE, font=self.FONT_SMALL)
+
         for enemy in world.enemies:
             if not enemy.alive:
                 continue
@@ -841,14 +893,32 @@ class ChartMapOverlay:
             mx, my = hit
             r = max(4.0, enemy.radius * t.scale * 0.35)
             if enemy.kind is EnemyKind.SQUID:
-                for i in range(4):
-                    angle = enemy.facing_angle + (6.28318 * i / 4)
-                    tx = mx + math.cos(angle) * r * 1.6
-                    ty = my + math.sin(angle) * r * 1.6
-                    canvas.create_line(mx, my, tx, ty, fill=palette.SQUID_TENTACLE, width=1)
-                canvas.create_oval(mx - r, my - r, mx + r, my + r, fill=palette.SQUID_BODY, outline=palette.SQUID_CORE, width=1)
+                from gravity_ho_matey.render.squid_viz import draw_squid_map_glyph
+
+                draw_squid_map_glyph(canvas, mx, my, radius=r, facing=enemy.facing_angle)
             else:
-                canvas.create_oval(mx - r, my - r, mx + r, my + r, fill=palette.ENEMY, outline=palette.ENEMY_EDGE, width=1)
+                from gravity_ho_matey.render.enemy_viz import draw_patrol_enemy_map_glyph
+
+                draw_patrol_enemy_map_glyph(canvas, mx, my, radius=r, facing=enemy.facing_angle)
+
+        if world.egg_pods:
+            from gravity_ho_matey.render.egg_pod_viz import draw_egg_pod_map_glyph
+
+            for pod in world.egg_pods:
+                if not pod.alive:
+                    continue
+                hit = self._world_to_map(pod.pos, t)
+                if hit is None:
+                    continue
+                mx, my = hit
+                draw_egg_pod_map_glyph(
+                    canvas,
+                    mx,
+                    my,
+                    radius=max(5.0, pod.radius * t.scale * 0.38),
+                    alarm=pod.alarm,
+                    elapsed=elapsed,
+                )
 
         spawn = self._world_to_map(world.ship.pos, t)
         if spawn is not None:

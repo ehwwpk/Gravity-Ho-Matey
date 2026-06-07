@@ -48,3 +48,8 @@ def jewel_count_for_boss(anchor: Vec2, rng: random.Random | None = None) -> int:
 def jewel_count_for_beacon(pos: Vec2, rng: random.Random | None = None) -> int:
     roll = rng or rng_at(pos)
     return roll.randint(BEACON_JEWEL_MIN, BEACON_JEWEL_MAX)
+
+
+def jewel_count_for_egg_pod(pos: Vec2, rng: random.Random | None = None) -> int:
+    roll = rng or rng_at(pos)
+    return 1 if roll.random() < 0.66 else 0

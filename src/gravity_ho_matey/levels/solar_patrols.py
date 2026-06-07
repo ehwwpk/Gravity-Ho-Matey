@@ -15,7 +15,6 @@ def solar_patrol_enemies(strip_height: float) -> list[PatrolEnemy]:
             can_shoot=True,
             fire_interval=3.2,
             fire_cooldown=0.6,
-            engage_range=460.0,
         ),
         PatrolEnemy(
             waypoints=(Vec2(845, mid - 120), Vec2(845, mid + 80), Vec2(770, mid + 80), Vec2(770, mid - 120)),

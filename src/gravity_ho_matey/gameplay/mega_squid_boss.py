@@ -28,6 +28,8 @@ class MegaSquidBoss:
     wobble: float = 0.0
     spawn_timer: float = 0.0
     pod_timer: float = 0.0
+    approach_gain: float = 1.8
+    max_cruise: float = 62.0
     director: SpawnDirector = field(default_factory=SpawnDirector)
 
     @property
@@ -41,6 +43,7 @@ class MegaSquidBoss:
         *,
         gravity_scale: float,
         drag: float,
+        well_gravity_scale: float = 0.35,
     ) -> None:
         if not self.alive:
             return
@@ -50,10 +53,10 @@ class MegaSquidBoss:
             math.sin(self.wobble * 0.28) * 36.0,
         )
         target = self.anchor + orbit
-        pull = (target - self.pos) * 1.8
-        accel = gravity_acceleration_at(self.pos, wells) * gravity_scale * 0.35 + pull
+        pull = (target - self.pos) * self.approach_gain
+        accel = gravity_acceleration_at(self.pos, wells) * gravity_scale * well_gravity_scale + pull
         self.vel = (self.vel + accel * dt) * drag
-        self.vel = self.vel.clamped_length(62.0)
+        self.vel = self.vel.clamped_length(self.max_cruise)
         self.pos = self.pos + self.vel * dt
         if self.vel.length_sq() > 4.0:
             self.facing_angle = math.atan2(self.vel.y, self.vel.x)
@@ -61,7 +64,7 @@ class MegaSquidBoss:
     def tick_spawns(
         self,
         dt: float,
-        ship_pos: Vec2,
+        prey_pos: Vec2,
         alive_squids: int,
     ) -> tuple[SquidEnemy | None, SquidPod | None]:
         if not self.alive:
@@ -87,7 +90,7 @@ class MegaSquidBoss:
             )
         if self.pod_timer >= pod_interval and hp <= 11:
             self.pod_timer = 0.0
-            aim = ship_pos + (ship_pos - self.pos).normalized() * 40.0
+            aim = prey_pos + (prey_pos - self.pos).normalized() * 40.0
             direction = (aim - self.pos).normalized()
             speed = 400.0 if hp > 5 else 460.0
             pod_out = SquidPod(pos=Vec2(self.pos.x, self.pos.y), vel=direction * speed, target=aim)

@@ -43,7 +43,6 @@ def siege_roster_patrols(layout: SiegeLayout) -> list[PatrolEnemy]:
                     can_shoot=True,
                     fire_interval=2.95,
                     fire_cooldown=0.4 + roster_id * 0.12,
-                    engage_range=460.0,
                     skirmish_roster_id=roster_id,
                 )
             )

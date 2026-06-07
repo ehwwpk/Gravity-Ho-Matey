@@ -8,6 +8,7 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.enemy_aim import lead_aim_direction
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.entities import GravityWell, Projectile
+from gravity_ho_matey.gameplay.friendly_fighter_config import PATROL_ENGAGE_RANGE
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
 
 # Armed patrol baseline — 10% slower bolts, 10% wider aim spread, 10% less velocity lead.
@@ -31,7 +32,7 @@ class PatrolEnemy:
     fire_cooldown: float = 0.0
     fire_interval: float = 2.85
     shot_speed: float = PATROL_SHOT_SPEED
-    engage_range: float = 440.0
+    engage_range: float = PATROL_ENGAGE_RANGE
     min_range: float = 70.0
     aim_lead_factor: float = PATROL_AIM_LEAD_FACTOR
     aim_spread_rad: float = PATROL_AIM_SPREAD_RAD

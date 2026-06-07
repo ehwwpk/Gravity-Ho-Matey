@@ -43,6 +43,7 @@ def wire_world_for_campaign(
     world.on_jewels_collected = on_jewels_collected
     world.consume_rubber_hull_bounce = campaign.try_consume_rubber_hull_bounce
     world.player_weapon_track = campaign.weapon_track
+    world.player_weapon_advanced = campaign.weapon_advanced
     deploy_drone_wingman(world, campaign)
 
 

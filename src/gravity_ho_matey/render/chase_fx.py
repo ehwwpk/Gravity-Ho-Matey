@@ -17,9 +17,17 @@ def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> N
     solar = world.config.level_theme == "solar"
     drift = world.config.level_theme == "drift"
     rift = world.config.level_theme == "rift"
-    deep_space = solar or drift or rift
-    sky_top = "#020408" if deep_space else "#040810"
-    sky_horizon = "#0a1830" if deep_space else "#081420"
+    brood = world.config.level_theme == "brood_moon"
+    deep_space = solar or drift or rift or brood
+    if brood:
+        sky_top = "#120818"
+        sky_horizon = "#281830"
+    elif deep_space:
+        sky_top = "#020408"
+        sky_horizon = "#0a1830" if (solar or drift or rift) else "#081420"
+    else:
+        sky_top = "#040810"
+        sky_horizon = "#081420"
     steps = 8
     band = max(1.0, (horizon - top) / steps)
     for i in range(steps):
@@ -32,7 +40,7 @@ def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> N
 
 
 def draw_rift_chase_floor_wash(canvas: tk.Canvas, camera: ViewCamera) -> None:
-    """Soft horizon haze — keeps chase view readable on the membrane level."""
+    """Soft horizon haze — keeps chase view readable in deep rift sectors."""
     horizon = camera.chase_horizon_y()
     bottom = camera.viewport_height
     width = camera.viewport_width
@@ -43,6 +51,21 @@ def draw_rift_chase_floor_wash(canvas: tk.Canvas, camera: ViewCamera) -> None:
         y0 = horizon + band * i
         y1 = horizon + band * (i + 1)
         color = _lerp_color("#0a1420", "#060a10", t * 0.65)
+        canvas.create_rectangle(0, y0, width, y1, fill=color, outline="")
+
+
+def draw_brood_orbital_chase_floor_wash(canvas: tk.Canvas, camera: ViewCamera) -> None:
+    """Mauve exosphere haze for brood moon orbital approach — not generic blue floor."""
+    horizon = camera.chase_horizon_y()
+    bottom = camera.viewport_height
+    width = camera.viewport_width
+    steps = 5
+    band = max(1.0, (bottom - horizon) / steps)
+    for i in range(steps):
+        t = i / max(1, steps - 1)
+        y0 = horizon + band * i
+        y1 = horizon + band * (i + 1)
+        color = _lerp_color("#140820", "#221028", t)
         canvas.create_rectangle(0, y0, width, y1, fill=color, outline="")
 
 

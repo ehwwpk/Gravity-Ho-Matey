@@ -71,6 +71,33 @@ class JewelHudTests(unittest.TestCase):
         )
         root.destroy()
 
+    def test_relay_wave_hints_draw_smoke(self) -> None:
+        try:
+            import tkinter as tk
+        except tk.TclError:
+            self.skipTest("Tk unavailable")
+
+        from gravity_ho_matey.gameplay.wave_mission import WaveMissionPresentation
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            canvas = tk.Canvas(root, width=960, height=640)
+            overlay = SciFiHudOverlay()
+            world = build_level("rift")
+            campaign = CampaignState.new()
+            director = world.wave_director
+            assert director is not None
+            director.poll_spawn(0.0)
+            director.tick(15.0, 0.016)
+            overlay.draw(canvas, world, campaign)
+            self.assertGreater(len(canvas.find_all()), 0)
+            director.poll_spawn(20.0)
+            overlay.draw(canvas, world, campaign)
+            self.assertGreater(len(canvas.find_all()), 0)
+        finally:
+            root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

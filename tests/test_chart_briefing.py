@@ -105,7 +105,7 @@ class ChartBriefingLayoutTests(unittest.TestCase):
         self.assertIn("CHART BRIEF", joined)
         self.assertIn("INITIAL BRIEF", joined)
         self.assertIn("BRIEFING", joined)
-        self.assertIn("OPEN HOLO BAZAAR", joined)
+        self.assertIn("OPEN SKILL DECK", joined)
         self.assertNotIn("PURCHASE", joined)
         self.assertGreater(len(canvas.find_all()), 40)
         root.destroy()
@@ -135,12 +135,26 @@ class ChartBriefingLayoutTests(unittest.TestCase):
         )
         text_items = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
         joined = " ".join(str(t) for t in text_items if t)
-        self.assertIn("HOLO BAZAAR", joined)
+        self.assertIn("UPGRADE TREE", joined)
+        self.assertIn("UPGRADE TREE", joined)
+        self.assertIn("CAPTAIN", joined)
         self.assertIn("PURCHASE", joined)
-        self.assertIn("Tier 0/6", joined)
-        self.assertIn("DRONE", joined)
         self.assertIn("CLOSE", joined)
-        self.assertIsNotNone(overlay.hits.hit(678, 152))
+        from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+        from gravity_ho_matey.render.shop_skill_tree_layout import (
+            compute_viewport,
+            node_screen_center,
+            shop_tree_rect,
+            skill_tree_nodes,
+        )
+
+        px, py, pw, ph = 20.0, 8.0, 920.0, 624.0
+        left, top, width, height = shop_tree_rect(px, py, pw, ph)
+        nodes = skill_tree_nodes(campaign)
+        viewport = compute_viewport(nodes, left=left, top=top, width=width, height=height)
+        laser = next(n for n in nodes if n.kind is PowerUpKind.WEAPON_LASER)
+        lx, ly = node_screen_center(viewport, laser)
+        self.assertIsNotNone(overlay.hits.hit(lx, ly))
         root.destroy()
 
     def test_start_chart_briefing_factory_for_sector_one(self) -> None:

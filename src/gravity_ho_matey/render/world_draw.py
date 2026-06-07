@@ -229,6 +229,7 @@ def draw_ship(
     boost_energy: float,
     *,
     boost_burst: float = 0.0,
+    planetside_boost: bool = False,
     invuln: float = 0.0,
     elapsed: float = 0.0,
     scale: float = 1.0,
@@ -246,6 +247,7 @@ def draw_ship(
             scale=scale,
             rig=rig,
             boost_burst=boost_burst,
+            planetside_boost=planetside_boost,
             powerup_stacks=powerup_stacks,
         )
     else:

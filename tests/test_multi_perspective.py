@@ -104,19 +104,23 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
 
         scene = PlayScene("rift", CampaignState.new())
         host = _FakeHost()
+        scene.world.wave_director.waves_spawned = 3  # type: ignore[union-attr]
         scene.world.boss_cleared = True
-        scene.world.ship.pos = Vec2(
-            scene.world.finish_gate.rect.x + 10,
-            scene.world.finish_gate.rect.y + 10,
-        )
+        if scene.world.mega_squid is not None:
+            scene.world.mega_squid.alive = False
+        for enemy in scene.world.enemies:
+            enemy.alive = False
+        scene.world._prune_dead_enemies()
+        gate = scene.world.finish_gate.rect
+        scene.world.ship.pos = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         scene.update(host, 0.016)
         self.assertIsInstance(host.last_scene, ChartBriefingScene)
         briefing = host.last_scene
         assert isinstance(briefing, ChartBriefingScene)
         self.assertEqual(briefing.upcoming_level_id, "siege")
 
-    def test_siege_campaign_complete_routes_to_end_scene(self) -> None:
-        from gravity_ho_matey.scenes.end import EndScene
+    def test_siege_campaign_complete_routes_to_brood_moon_briefing(self) -> None:
+        from gravity_ho_matey.scenes.chart_briefing import ChartBriefingScene
 
         scene = PlayScene("siege", CampaignState.new())
         host = _FakeHost()
@@ -127,6 +131,34 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         gate = scene.world.finish_gate.rect
         scene.world.ship.pos = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         scene.update(host, 0.016)
+        self.assertIsInstance(host.last_scene, ChartBriefingScene)
+        briefing = host.last_scene
+        assert isinstance(briefing, ChartBriefingScene)
+        self.assertEqual(briefing.upcoming_level_id, "brood_moon")
+
+    def test_brood_moon_campaign_complete_routes_to_end_scene(self) -> None:
+        from gravity_ho_matey.gameplay.brood_moon_controller import apply_surface_layout
+        from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
+        from gravity_ho_matey.levels.brood_moon_layout import SEAL_TRAVEL_DISTANCE
+        from gravity_ho_matey.scenes.end import EndScene
+
+        scene = PlayScene("brood_moon", CampaignState.new())
+        apply_surface_layout(scene.world)
+        bm = scene.world.brood_moon
+        assert bm is not None
+        for beacon in scene.world.beacons:
+            beacon.collected = True
+        for pod in scene.world.egg_pods:
+            pod.alive = False
+        bm.objectives_complete = True
+        bm.seal_travel = SEAL_TRAVEL_DISTANCE
+        bm.seal_complete = True
+        bm.phase = BroodPhase.ORBITAL_RETURN
+        bm.dock_unlocked = True
+        gate = scene.world.finish_gate.rect
+        scene.world.ship.pos = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
+        host = _FakeHost()
+        scene.update(host, 0.016)
         self.assertIsInstance(host.last_scene, EndScene)
         end = host.last_scene
         assert isinstance(end, EndScene)
@@ -134,6 +166,7 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
 
     def test_chart_briefing_launches_upcoming_level_on_enter(self) -> None:
         from gravity_ho_matey.scenes.game_flow import start_chart_briefing, start_play
+        from gravity_ho_matey.scenes.level_intro import LevelIntroScene
 
         briefing = start_chart_briefing(
             "solar",
@@ -142,10 +175,10 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         )
         host = _FakeHost()
         briefing.on_key_press(host, "Return")
-        self.assertIsInstance(host.last_scene, PlayScene)
-        play = host.last_scene
-        assert isinstance(play, PlayScene)
-        self.assertEqual(play.level_id, "solar")
+        self.assertIsInstance(host.last_scene, LevelIntroScene)
+        intro = host.last_scene
+        assert isinstance(intro, LevelIntroScene)
+        self.assertEqual(intro.level_id, "solar")
         self.assertIsNot(host.last_scene, start_play("cove", CampaignState.new()))
 
 

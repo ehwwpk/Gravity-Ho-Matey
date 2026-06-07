@@ -39,7 +39,7 @@ class LightLayerBuilder:
             self._sources.append(("sink", screen_pos.x, screen_pos.y, radius * 0.55, (mat.deep,), 1.0))
             colors = palette.CHASE_FOG_BLACK_HOLE
         elif well.kind == "planet":
-            colors = palette.CHASE_FOG_PLANET
+            colors = palette.CHASE_FOG_BROOD if self.rig.theme == "brood_moon" else palette.CHASE_FOG_PLANET
         else:
             colors = palette.CHASE_FOG_WELL
         pulse = self.elapsed * (2.2 if well.kind == "black_hole" else 1.6)

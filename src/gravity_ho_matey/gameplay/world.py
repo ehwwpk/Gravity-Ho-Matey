@@ -36,24 +36,28 @@ from gravity_ho_matey.gameplay.jewel_drops import (
     jewel_count_for_enemy,
 )
 from gravity_ho_matey.gameplay.jewel_pickup import JewelPickup, spawn_scattered_jewels, tick_jewels
-from gravity_ho_matey.gameplay.boost_lane import LaneProbe, LaneState, probe_lane
-from gravity_ho_matey.gameplay.boost_pad import BoostPad, tick_boost_pads, try_trigger_pad
 from gravity_ho_matey.gameplay.squid_enemy import SQUID_CLING_DAMAGE_INTERVAL, SquidEnemy
-from gravity_ho_matey.gameplay.lane_physics import (
-    apply_lane_centering,
-    lane_modifiers,
-)
 from gravity_ho_matey.gameplay.friendly_fighter import FriendlyFighter
+from gravity_ho_matey.gameplay.friendly_fighter_config import ALLY_ASTEROID_QUERY_RADIUS
 from gravity_ho_matey.gameplay.drone_config import DRONE_ASTEROID_QUERY_RADIUS
 from gravity_ho_matey.gameplay.drone_wingman import DroneWingman
 from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
 from gravity_ho_matey.gameplay.space_station import SpaceStation
 from gravity_ho_matey.gameplay.tractor_beam import TractorBeamState
 from gravity_ho_matey.gameplay.squid_pod import SquidPod
-from gravity_ho_matey.levels.membrane_layout import MembraneLayout
+from gravity_ho_matey.gameplay.wave_director import WaveDirector
+from gravity_ho_matey.gameplay.egg_pod_objective import EggPodObjective
+from gravity_ho_matey.gameplay.brood_moon_mission import BroodMoonState, BroodPhase
+from gravity_ho_matey.gameplay.brood_moon_controller import (
+    on_egg_pod_destroyed,
+    surface_gravity_accel,
+    tick_brood_moon,
+)
+from gravity_ho_matey.levels.guard_layout import GuardLayout
+from gravity_ho_matey.levels.guard_waves import wave_spawn_for
 from gravity_ho_matey.gameplay.asteroid_spatial import AsteroidSpatialGrid
 from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot, build_asteroid_threat_snapshots
-from gravity_ho_matey.gameplay.weapon_combat import HitDisposition, apply_explosive_burst, resolve_projectile_after_hit
+from gravity_ho_matey.gameplay.weapon_combat import HitDisposition, apply_explosive_burst, resolve_projectile_after_hit, spawn_weapon_hit_fx
 from gravity_ho_matey.gameplay.weapon_fire import player_fire_cooldown, spawn_player_shots
 from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 
@@ -93,22 +97,27 @@ class GameWorld:
     asteroid_spatial: AsteroidSpatialGrid = field(default_factory=AsteroidSpatialGrid)
     chart_radiation_exposure: float = 0.0
     squid_cling_timer: float = 0.0
-    membrane_layout: MembraneLayout | None = None
-    boost_pads: list[BoostPad] = field(default_factory=list)
     mega_squid: MegaSquidBoss | None = None
     squid_pods: list[SquidPod] = field(default_factory=list)
     boss_cleared: bool = False
-    lane_probe: LaneProbe | None = None
-    pad_flash: float = 0.0
+    boss_tagged_by_player: bool = False
+    protection_boss_intro_flash: float = 0.0
     boss_scrape_flash: float = 0.0
     allies: list[FriendlyFighter] = field(default_factory=list)
     drone_wingman: DroneWingman | None = None
     space_station: SpaceStation | None = None
+    friendly_stations: list[SpaceStation] = field(default_factory=list)
+    guard_layout: GuardLayout | None = None
+    wave_director: WaveDirector | None = None
+    station_cling_timers: dict[str, float] = field(default_factory=dict)
     tractor_beam: TractorBeamState | None = None
     station_cleared: bool = False
     roster_enemies_total: int = 0
     roster_enemies_remaining: int = 0
+    egg_pods: list[EggPodObjective] = field(default_factory=list)
+    brood_moon: BroodMoonState | None = None
     player_weapon_track: WeaponTrack | None = None
+    player_weapon_advanced: bool = False
 
     def refresh_threat_snapshots(self) -> None:
         """Narrow-phase meshes for interaction zone only — far belt rocks stay motion-only."""
@@ -134,7 +143,18 @@ class GameWorld:
         return len(self.beacons)
 
     @property
+    def egg_pods_remaining(self) -> int:
+        return sum(1 for pod in self.egg_pods if pod.alive)
+
+    @property
     def finish_unlocked(self) -> bool:
+        if self.config.brood_moon_mission and self.brood_moon is not None:
+            bm = self.brood_moon
+            if bm.phase is BroodPhase.ORBITAL_RETURN:
+                return bm.dock_unlocked and bm.seal_complete
+            return False
+        if self.config.protection_mission:
+            return self.protection_combat_cleared
         if self.config.exit_requires_roster_clear:
             return self.roster_enemies_remaining <= 0
         if self.config.exit_requires_boss:
@@ -146,36 +166,76 @@ class GameWorld:
         return collected >= required
 
     @property
+    def protection_combat_cleared(self) -> bool:
+        """All waves fired, Brood-Mother dead, swarm mopped — extract pad unlocks."""
+        if not self.config.protection_mission:
+            return False
+        if self.wave_director is None or not self.wave_director.all_waves_fired:
+            return False
+        if not self.friendly_stations or not all(station.alive for station in self.friendly_stations):
+            return False
+        if not self.boss_cleared:
+            return False
+        if self.mega_squid is not None and self.mega_squid.alive:
+            return False
+        if any(enemy.alive for enemy in self.enemies):
+            return False
+        if any(pod.alive for pod in self.squid_pods):
+            return False
+        return True
+
+    @property
+    def protection_mission_won(self) -> bool:
+        return self.protection_combat_cleared
+
+    @property
     def roster_enemies_defeated(self) -> int:
         return max(0, self.roster_enemies_total - self.roster_enemies_remaining)
 
-    def update(self, dt: float, intent: ControlIntent, *, beacon_capture_slack: float = 0.0) -> None:
+    def update(self, dt: float, intent: ControlIntent, *, beacon_capture_slack: float = 0.0, interaction_hold: bool = False) -> bool:
+        """Advance simulation. Returns True when gravity field should be rebaked (brood moon phase swap)."""
         dt = max(0.0, min(dt, 1.0 / 20.0))
         self.elapsed += dt
         self.explosions.update(dt)
         if self.status is not GameStatus.RUNNING:
-            return
+            return False
+
+        rebake_gravity = False
+        if self.brood_moon is not None:
+            if self.brood_moon.in_cinematic:
+                rebake_gravity = tick_brood_moon(self, dt, interaction_hold=interaction_hold)
+                return rebake_gravity
+            rebake_gravity = tick_brood_moon(self, dt, interaction_hold=interaction_hold)
 
         self._tick_invuln(dt)
         self._update_tractor_beam(dt)
         self._update_asteroids(dt)
         self.asteroid_spatial.rebuild(self.asteroids)
         self._update_ship(dt, intent)
+        self._tick_wave_director(dt)
         self._update_enemies(dt)
         self._update_allies(dt)
         self._update_drone_wingman(dt)
         self._update_boss_and_pods(dt)
         self._update_space_station(dt)
+        self._update_friendly_stations(dt)
         self._update_projectiles(dt)
         self.refresh_threat_snapshots()
         self._collect_beacons(beacon_capture_slack)
         self._update_jewels(dt)
         self._check_squid_cling_damage(dt)
+        self._check_station_squid_cling_damage(dt)
         if self.status is GameStatus.RUNNING:
             self._check_patrol_enemy_collisions()
         self._check_finish()
+        if self.protection_boss_intro_flash > 0.0:
+            self.protection_boss_intro_flash = max(0.0, self.protection_boss_intro_flash - dt)
         self._tick_chart_radiation(dt)
         self._check_loss()
+        for pod in self.egg_pods:
+            if pod.alive:
+                pod.tick(dt)
+        return rebake_gravity
 
     def _update_asteroids(self, dt: float) -> None:
         cfg = self.config
@@ -250,67 +310,60 @@ class GameWorld:
 
         if self.ship.boost_flash > 0.0:
             self.ship.boost_flash = max(0.0, self.ship.boost_flash - dt)
+        if self.ship.boost_jolt > 0.0:
+            self.ship.boost_jolt = max(0.0, self.ship.boost_jolt - dt)
         self.ship.boost_energy = min(
             1.0,
             self.ship.boost_energy + self.config.boost_regen_rate * dt,
         )
 
-        if self.pad_flash > 0.0:
-            self.pad_flash = max(0.0, self.pad_flash - dt)
         if self.boss_scrape_flash > 0.0:
             self.boss_scrape_flash = max(0.0, self.boss_scrape_flash - dt)
 
-        lane_probe: LaneProbe | None = None
-        lane_mods = None
+        from gravity_ho_matey.gameplay.planetside_flight import (
+            PLANETSIDE_BOOST_FX_SCALE,
+            PLANETSIDE_BURST_FORWARD_DOT,
+            PLANETSIDE_DRAG_WHILE_BOOST,
+            PLANETSIDE_JOLT_SECONDS,
+            is_planetside,
+        )
+
+        planetside = is_planetside(self.config)
         gravity_scale = self.config.gravity_scale
         drag = self.config.drag
+        if planetside and self.ship.boost_flash > 0.0:
+            drag = PLANETSIDE_DRAG_WHILE_BOOST
         thrust_mult = self.ship.thrust_multiplier
         max_speed = self.config.max_ship_speed
 
-        if self.membrane_layout is not None:
-            lane_probe = probe_lane(self.ship.pos, self.membrane_layout)
-            self.lane_probe = lane_probe
-            if lane_probe.state is LaneState.ON_RIBBON:
-                lane_mods = lane_modifiers(
-                    lane_probe,
-                    base_drag=self.config.drag,
-                    base_max_speed=self.config.max_ship_speed,
-                )
-                drag = lane_mods.drag
-                thrust_mult *= lane_mods.thrust_mult
-                max_speed = lane_mods.max_speed
-
         accel = gravity_acceleration_at(self.ship.pos, self.wells) * gravity_scale
+        surface_pull = surface_gravity_accel(self)
+        if surface_pull is not None:
+            accel += surface_pull
         if intent.thrust:
             accel += Vec2.from_angle(self.ship.angle) * (self.config.thrust * thrust_mult)
 
-        if lane_probe is not None and lane_mods is not None:
-            accel = apply_lane_centering(accel, lane_probe, lane_mods)
-
         self.ship.vel = (self.ship.vel + accel * dt) * drag
-
-        if self.membrane_layout is not None and self.boost_pads:
-            tick_boost_pads(self.boost_pads, dt)
-            if try_trigger_pad(
-                self.boost_pads,
-                self.ship,
-                self.membrane_layout,
-                pad_flash_seconds=self.config.pad_flash_seconds,
-            ):
-                self.pad_flash = self.config.pad_flash_seconds
 
         if intent.boost_tap and self.ship.boost_energy >= self.config.boost_energy_cost:
             forward = Vec2.from_angle(self.ship.angle)
             burst = max_speed * self.config.boost_burst_fraction * thrust_mult * self.ship.boost_tap_multiplier
-            burst += max(0.0, self.ship.vel.dot(forward)) * 0.12
+            forward_dot = PLANETSIDE_BURST_FORWARD_DOT if planetside else 0.12
+            burst += max(0.0, self.ship.vel.dot(forward)) * forward_dot
             self.ship.vel = self.ship.vel + forward * burst
             self.ship.boost_energy = max(0.0, self.ship.boost_energy - self.config.boost_energy_cost)
             self.ship.boost_flash = self.config.boost_flash_seconds
+            if planetside:
+                self.ship.boost_jolt = PLANETSIDE_JOLT_SECONDS
+                tail = self.ship.pos - forward * (self.ship.radius + 5.0)
+                self.explosions.spawn(
+                    ExplosionKind.REACTOR_BURST,
+                    tail,
+                    scale=PLANETSIDE_BOOST_FX_SCALE,
+                )
 
         overspeed = self.config.boost_overspeed_cap
-        if self.pad_flash > 0.0:
-            overspeed = max(overspeed, self.config.pad_overspeed_cap)
-        speed_cap = max_speed * (overspeed if self.ship.boost_flash > 0.0 or self.pad_flash > 0.0 else 1.0)
+        speed_cap = max_speed * (overspeed if self.ship.boost_flash > 0.0 else 1.0)
         self.ship.vel = self.ship.vel.clamped_length(speed_cap)
         self.ship.pos = self.ship.pos + self.ship.vel * dt
         self.ship.cooldown = max(0.0, self.ship.cooldown - dt)
@@ -326,12 +379,14 @@ class GameWorld:
             ship_radius=self.ship.radius,
             projectile_speed=self.config.projectile_speed,
             track=self.player_weapon_track,
+            advanced=self.player_weapon_advanced,
         )
         self.projectiles.extend(shots)
         self.ship.cooldown = player_fire_cooldown(
             self.config.ship_fire_cooldown,
             self.ship.fire_cooldown_multiplier,
             self.player_weapon_track,
+            advanced=self.player_weapon_advanced,
         )
 
     def _apply_asteroid_combat_result(self, result: AsteroidCombatResult) -> None:
@@ -386,6 +441,8 @@ class GameWorld:
                     )
                 continue
             if projectile.hostile:
+                if self._projectile_hits_friendly_stations(projectile):
+                    continue
                 if self._projectile_hits_ship(projectile):
                     continue
                 if self._projectile_hits_ally_hostile(projectile):
@@ -406,6 +463,11 @@ class GameWorld:
                         kept.append(projectile)
                     continue
                 disposition = self._projectile_hits_enemy(projectile, drop_loot=not projectile.from_ally)
+                if disposition != "none":
+                    if disposition == "pierce":
+                        kept.append(projectile)
+                    continue
+                disposition = self._projectile_hits_egg_pods(projectile)
                 if disposition != "none":
                     if disposition == "pierce":
                         kept.append(projectile)
@@ -437,7 +499,8 @@ class GameWorld:
                 if not enemy.body_hit_by_projectile(projectile.pos, projectile.radius):
                     continue
                 hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
-                self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
+                piercing = projectile.pierce_remaining > 0 and projectile.explosive_radius <= 0.0
+                spawn_weapon_hit_fx(self, hit_pos, projectile, piercing=piercing)
                 if enemy.apply_shot():
                     enemy_pos = Vec2(enemy.pos.x, enemy.pos.y)
                     enemy.alive = False
@@ -452,8 +515,9 @@ class GameWorld:
             if (enemy.pos - projectile.pos).length() <= enemy.radius + projectile.radius:
                 hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
                 enemy_pos = Vec2(enemy.pos.x, enemy.pos.y)
+                piercing = projectile.pierce_remaining > 0 and projectile.explosive_radius <= 0.0
+                spawn_weapon_hit_fx(self, hit_pos, projectile, piercing=piercing)
                 enemy.alive = False
-                self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
                 self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, enemy_pos)
                 if drop_loot:
                     drop_count = jewel_count_for_enemy(enemy)
@@ -464,6 +528,36 @@ class GameWorld:
                 return resolve_projectile_after_hit(projectile, hit=True)
         return "none"
 
+    def _projectile_hits_egg_pods(self, projectile: Projectile) -> HitDisposition:
+        if projectile.hostile or not self.egg_pods:
+            return "none"
+        if projectile.explosive_radius > 0.0:
+            for pod in self.egg_pods:
+                if not pod.alive:
+                    continue
+                if (pod.pos - projectile.pos).length() <= pod.radius + projectile.radius:
+                    apply_explosive_burst(
+                        self,
+                        Vec2(projectile.pos.x, projectile.pos.y),
+                        projectile.explosive_radius,
+                        drop_loot=not projectile.from_ally,
+                    )
+                    return "consume"
+            return "none"
+        for pod in self.egg_pods:
+            if not pod.alive:
+                continue
+            if (pod.pos - projectile.pos).length() > pod.radius + projectile.radius:
+                continue
+            hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
+            piercing = projectile.pierce_remaining > 0 and projectile.explosive_radius <= 0.0
+            spawn_weapon_hit_fx(self, hit_pos, projectile, piercing=piercing)
+            if pod.apply_shot():
+                self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(pod.pos.x, pod.pos.y), scale=1.6)
+                on_egg_pod_destroyed(self, pod)
+            return resolve_projectile_after_hit(projectile, hit=True)
+        return "none"
+
     def _register_roster_kill(self, enemy: EnemyUnit) -> None:
         if not self.config.exit_requires_roster_clear:
             return
@@ -471,6 +565,39 @@ class GameWorld:
         if roster_id is None:
             return
         self.roster_enemies_remaining = max(0, self.roster_enemies_remaining - 1)
+
+    def _register_mission_fail(self, reason: str) -> None:
+        self.last_damage = DamageEvent(source=DamageSource.MISSION_FAIL, reason=reason)
+        self.status = GameStatus.SHIP_HIT
+
+    def _on_friendly_station_lost(self, station: SpaceStation) -> None:
+        station_pos = Vec2(station.pos.x, station.pos.y)
+        self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, station_pos, scale=2.0)
+        label = station.station_label
+        self._register_mission_fail(f"Relay {label} destroyed — sector overrun.")
+
+    def _projectile_hits_friendly_stations(self, projectile: Projectile) -> bool:
+        if not projectile.hostile or not self.friendly_stations:
+            return False
+        for station in self.friendly_stations:
+            if not station.alive:
+                continue
+            if not station.body_hit_by_projectile(projectile.pos, projectile.radius):
+                continue
+            hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
+            if projectile.explosive_radius > 0.0:
+                apply_explosive_burst(
+                    self,
+                    hit_pos,
+                    projectile.explosive_radius,
+                    drop_loot=False,
+                )
+                return True
+            self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
+            if station.apply_shot():
+                self._on_friendly_station_lost(station)
+            return True
+        return False
 
     def _projectile_hits_station(self, projectile: Projectile) -> HitDisposition:
         station = self.space_station
@@ -547,6 +674,103 @@ class GameWorld:
         if spawned is not None:
             self.enemies.append(spawned)
 
+    def _station_ally_count(self, station: SpaceStation) -> int:
+        low = 100 if station.station_label in ("ALPHA", "RELAY") else 200
+        high = 200 if station.station_label in ("ALPHA", "RELAY") else 300
+        return sum(1 for ally in self.allies if ally.alive and low <= ally.wing_id < high)
+
+    def _update_friendly_stations(self, dt: float) -> None:
+        if not self.friendly_stations:
+            return
+        for station in self.friendly_stations:
+            if not station.alive:
+                continue
+            station.integrate(
+                dt,
+                self.wells,
+                gravity_scale=self.config.gravity_scale,
+                drag=self.config.drag,
+            )
+            station.tick_combat(dt)
+            shot = station.try_fire_at_hostiles(
+                self.enemies,
+                boss=self.mega_squid,
+                prioritize_boss=not self.config.protection_mission,
+            )
+            if shot is not None:
+                self.projectiles.append(shot)
+            spawned = station.tick_friendly_spawns(dt, self._station_ally_count(station))
+            if spawned is not None:
+                self.allies.append(spawned)
+
+    def _relay_homeward(self) -> tuple[Vec2 | None, float]:
+        if not self.config.protection_mission or self.guard_layout is None:
+            return None, 0.0
+        return self.guard_layout.station_anchor, 380.0
+
+    def _apply_relay_squid_ingress(self, squid: SquidEnemy) -> None:
+        if self.guard_layout is None:
+            return
+        from gravity_ho_matey.levels.guard_layout import RELAY_INGRESS_SQUID_SPEED
+        from gravity_ho_matey.levels.guard_waves import relay_ingress_velocity
+
+        station = self.guard_layout.station_anchor
+        squid.vel = relay_ingress_velocity(squid.pos, station, RELAY_INGRESS_SQUID_SPEED * 0.9)
+        squid.approach_thrust = max(squid.approach_thrust, 580.0)
+        squid.max_speed = max(squid.max_speed, 220.0)
+
+    def _tick_wave_director(self, dt: float) -> None:
+        if self.wave_director is None or self.guard_layout is None:
+            return
+        if self.status is not GameStatus.RUNNING:
+            return
+        self.wave_director.tick(self.elapsed, dt)
+        while True:
+            wave = self.wave_director.poll_spawn(self.elapsed)
+            if wave is None:
+                break
+            spawned, boss = wave_spawn_for(self.guard_layout, wave)
+            self.enemies.extend(spawned)
+            if boss is not None:
+                self.mega_squid = boss
+                self.protection_boss_intro_flash = 3.2
+                self.boss_tagged_by_player = False
+
+    def _check_station_squid_cling_damage(self, dt: float) -> None:
+        if self.status is not GameStatus.RUNNING or not self.friendly_stations:
+            return
+        for station in self.friendly_stations:
+            if not station.alive:
+                continue
+            clinging = False
+            for enemy in self.enemies:
+                if not enemy.alive or enemy.kind is not EnemyKind.SQUID:
+                    continue
+                assert isinstance(enemy, SquidEnemy)
+                if enemy.is_clinging(station.pos, station.radius):
+                    clinging = True
+                    break
+            key = station.station_label
+            if not clinging:
+                self.station_cling_timers[key] = 0.0
+                continue
+            timer = self.station_cling_timers.get(key, 0.0) + dt
+            self.station_cling_timers[key] = timer
+            if timer < SQUID_CLING_DAMAGE_INTERVAL:
+                continue
+            self.station_cling_timers[key] = 0.0
+            self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(station.pos.x, station.pos.y))
+            if station.apply_shot():
+                self._on_friendly_station_lost(station)
+
+    def _check_finish(self) -> None:
+        if self.status is not GameStatus.RUNNING:
+            return
+        if self.config.protection_mission and not self.protection_combat_cleared:
+            return
+        if self.finish_unlocked and self.finish_gate.rect.intersects_circle(self.ship.pos, self.ship.radius):
+            self.status = GameStatus.WON
+
     def _projectile_hits_boss(self, projectile: Projectile) -> HitDisposition:
         boss = self.mega_squid
         if boss is None or not boss.alive or projectile.hostile:
@@ -563,6 +787,8 @@ class GameWorld:
             )
             return "consume"
         self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
+        if not projectile.from_ally:
+            self.boss_tagged_by_player = True
         if boss.apply_shot():
             self._on_boss_defeated()
         return resolve_projectile_after_hit(projectile, hit=True)
@@ -577,6 +803,8 @@ class GameWorld:
         if drop_count > 0:
             self._spawn_jewels_at(boss_pos, drop_count)
         self.boss_cleared = True
+        if self.config.protection_mission or self.config.brood_moon_mission:
+            return
         gate_half = 34.0
         portal_y = boss.anchor.y - 90.0
         self.finish_gate = FinishGate(
@@ -596,10 +824,14 @@ class GameWorld:
                 self.wells,
                 gravity_scale=self.config.gravity_scale,
                 drag=self.config.drag,
+                well_gravity_scale=0.12 if self.config.protection_mission else 0.35,
             )
             alive_squids = sum(1 for e in self.enemies if e.alive and e.kind is EnemyKind.SQUID)
-            squid, pod = boss.tick_spawns(dt, self.ship.pos, alive_squids)
+            prey = self._boss_prey_pos()
+            squid, pod = boss.tick_spawns(dt, prey, alive_squids)
             if squid is not None:
+                if self.config.protection_mission:
+                    self._apply_relay_squid_ingress(squid)
                 self.enemies.append(squid)
             if pod is not None:
                 self.squid_pods.append(pod)
@@ -616,15 +848,16 @@ class GameWorld:
             if not pod.alive:
                 continue
             if pod.tick(dt):
-                self.enemies.append(
-                    SquidEnemy(
-                        pos=Vec2(pod.pos.x, pod.pos.y),
-                        tentacle_reach=62.0,
-                        max_speed=185.0,
-                        detect_range=760.0,
-                        engage_range=620.0,
-                    )
+                squid = SquidEnemy(
+                    pos=Vec2(pod.pos.x, pod.pos.y),
+                    tentacle_reach=62.0,
+                    max_speed=185.0,
+                    detect_range=760.0,
+                    engage_range=620.0,
                 )
+                if self.config.protection_mission:
+                    self._apply_relay_squid_ingress(squid)
+                self.enemies.append(squid)
             else:
                 kept_pods.append(pod)
         self.squid_pods = kept_pods
@@ -638,14 +871,53 @@ class GameWorld:
         self._register_ship_hit(DamageSource.ENEMY_PROJECTILE)
         return True
 
-    def _update_enemies(self, dt: float) -> None:
-        patrol_threats: list[tuple[Vec2, Vec2]] = [(self.ship.pos, self.ship.vel)]
+    def _patrol_threats(self) -> list[tuple[Vec2, Vec2]]:
+        threats: list[tuple[Vec2, Vec2]] = [(self.ship.pos, self.ship.vel)]
         for ally in self.allies:
             if ally.alive:
-                patrol_threats.append((ally.pos, ally.vel))
+                threats.append((ally.pos, ally.vel))
         drone = self.drone_wingman
         if drone is not None and drone.alive:
-            patrol_threats.append((drone.pos, drone.vel))
+            threats.append((drone.pos, drone.vel))
+        for station in self.friendly_stations:
+            if station.alive:
+                threats.append((station.pos, Vec2()))
+        return threats
+
+    def _squid_prey_for(self, squid_pos: Vec2) -> tuple[Vec2, Vec2, float]:
+        best_pos = self.ship.pos
+        best_vel = self.ship.vel
+        best_radius = self.ship.radius
+        best_dist = (self.ship.pos - squid_pos).length()
+        for station in self.friendly_stations:
+            if not station.alive:
+                continue
+            dist = (station.pos - squid_pos).length()
+            if dist < best_dist:
+                best_dist = dist
+                best_pos = station.pos
+                best_vel = Vec2()
+                best_radius = station.radius
+        return best_pos, best_vel, best_radius
+
+    def _boss_prey_pos(self) -> Vec2:
+        if not self.friendly_stations:
+            return self.ship.pos
+        best: Vec2 | None = None
+        best_dist = float("inf")
+        boss_pos = self.mega_squid.pos if self.mega_squid is not None else self.ship.pos
+        for station in self.friendly_stations:
+            if not station.alive:
+                continue
+            dist = (station.pos - boss_pos).length()
+            if dist < best_dist:
+                best_dist = dist
+                best = station.pos
+        return best if best is not None else self.ship.pos
+
+    def _update_enemies(self, dt: float) -> None:
+        patrol_threats = self._patrol_threats()
+        homeward_target, homeward_thrust = self._relay_homeward()
 
         for enemy in self.enemies:
             if not enemy.alive:
@@ -653,15 +925,18 @@ class GameWorld:
             enemy.tick_combat(dt)
             if enemy.kind is EnemyKind.SQUID:
                 assert isinstance(enemy, SquidEnemy)
+                prey_pos, prey_vel, prey_radius = self._squid_prey_for(enemy.pos)
                 enemy.integrate(
                     dt,
-                    self.ship.pos,
-                    self.ship.vel,
+                    prey_pos,
+                    prey_vel,
                     self.wells,
                     gravity_scale=self.config.gravity_scale,
                     drag=self.config.drag,
                     well_maw_radius=self.config.well_maw_radius,
-                    ship_radius=self.ship.radius,
+                    prey_radius=prey_radius,
+                    homeward_target=homeward_target,
+                    homeward_thrust=homeward_thrust,
                 )
                 shot = enemy.try_fire(self.ship.pos, self.ship.vel)
             else:
@@ -685,46 +960,24 @@ class GameWorld:
             ally.tick_combat(dt)
             if ally.boost_flash > 0.0:
                 ally.boost_flash = max(0.0, ally.boost_flash - dt)
-            threat = ally.pick_threat(self.enemies, self.mega_squid)
-            gravity_scale = self.config.gravity_scale
-            drag = self.config.drag
-            thrust_mult = 1.0
-            lane_probe: LaneProbe | None = None
-            lane_mods = None
-            pad_overspeed = self.config.boost_overspeed_cap
-            if self.membrane_layout is not None:
-                lane_probe = probe_lane(ally.pos, self.membrane_layout)
-                if lane_probe.state is LaneState.ON_RIBBON:
-                    lane_mods = lane_modifiers(
-                        lane_probe,
-                        base_drag=self.config.drag,
-                        base_max_speed=self.config.max_ship_speed,
-                    )
-                    drag = lane_mods.drag
-                    thrust_mult = lane_mods.thrust_mult
-                if self.boost_pads:
-                    try_trigger_pad(
-                        self.boost_pads,
-                        ally,
-                        self.membrane_layout,
-                        pad_flash_seconds=self.config.pad_flash_seconds,
-                    )
-                if ally.boost_flash > 0.0:
-                    pad_overspeed = max(pad_overspeed, self.config.pad_overspeed_cap)
+            threat = ally.pick_threat(
+                self.enemies,
+                self.mega_squid,
+                player_pos=self.ship.pos,
+                allow_boss=self.boss_tagged_by_player or not self.config.protection_mission,
+            )
+            nearby_asteroids = self._nearby_asteroids(ally.pos, ALLY_ASTEROID_QUERY_RADIUS)
             ally.integrate(
                 dt,
                 player_pos=self.ship.pos,
                 player_vel=self.ship.vel,
                 player_angle=self.ship.angle,
                 wells=self.wells,
-                gravity_scale=gravity_scale,
-                drag=drag,
+                gravity_scale=self.config.gravity_scale,
+                drag=self.config.drag,
                 well_maw_radius=self.config.well_maw_radius,
                 threat=threat,
-                lane_probe=lane_probe,
-                lane_mods=lane_mods,
-                thrust_mult=thrust_mult,
-                pad_overspeed_cap=pad_overspeed,
+                asteroids=nearby_asteroids,
             )
             shot = ally.try_fire(threat)
             if shot is not None:
@@ -732,15 +985,18 @@ class GameWorld:
         self._check_ally_hazards()
         self._prune_dead_allies()
 
-    def _nearby_asteroids_for_drone(self, pos: Vec2) -> list[Asteroid]:
+    def _nearby_asteroids(self, pos: Vec2, radius: float) -> list[Asteroid]:
         if self.asteroid_spatial.populated:
-            return self.asteroid_spatial.query_circle(pos, DRONE_ASTEROID_QUERY_RADIUS)
+            return self.asteroid_spatial.query_circle(pos, radius)
         out: list[Asteroid] = []
-        reach_sq = (DRONE_ASTEROID_QUERY_RADIUS + 48.0) ** 2
+        reach_sq = (radius + 48.0) ** 2
         for asteroid in self.asteroids:
             if (asteroid.pos - pos).length_sq() <= reach_sq:
                 out.append(asteroid)
         return out
+
+    def _nearby_asteroids_for_drone(self, pos: Vec2) -> list[Asteroid]:
+        return self._nearby_asteroids(pos, DRONE_ASTEROID_QUERY_RADIUS)
 
     def _update_drone_wingman(self, dt: float) -> None:
         drone = self.drone_wingman
@@ -748,12 +1004,20 @@ class GameWorld:
             return
         drone.tick_combat(dt)
         nearby_asteroids = self._nearby_asteroids_for_drone(drone.pos)
-        threat = drone.pick_threat(
-            self.enemies,
-            self.mega_squid,
-            player_pos=self.ship.pos,
-            asteroids=nearby_asteroids,
-        )
+        suspend_combat = False
+        if self.config.brood_moon_mission and self.brood_moon is not None:
+            from gravity_ho_matey.gameplay.brood_moon_mission import in_orbital_space_phase
+
+            suspend_combat = in_orbital_space_phase(self.brood_moon.phase)
+        threat = None
+        if not suspend_combat:
+            threat = drone.pick_threat(
+                self.enemies,
+                self.mega_squid,
+                player_pos=self.ship.pos,
+                asteroids=nearby_asteroids,
+                allow_boss=self.boss_tagged_by_player or not self.config.protection_mission,
+            )
         drone.integrate(
             dt,
             player_pos=self.ship.pos,
@@ -768,7 +1032,7 @@ class GameWorld:
             enemies=self.enemies,
             hostile_projectiles=[p for p in self.projectiles if p.hostile],
         )
-        shot = drone.try_fire(threat)
+        shot = None if suspend_combat else drone.try_fire(threat)
         if shot is not None:
             self.projectiles.append(shot)
         self._check_drone_hazards()
@@ -948,12 +1212,6 @@ class GameWorld:
         self._check_squid_cling_damage(dt)
         if self.status is GameStatus.RUNNING:
             self._check_patrol_enemy_collisions()
-
-    def _check_finish(self) -> None:
-        if self.status is not GameStatus.RUNNING:
-            return
-        if self.finish_unlocked and self.finish_gate.rect.intersects_circle(self.ship.pos, self.ship.radius):
-            self.status = GameStatus.WON
 
     def _tick_chart_radiation(self, dt: float) -> None:
         if advance_chart_radiation_exposure(self, dt):

@@ -6,9 +6,10 @@ from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.level_data import (
     build_cove_run_level,
     build_drift_belt_level,
-    build_membrane_run_level,
+    build_relay_hold_level,
     build_siege_line_level,
     build_solar_crossing_level,
+    build_brood_moon_level,
 )
 
 LevelBuilder = Callable[[], GameWorld]
@@ -17,18 +18,20 @@ LEVEL_BUILDERS: dict[str, LevelBuilder] = {
     "cove": build_cove_run_level,
     "solar": build_solar_crossing_level,
     "drift": build_drift_belt_level,
-    "rift": build_membrane_run_level,
+    "rift": build_relay_hold_level,
     "siege": build_siege_line_level,
+    "brood_moon": build_brood_moon_level,
 }
 
-LEVEL_ORDER: tuple[str, ...] = ("cove", "solar", "drift", "rift", "siege")
+LEVEL_ORDER: tuple[str, ...] = ("cove", "solar", "drift", "rift", "siege", "brood_moon")
 
 LEVEL_LABELS: dict[str, str] = {
     "cove": "1 — Smuggler's Cove",
     "solar": "2 — Singularity Crossing",
     "drift": "3 — The Drift",
-    "rift": "4 — The Membrane Run",
+    "rift": "4 — Relay Hold",
     "siege": "5 — The Siege Line",
+    "brood_moon": "6 — The Brood Moon",
 }
 
 

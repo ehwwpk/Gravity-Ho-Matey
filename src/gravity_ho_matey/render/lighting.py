@@ -4,12 +4,14 @@ import math
 from dataclasses import dataclass
 
 from gravity_ho_matey.core.vector import Vec2
+from gravity_ho_matey.gameplay.station_kinds import StationFaction
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode
 
 _KEY_COVE = Vec2(-0.65, -0.75).normalized()
 _KEY_SOLAR = Vec2(-0.55, -0.80).normalized()
 _KEY_RIFT = Vec2(-0.48, -0.82).normalized()
+_KEY_BROOD = Vec2(-0.58, -0.78).normalized()
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,14 +28,25 @@ class LightRig:
     def for_play(*, theme: str, camera_mode: CameraMode) -> LightRig:
         solar = theme == "solar"
         rift = theme == "rift"
-        key = _KEY_SOLAR if solar else _KEY_RIFT if rift else _KEY_COVE
+        brood = theme == "brood_moon"
+        key = (
+            _KEY_SOLAR
+            if solar
+            else _KEY_RIFT
+            if rift
+            else _KEY_BROOD
+            if brood
+            else _KEY_COVE
+        )
         view = "chase" if camera_mode is CameraMode.CHASE else "tactical"
         rim = 0.55 if view == "chase" else 0.45
         if solar:
             rim += 0.05
         elif rift:
             rim += 0.08
-        ambient = 0.28 if solar else 0.38 if rift else 0.35
+        elif brood:
+            rim += 0.05 if view == "chase" else 0.03
+        ambient = 0.28 if solar else 0.38 if rift else 0.38 if brood else 0.35
         return LightRig(
             theme=theme,
             view=view,
@@ -107,6 +120,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_rim_hi="#8b50cc",
         )
     if kind == "well_planet":
+        if theme == "brood_moon":
+            return MaterialTones(
+                highlight=lerp_hex("#ffd0a0", palette.BROOD_MOON_VEIN, 0.35),
+                mid=lerp_hex(palette.BROOD_MOON_SURFACE, "#503070", 0.45),
+                shadow=lerp_hex(palette.BROOD_REGOLITH_SHADOW, "#281830", 0.5),
+                deep=palette.BROOD_REGOLITH_DEEP,
+                rim=lerp_hex(palette.BROOD_MOON_HUD_ACCENT, palette.BROOD_MOON_VEIN, 0.4),
+                crater_pit=palette.BROOD_REGOLITH_PIT,
+                crater_rim_hi=palette.BROOD_MOON_VEIN,
+            )
         return MaterialTones(
             highlight="#ffe8a8",
             mid=palette.PLANET_CORE,
@@ -176,17 +199,17 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_pit=palette.ASTEROID_CRATER,
             crater_rim_hi=lerp_hex(palette.RIFT_ROAD_REGOLITH, palette.HOLO_ASTEROID_REGOLITH, 0.55),
         )
-    if kind == "boost_pad":
-        return MaterialTones(
-            highlight=palette.RIFT_PAD_FLASH,
-            mid=palette.RIFT_PAD_MK_YELLOW,
-            shadow=lerp_hex(palette.RIFT_PAD_MK_ORANGE, "#604020", 0.35),
-            deep="#302018",
-            rim="#fff0d0",
-            crater_pit="#281808",
-            crater_rim_hi=palette.RIFT_PAD_ZIGZAG,
-        )
     if kind == "squid":
+        if theme == "brood_moon":
+            return MaterialTones(
+                highlight=lerp_hex("#c878e8", palette.BROOD_MOON_VEIN, 0.45),
+                mid=lerp_hex("#7038a0", palette.BROOD_REGOLITH_MID, 0.35),
+                shadow=lerp_hex("#381850", palette.BROOD_REGOLITH_SHADOW, 0.4),
+                deep=palette.BROOD_REGOLITH_DEEP,
+                rim=lerp_hex("#a048d0", palette.BROOD_MOON_VEIN, 0.35),
+                crater_pit=palette.BROOD_REGOLITH_PIT,
+                crater_rim_hi=lerp_hex("#e0a0ff", palette.BROOD_MOON_VEIN, 0.5),
+            )
         return MaterialTones(
             highlight="#c878e8",
             mid="#7038a0",
@@ -197,6 +220,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_rim_hi="#e0a0ff",
         )
     if kind == "mega_squid":
+        if theme == "brood_moon":
+            return MaterialTones(
+                highlight=lerp_hex("#e0a0ff", palette.BROOD_MOON_VEIN, 0.55),
+                mid=lerp_hex("#8040c0", palette.BROOD_CHITIN_MID, 0.4),
+                shadow=lerp_hex("#401858", palette.BROOD_REGOLITH_SHADOW, 0.45),
+                deep=palette.BROOD_REGOLITH_DEEP,
+                rim=lerp_hex("#c058ff", palette.BROOD_MOON_HUD_ACCENT, 0.35),
+                crater_pit=palette.BROOD_REGOLITH_PIT,
+                crater_rim_hi=lerp_hex("#ffa0e0", palette.BROOD_MOON_VEIN, 0.55),
+            )
         return MaterialTones(
             highlight="#e0a0ff",
             mid="#8040c0",
@@ -210,11 +243,87 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
         return MaterialTones(
             highlight=palette.STATION_HOSTILE_GLOW,
             mid=palette.STATION_HOSTILE_HULL,
-            shadow="#301810",
-            deep="#100808",
+            shadow=palette.STATION_HOSTILE_SHADOW,
+            deep=palette.STATION_HOSTILE_DEEP,
             rim=palette.STATION_HOSTILE_RING,
-            crater_pit="#180808",
+            crater_pit=palette.STATION_HOSTILE_DEEP,
             crater_rim_hi=palette.STATION_HOSTILE_GLOW,
+        )
+    if kind == "station_friendly":
+        return _station_faction_material(StationFaction.FRIENDLY, theme=theme, view=view)
+    if kind == "station_hostile":
+        return _station_faction_material(StationFaction.HOSTILE, theme=theme, view=view)
+    if kind == "enemy_patrol":
+        return MaterialTones(
+            highlight=lerp_hex(palette.STATION_HOSTILE_GLOW, "#ffffff", 0.18),
+            mid=palette.STATION_HOSTILE_HULL,
+            shadow=palette.STATION_HOSTILE_SHADOW,
+            deep=palette.STATION_HOSTILE_DEEP,
+            rim=palette.STATION_HOSTILE_RING,
+            crater_pit=palette.STATION_HOSTILE_DEEP,
+            crater_rim_hi=palette.ENEMY_EDGE,
+        )
+    if kind == "station_neutral":
+        return _station_faction_material(StationFaction.NEUTRAL, theme=theme, view=view)
+    if kind == "brood_regolith":
+        return MaterialTones(
+            highlight=palette.BROOD_REGOLITH_HIGHLIGHT,
+            mid=palette.BROOD_REGOLITH_MID,
+            shadow=palette.BROOD_REGOLITH_SHADOW,
+            deep=palette.BROOD_REGOLITH_DEEP,
+            rim=palette.BROOD_REGOLITH_RIM,
+            crater_pit=palette.BROOD_REGOLITH_PIT,
+            crater_rim_hi=palette.BROOD_REGOLITH_VEIN_HI,
+        )
+    if kind == "brood_chitin":
+        return MaterialTones(
+            highlight=palette.BROOD_CHITIN_HIGHLIGHT,
+            mid=palette.BROOD_CHITIN_MID,
+            shadow=palette.BROOD_CHITIN_SHADOW,
+            deep=palette.BROOD_CHITIN_DEEP,
+            rim=palette.BROOD_CHITIN_RIM,
+            crater_pit=palette.BROOD_REGOLITH_PIT,
+            crater_rim_hi=palette.BROOD_MOON_VEIN,
+        )
+    if kind == "brood_flora":
+        return MaterialTones(
+            highlight=palette.BROOD_FLORA_HIGHLIGHT,
+            mid=palette.BROOD_FLORA_MID,
+            shadow=palette.BROOD_FLORA_SHADOW,
+            deep=palette.BROOD_FLORA_DEEP,
+            rim=palette.BROOD_FLORA_RIM,
+            crater_pit=palette.BROOD_REGOLITH_PIT,
+            crater_rim_hi=palette.BROOD_MOON_VEIN,
+        )
+    if kind == "brood_vein":
+        return MaterialTones(
+            highlight=palette.BROOD_MOON_VEIN,
+            mid=lerp_hex(palette.BROOD_MOON_VEIN, palette.BROOD_REGOLITH_MID, 0.35),
+            shadow=palette.BROOD_REGOLITH_SHADOW,
+            deep=palette.BROOD_REGOLITH_DEEP,
+            rim=palette.BROOD_MOON_VEIN,
+            crater_pit=palette.BROOD_REGOLITH_PIT,
+            crater_rim_hi=palette.BROOD_REGOLITH_VEIN_HI,
+        )
+    if kind == "brood_crystal":
+        return MaterialTones(
+            highlight=palette.BROOD_CRYSTAL_HIGHLIGHT,
+            mid=palette.BROOD_CRYSTAL_MID,
+            shadow=palette.BROOD_CRYSTAL_SHADOW,
+            deep=palette.BROOD_CRYSTAL_DEEP,
+            rim=palette.BROOD_CRYSTAL_RIM,
+            crater_pit=palette.BROOD_REGOLITH_PIT,
+            crater_rim_hi=palette.BROOD_CRYSTAL_HIGHLIGHT,
+        )
+    if kind == "brood_membrane":
+        return MaterialTones(
+            highlight=lerp_hex(palette.BROOD_CHITIN_HIGHLIGHT, palette.BROOD_FLORA_HIGHLIGHT, 0.45),
+            mid=lerp_hex(palette.BROOD_CHITIN_MID, palette.SQUID_BODY, 0.35),
+            shadow=lerp_hex(palette.BROOD_CHITIN_SHADOW, "#401848", 0.4),
+            deep="#281030",
+            rim=lerp_hex(palette.SQUID_TENTACLE, palette.BROOD_FLORA_RIM, 0.35),
+            crater_pit="#180820",
+            crater_rim_hi=palette.SQUID_CORE,
         )
     if kind == "friendly_ship":
         return MaterialTones(
@@ -227,6 +336,49 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_rim_hi=palette.FRIENDLY_SHIP_TRIM,
         )
     return material_for("asteroid", theme=theme)
+
+
+def _station_faction_material(faction: StationFaction, *, theme: str, view: str) -> MaterialTones:
+    _ = theme, view
+    if faction is StationFaction.FRIENDLY:
+        return MaterialTones(
+            highlight=palette.STATION_FRIENDLY_GLOW,
+            mid=palette.STATION_FRIENDLY_HULL,
+            shadow=palette.STATION_FRIENDLY_SHADOW,
+            deep=palette.STATION_FRIENDLY_DEEP,
+            rim=palette.STATION_FRIENDLY_RING,
+            crater_pit=palette.STATION_FRIENDLY_DEEP,
+            crater_rim_hi=lerp_hex(palette.STATION_FRIENDLY_GLOW, "#ffffff", 0.25),
+        )
+    if faction is StationFaction.NEUTRAL:
+        return MaterialTones(
+            highlight=palette.STATION_NEUTRAL_GLOW,
+            mid=palette.STATION_NEUTRAL_HULL,
+            shadow=palette.STATION_NEUTRAL_SHADOW,
+            deep=palette.STATION_NEUTRAL_DEEP,
+            rim=palette.STATION_NEUTRAL_RING,
+            crater_pit=palette.STATION_NEUTRAL_DEEP,
+            crater_rim_hi=lerp_hex(palette.STATION_NEUTRAL_GLOW, "#ffffff", 0.2),
+        )
+    return MaterialTones(
+        highlight=palette.STATION_HOSTILE_GLOW,
+        mid=palette.STATION_HOSTILE_HULL,
+        shadow=palette.STATION_HOSTILE_SHADOW,
+        deep=palette.STATION_HOSTILE_DEEP,
+        rim=palette.STATION_HOSTILE_RING,
+        crater_pit=palette.STATION_HOSTILE_DEEP,
+        crater_rim_hi=lerp_hex(palette.STATION_HOSTILE_GLOW, "#ffffff", 0.18),
+    )
+
+
+def station_material_for(faction: StationFaction, *, theme: str, view: str = "tactical") -> MaterialTones:
+    if faction is StationFaction.FRIENDLY:
+        kind = "station_friendly"
+    elif faction is StationFaction.NEUTRAL:
+        kind = "station_neutral"
+    else:
+        kind = "station_hostile"
+    return material_for(kind, theme=theme, view=view)
 
 
 def shade_band(normal_dot_key: float) -> int:

@@ -44,7 +44,66 @@ class SiegeLevelBuildTests(unittest.TestCase):
 
     def test_campaign_order_includes_siege(self) -> None:
         self.assertEqual(next_level_id("rift"), "siege")
-        self.assertIsNone(next_level_id("siege"))
+        self.assertEqual(next_level_id("siege"), "brood_moon")
+        self.assertIsNone(next_level_id("brood_moon"))
+
+    def test_siege_allies_spread_east_of_spawn(self) -> None:
+        from gravity_ho_matey.levels.siege_escorts import siege_friendly_fighters
+        from gravity_ho_matey.levels.siege_layout import build_siege_layout
+
+        layout = build_siege_layout()
+        allies = siege_friendly_fighters(layout)
+        spawn = layout.spawn_ship.pos
+        xs = [ally.pos.x for ally in allies]
+        ys = [ally.pos.y for ally in allies]
+        self.assertGreater(min(xs), spawn.x + 240.0)
+        self.assertGreater(max(ys) - min(ys), 280.0)
+        self.assertGreater(max(xs) - min(xs), 180.0)
+
+    def test_siege_tactical_render_draws_station(self) -> None:
+        try:
+            import tkinter as tk
+        except tk.TclError:
+            self.skipTest("Tk unavailable")
+        from gravity_ho_matey.gameplay.gravity_field import GravityField
+        from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+        from gravity_ho_matey.render.station_viz import draw_space_station_tactical
+        from gravity_ho_matey.render.view_renderers import TacticalViewRenderer
+        from gravity_ho_matey.render.lighting import LightRig
+
+        world = build_level("siege")
+        field = GravityField.bake(
+            world.wells,
+            world_width=world.config.width,
+            world_height=world.config.height,
+            cols=32,
+            rows=32,
+            gravity_scale=world.config.gravity_scale,
+        )
+        camera = ViewCamera(mode=CameraMode.TACTICAL)
+        camera.snap_tactical_to_ship(world.ship.pos, world.config)
+        try:
+            root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("Tk unavailable")
+        root.withdraw()
+        canvas = tk.Canvas(root, width=960, height=640)
+        TacticalViewRenderer().draw(canvas, world, camera, field, hud_top=54)
+        self.assertGreater(len(canvas.find_all()), 100)
+        station = world.space_station
+        assert station is not None
+        draw_space_station_tactical(
+            canvas,
+            station,
+            camera,
+            ship_pos=world.ship.pos,
+            ship_angle=world.ship.angle,
+            hud_top=54.0,
+            rig=LightRig.for_play(theme="siege", camera_mode=CameraMode.TACTICAL),
+            elapsed=0.0,
+            tractor=world.tractor_beam,
+        )
+        root.destroy()
 
 
 class SiegeWinConditionTests(unittest.TestCase):

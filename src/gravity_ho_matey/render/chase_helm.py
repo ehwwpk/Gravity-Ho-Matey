@@ -67,6 +67,8 @@ def _playfield_accent(level_theme: str) -> tuple[str, str]:
         return palette.RIFT_HUD_ACCENT, palette.HUD_DIM
     if level_theme == "siege":
         return palette.SIEGE_HUD_ACCENT, palette.HUD_DIM
+    if level_theme == "brood_moon":
+        return palette.BROOD_MOON_HUD_ACCENT, palette.HUD_DIM
     return palette.HUD_ACCENT, palette.HUD_DIM
 
 
