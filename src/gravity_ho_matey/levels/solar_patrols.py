@@ -38,23 +38,6 @@ def solar_patrol_enemies(strip_height: float) -> list[PatrolEnemy]:
             aim_spread_rad=_SOLAR_AIM_SPREAD,
         ),
         PatrolEnemy(
-            waypoints=(
-                Vec2(110, strip_height * 0.68),
-                Vec2(240, strip_height * 0.74),
-                Vec2(360, strip_height * 0.68),
-                Vec2(240, strip_height * 0.62),
-            ),
-            thrust=230.0,
-            max_speed=100.0,
-            drop_kind=PowerUpKind.STABILIZER,
-            can_shoot=True,
-            fire_interval=3.4,
-            fire_cooldown=1.7,
-            engage_range=420.0,
-            aim_lead_factor=_SOLAR_AIM_LEAD,
-            aim_spread_rad=_SOLAR_AIM_SPREAD,
-        ),
-        PatrolEnemy(
             waypoints=(Vec2(620, mid - 40), Vec2(700, mid + 20), Vec2(620, mid + 80), Vec2(540, mid + 20)),
             thrust=228.0,
             max_speed=98.0,

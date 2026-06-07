@@ -29,6 +29,10 @@ class LightRigTests(unittest.TestCase):
         self.assertEqual(tactical.rim, palette.HOLO_ASTEROID_EDGE)
         self.assertNotEqual(chase.rim, tactical.rim)
 
+    def test_beacon_material_uses_nav_accent(self) -> None:
+        beacon = material_for("beacon", theme="cove")
+        self.assertEqual(beacon.mid, palette.BEACON)
+
 
 class ShadeBandTests(unittest.TestCase):
     def test_shade_band_monotone(self) -> None:

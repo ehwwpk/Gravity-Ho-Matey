@@ -13,6 +13,8 @@ class ExplosionKind(Enum):
     ENEMY_DESTROYED = auto()
     SHIP_STRUCK = auto()
     SHIP_DESTROYED = auto()
+    ASTEROID_DESTROYED = auto()
+    ASTEROID_BREAKUP = auto()
 
 
 @dataclass(slots=True)
@@ -53,17 +55,22 @@ _PRESETS: dict[ExplosionKind, tuple[int, float, float]] = {
     ExplosionKind.ENEMY_DESTROYED: (24, 32.0, 0.28),
     ExplosionKind.SHIP_STRUCK: (20, 28.0, 0.24),
     ExplosionKind.SHIP_DESTROYED: (34, 52.0, 0.38),
+    ExplosionKind.ASTEROID_DESTROYED: (14, 20.0, 0.2),
+    ExplosionKind.ASTEROID_BREAKUP: (22, 38.0, 0.3),
 }
 
 
-def spawn_explosion(kind: ExplosionKind, pos: Vec2) -> Explosion:
+def spawn_explosion(kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> Explosion:
     count, ring_max, ring_life = _PRESETS[kind]
-    scale = {
+    base_scale = {
         ExplosionKind.PROJECTILE_IMPACT: 0.55,
         ExplosionKind.ENEMY_DESTROYED: 1.0,
         ExplosionKind.SHIP_STRUCK: 0.9,
         ExplosionKind.SHIP_DESTROYED: 1.35,
+        ExplosionKind.ASTEROID_DESTROYED: 0.75,
+        ExplosionKind.ASTEROID_BREAKUP: 1.05,
     }[kind]
+    scale = max(0.35, min(1.8, scale * base_scale))
 
     explosion = Explosion(
         kind=kind,
@@ -72,7 +79,7 @@ def spawn_explosion(kind: ExplosionKind, pos: Vec2) -> Explosion:
         ring_life=ring_life,
         flash_life=0.08 + ring_life * 0.35,
     )
-    explosion.particles = _build_particles(pos, count, scale)
+    explosion.particles = _build_particles(pos, max(4, int(count * scale)), scale)
     return explosion
 
 
@@ -135,8 +142,8 @@ def update_explosion(explosion: Explosion, dt: float) -> None:
 class ExplosionSystem:
     active: list[Explosion] = field(default_factory=list)
 
-    def spawn(self, kind: ExplosionKind, pos: Vec2) -> None:
-        self.active.append(spawn_explosion(kind, pos))
+    def spawn(self, kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> None:
+        self.active.append(spawn_explosion(kind, pos, scale=scale))
 
     def update(self, dt: float) -> None:
         for explosion in self.active:

@@ -8,6 +8,8 @@ def advance_chart_radiation_exposure(world, dt: float) -> bool:
     """Track cumulative OOB time on open charts. True when exposure limit is reached."""
     if not world.config.open_bounds:
         return False
+    if not world.config.radiation_enabled:
+        return False
     if world.status is not GameStatus.RUNNING:
         return False
     if world.invuln_remaining > 0.0:

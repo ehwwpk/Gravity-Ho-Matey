@@ -223,7 +223,33 @@ class ViewCamera:
             )
         return self._project_chase(world_pos, ship_pos, ship_angle)
 
-    def _project_chase(self, world_pos: Vec2, ship_pos: Vec2, ship_angle: float) -> ProjectedPoint:
+    def world_to_chase_screen(
+        self,
+        world_pos: Vec2,
+        ship_pos: Vec2,
+        ship_angle: float,
+        *,
+        min_ahead: float | None = None,
+        screen_margin: float | None = None,
+    ) -> ProjectedPoint:
+        """Chase projection with optional extended frustum (asteroids, distant gates)."""
+        return self._project_chase(
+            world_pos,
+            ship_pos,
+            ship_angle,
+            min_ahead=min_ahead if min_ahead is not None else self.min_depth,
+            screen_margin=screen_margin if screen_margin is not None else 96.0,
+        )
+
+    def _project_chase(
+        self,
+        world_pos: Vec2,
+        ship_pos: Vec2,
+        ship_angle: float,
+        *,
+        min_ahead: float | None = None,
+        screen_margin: float | None = None,
+    ) -> ProjectedPoint:
         """Racing chase: camera behind + above ship; forward stays toward top of screen."""
         forward = Vec2.from_angle(ship_angle)
         right = forward.rotated(math.pi / 2.0)
@@ -232,7 +258,8 @@ class ViewCamera:
         ahead = rel.dot(forward)
         lateral = rel.dot(right)
 
-        if ahead < self.min_depth:
+        depth_floor = min_ahead if min_ahead is not None else self.min_depth
+        if ahead < depth_floor:
             return ProjectedPoint(x=0.0, y=0.0, depth=ahead, visible=False)
 
         scale = self.focal_length / ahead
@@ -242,7 +269,7 @@ class ViewCamera:
         screen_x = anchor_x + lateral * lateral_scale
         screen_y = anchor_y + self.velocity_lag_y - (ahead - self.chase_back) * scale * pitch
 
-        margin = 96.0
+        margin = screen_margin if screen_margin is not None else 96.0
         visible = (
             -margin <= screen_x <= self.viewport_width + margin
             and self.chase_horizon_y() - margin <= screen_y <= self.viewport_height + margin

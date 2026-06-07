@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.enemy_aim import lead_aim_direction
+from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.entities import GravityWell, Projectile
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
@@ -31,6 +32,10 @@ class PatrolEnemy:
     min_range: float = 70.0
     aim_lead_factor: float = 0.68
     aim_spread_rad: float = 0.055
+
+    @property
+    def kind(self) -> EnemyKind:
+        return EnemyKind.PATROL
 
     def __post_init__(self) -> None:
         if not self.waypoints:

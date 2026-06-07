@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import math
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.chart_radiation import advance_chart_radiation_exposure
-from gravity_ho_matey.gameplay.chart_bounds import chart_radiation_reason
+from gravity_ho_matey.gameplay.chart_bounds import chart_radiation_reason, ship_in_chart
 from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSeverity, DamageSource, damage_spec_for, default_reason
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
+from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.explosions import ExplosionKind, ExplosionSystem
-from gravity_ho_matey.gameplay.asteroid_motion import integrate_asteroid
+from gravity_ho_matey.gameplay.asteroid_combat import (
+    AsteroidCombatResult,
+    apply_projectile_hit,
+)
+from gravity_ho_matey.gameplay.asteroid_motion import integrate_asteroid, integrate_ring_asteroid_kinematic
 from gravity_ho_matey.gameplay.entities import (
     Asteroid,
     Beacon,
@@ -24,7 +31,11 @@ from gravity_ho_matey.gameplay.entities import (
 from gravity_ho_matey.core.geometry import circle_intersects_convex_polygon
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+from gravity_ho_matey.gameplay.squid_enemy import SQUID_CLING_DAMAGE_INTERVAL, SquidEnemy
+from gravity_ho_matey.gameplay.asteroid_spatial import AsteroidSpatialGrid
 from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot, build_asteroid_threat_snapshots
+
+EnemyUnit = PatrolEnemy | SquidEnemy
 
 
 @dataclass(slots=True)
@@ -45,7 +56,7 @@ class GameWorld:
     beacons: list[Beacon]
     finish_gate: FinishGate
     projectiles: list[Projectile] = field(default_factory=list)
-    enemies: list[PatrolEnemy] = field(default_factory=list)
+    enemies: list[EnemyUnit] = field(default_factory=list)
     pickups: list[PowerUpPickup] = field(default_factory=list)
     on_powerup_collected: Callable[[PowerUpKind], None] | None = None
     status: GameStatus = GameStatus.RUNNING
@@ -56,10 +67,19 @@ class GameWorld:
     invuln_remaining: float = 0.0
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
     asteroid_threat_snapshots: tuple[AsteroidThreatSnapshot, ...] = ()
+    asteroid_spatial: AsteroidSpatialGrid = field(default_factory=AsteroidSpatialGrid)
     chart_radiation_exposure: float = 0.0
+    squid_cling_timer: float = 0.0
 
     def refresh_threat_snapshots(self) -> None:
-        self.asteroid_threat_snapshots = build_asteroid_threat_snapshots(self.asteroids)
+        """Narrow-phase meshes for interaction zone only — far belt rocks stay motion-only."""
+        if not self.asteroid_spatial.populated:
+            self.asteroid_spatial.rebuild(self.asteroids)
+        active = self.asteroid_spatial.query_interaction_zones(
+            self.ship.pos,
+            projectile_points=tuple(Vec2(p.pos.x, p.pos.y) for p in self.projectiles),
+        )
+        self.asteroid_threat_snapshots = build_asteroid_threat_snapshots(active)
 
     @property
     def beacons_remaining(self) -> int:
@@ -78,20 +98,29 @@ class GameWorld:
 
         self._tick_invuln(dt)
         self._update_asteroids(dt)
-        self.refresh_threat_snapshots()
+        self.asteroid_spatial.rebuild(self.asteroids)
         self._update_ship(dt, intent)
         self._update_enemies(dt)
         self._update_projectiles(dt)
+        self.refresh_threat_snapshots()
         self._collect_beacons(beacon_capture_slack)
         self._collect_pickups()
-        self._check_enemy_collisions()
+        self._check_squid_cling_damage(dt)
+        if self.status is GameStatus.RUNNING:
+            self._check_patrol_enemy_collisions()
         self._check_finish()
         self._tick_chart_radiation(dt)
         self._check_loss()
 
     def _update_asteroids(self, dt: float) -> None:
         cfg = self.config
+        ship_in_playfield = not cfg.open_bounds or ship_in_chart(self.ship.pos, cfg)
         for asteroid in self.asteroids:
+            if asteroid.free_bounds and ship_in_playfield:
+                continue
+            if asteroid.drift_kind == "ring" and asteroid.ring_anchor is not None:
+                integrate_ring_asteroid_kinematic(asteroid, dt)
+                continue
             integrate_asteroid(
                 asteroid,
                 dt,
@@ -101,7 +130,13 @@ class GameWorld:
                 world_height=float(cfg.height),
             )
 
-    def _asteroid_hit_at(self, pos: Vec2, radius: float) -> Asteroid | None:
+    def _asteroid_hit_at(self, pos: Vec2, radius: float, *, use_spatial: bool = False) -> Asteroid | None:
+        if use_spatial and self.asteroid_spatial.populated:
+            return self._asteroid_hit_among(
+                self.asteroid_spatial.query_circle(pos, radius + 72.0),
+                pos,
+                radius,
+            )
         snapshots = self.asteroid_threat_snapshots
         if not snapshots:
             self.refresh_threat_snapshots()
@@ -111,6 +146,15 @@ class GameWorld:
                 continue
             if circle_intersects_convex_polygon(pos, radius, list(snap.verts)):
                 return snap.asteroid
+        return None
+
+    def _asteroid_hit_among(self, candidates: list[Asteroid], pos: Vec2, radius: float) -> Asteroid | None:
+        for asteroid in candidates:
+            reach = asteroid.approximate_radius() + radius
+            if (asteroid.pos - pos).length_sq() > reach * reach:
+                continue
+            if circle_intersects_convex_polygon(pos, radius, asteroid.world_vertices()):
+                return asteroid
         return None
 
     def _tick_invuln(self, dt: float) -> None:
@@ -182,6 +226,18 @@ class GameWorld:
         self.projectiles.append(Projectile(pos=muzzle, vel=velocity, hostile=False))
         self.ship.cooldown = self.config.ship_fire_cooldown * self.ship.fire_cooldown_multiplier
 
+    def _apply_asteroid_combat_result(self, result: AsteroidCombatResult) -> None:
+        for fx in result.fx:
+            self.explosions.spawn(fx.kind, fx.pos, scale=fx.scale)
+        for asteroid in result.asteroids_removed:
+            if asteroid in self.asteroids:
+                self.asteroids.remove(asteroid)
+        if result.asteroids_added:
+            self.asteroids.extend(result.asteroids_added)
+        if result.snapshots_dirty:
+            self.asteroid_spatial.rebuild(self.asteroids)
+            self.refresh_threat_snapshots()
+
     def _update_projectiles(self, dt: float) -> None:
         kept: list[Projectile] = []
         for projectile in self.projectiles:
@@ -191,12 +247,21 @@ class GameWorld:
             projectile.ttl -= dt
             if projectile.ttl <= 0:
                 continue
-            if not self._point_in_bounds(projectile.pos, margin=32):
+            if not self.config.open_bounds and not self._point_in_bounds(projectile.pos, margin=32):
                 self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
                 continue
-            hit = self._asteroid_hit_at(projectile.pos, projectile.radius)
+            hit = self._asteroid_hit_at(projectile.pos, projectile.radius, use_spatial=True)
             if hit is not None:
-                self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
+                impact = Vec2(projectile.pos.x, projectile.pos.y)
+                self._apply_asteroid_combat_result(
+                    apply_projectile_hit(
+                        hit,
+                        impact,
+                        projectile.vel,
+                        world_asteroid_count=len(self.asteroids),
+                        max_asteroids=self.config.max_asteroids,
+                    )
+                )
                 continue
             if projectile.hostile:
                 if self._projectile_hits_ship(projectile):
@@ -212,6 +277,19 @@ class GameWorld:
         for enemy in self.enemies:
             if not enemy.alive:
                 continue
+            if enemy.kind is EnemyKind.SQUID:
+                assert isinstance(enemy, SquidEnemy)
+                if not enemy.body_hit_by_projectile(projectile.pos, projectile.radius):
+                    continue
+                hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
+                self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
+                if enemy.apply_shot():
+                    enemy_pos = Vec2(enemy.pos.x, enemy.pos.y)
+                    enemy.alive = False
+                    self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, enemy_pos)
+                    self.pickups.append(PowerUpPickup(pos=enemy_pos, kind=enemy.drop_kind))
+                    self._prune_dead_enemies()
+                return True
             if (enemy.pos - projectile.pos).length() <= enemy.radius + projectile.radius:
                 hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
                 enemy_pos = Vec2(enemy.pos.x, enemy.pos.y)
@@ -237,13 +315,26 @@ class GameWorld:
             if not enemy.alive:
                 continue
             enemy.tick_combat(dt)
-            enemy.integrate(
-                dt,
-                self.wells,
-                gravity_scale=self.config.gravity_scale,
-                drag=self.config.drag,
-                well_maw_radius=self.config.well_maw_radius,
-            )
+            if enemy.kind is EnemyKind.SQUID:
+                assert isinstance(enemy, SquidEnemy)
+                enemy.integrate(
+                    dt,
+                    self.ship.pos,
+                    self.ship.vel,
+                    self.wells,
+                    gravity_scale=self.config.gravity_scale,
+                    drag=self.config.drag,
+                    well_maw_radius=self.config.well_maw_radius,
+                    ship_radius=self.ship.radius,
+                )
+            else:
+                enemy.integrate(
+                    dt,
+                    self.wells,
+                    gravity_scale=self.config.gravity_scale,
+                    drag=self.config.drag,
+                    well_maw_radius=self.config.well_maw_radius,
+                )
             shot = enemy.try_fire(self.ship.pos, self.ship.vel)
             if shot is not None:
                 self.projectiles.append(shot)
@@ -271,11 +362,35 @@ class GameWorld:
                 remaining.append(pickup)
         self.pickups = remaining
 
-    def _check_enemy_collisions(self) -> None:
+    def _squid_is_clinging(self) -> bool:
+        for enemy in self.enemies:
+            if not enemy.alive or enemy.kind is not EnemyKind.SQUID:
+                continue
+            assert isinstance(enemy, SquidEnemy)
+            if enemy.is_clinging(self.ship.pos, self.ship.radius):
+                return True
+        return False
+
+    def _check_squid_cling_damage(self, dt: float) -> None:
         if self.status is not GameStatus.RUNNING:
             return
+        if not self._squid_is_clinging():
+            self.squid_cling_timer = 0.0
+            return
+        self.squid_cling_timer += dt
+        if self.squid_cling_timer < SQUID_CLING_DAMAGE_INTERVAL:
+            return
+        if self.invuln_remaining > 0.0:
+            return
+        self.squid_cling_timer = 0.0
+        self._register_ship_hit(
+            DamageSource.SQUID_CLING,
+            reason="Void squid tentacles cling and squeeze — hull chunk lost.",
+        )
+
+    def _check_patrol_enemy_collisions(self) -> None:
         for enemy in self.enemies:
-            if not enemy.alive:
+            if not enemy.alive or enemy.kind is EnemyKind.SQUID:
                 continue
             if (enemy.pos - self.ship.pos).length() <= enemy.radius + self.ship.radius:
                 if self.invuln_remaining > 0.0:
@@ -285,6 +400,11 @@ class GameWorld:
                 self._prune_dead_enemies()
                 self._register_ship_hit(DamageSource.ENEMY)
                 return
+
+    def _check_enemy_collisions(self, dt: float) -> None:
+        self._check_squid_cling_damage(dt)
+        if self.status is GameStatus.RUNNING:
+            self._check_patrol_enemy_collisions()
 
     def _check_finish(self) -> None:
         if self.status is not GameStatus.RUNNING:

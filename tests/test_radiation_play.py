@@ -24,7 +24,7 @@ class _FakeHost:
 class RadiationPlaySceneTests(unittest.TestCase):
     def test_radiation_chip_applies_one_chunk_without_spawn_teleport(self) -> None:
         scene = PlayScene("cove", CampaignState.new())
-        scene.world.ship.pos = Vec2(-30, 400)
+        scene.world.ship.pos = Vec2(-55, 400)
         start = Vec2(scene.world.spawn_pos.x, scene.world.spawn_pos.y)
         self.assertEqual(scene.campaign.hull_chunks, 3)
 

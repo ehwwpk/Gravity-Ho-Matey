@@ -8,6 +8,11 @@ from gravity_ho_matey.gameplay.entities import WorldConfig
 
 CHART_RADIATION_EXPOSURE_LIMIT = 5.0
 CHART_BOUNDS_TOAST_SECONDS = 1.6
+CHART_BOUNDS_MARGIN_FRAC = 0.05
+
+# Cove void ring: ~1.5s cruise beyond the chart rim at typical thrust speed.
+OOB_RING_TRAVEL_SECONDS = 1.5
+OOB_RING_CRUISE_SPEED = 220.0
 
 # Chase view: dotted chart rim only when the ship is near an edge (world units).
 CHART_EDGE_HINT_START_FRAC = 0.14
@@ -21,29 +26,62 @@ class ChartBoundsToast(Enum):
     ENTERED_CHART = auto()
 
 
+def chart_margin_xy(config: WorldConfig) -> tuple[float, float]:
+    frac = config.chart_margin_frac
+    return config.width * frac, config.height * frac
+
+
+def chart_limits(config: WorldConfig) -> tuple[float, float, float, float]:
+    """Inclusive playable chart rect — expanded outward from level width/height."""
+    mx, my = chart_margin_xy(config)
+    return (-mx, -my, config.width + mx, config.height + my)
+
+
+def chart_outer_radius_from_center(config: WorldConfig) -> float:
+    """Distance from level center to the farthest chart corner."""
+    cx = config.width * 0.5
+    cy = config.height * 0.5
+    x0, y0, x1, y1 = chart_limits(config)
+    return max(
+        math.hypot(x0 - cx, y0 - cy),
+        math.hypot(x1 - cx, y0 - cy),
+        math.hypot(x1 - cx, y1 - cy),
+        math.hypot(x0 - cx, y1 - cy),
+    )
+
+
+def oob_ring_radius(config: WorldConfig) -> float:
+    """Orbital radius for the void hazard ring just outside the chart."""
+    return chart_outer_radius_from_center(config) + OOB_RING_TRAVEL_SECONDS * OOB_RING_CRUISE_SPEED
+
+
 def ship_in_chart(pos: Vec2, config: WorldConfig, *, margin: float = 0.0) -> bool:
+    x0, y0, x1, y1 = chart_limits(config)
     return (
-        -margin <= pos.x <= config.width + margin
-        and -margin <= pos.y <= config.height + margin
+        x0 - margin <= pos.x <= x1 + margin
+        and y0 - margin <= pos.y <= y1 + margin
     )
 
 
 def chart_oob_distance(pos: Vec2, config: WorldConfig) -> float:
     """World units outside the chart rectangle (0 when inside)."""
+    x0, y0, x1, y1 = chart_limits(config)
     dx = 0.0
-    if pos.x < 0.0:
-        dx = -pos.x
-    elif pos.x > config.width:
-        dx = pos.x - config.width
+    if pos.x < x0:
+        dx = x0 - pos.x
+    elif pos.x > x1:
+        dx = pos.x - x1
     dy = 0.0
-    if pos.y < 0.0:
-        dy = -pos.y
-    elif pos.y > config.height:
-        dy = pos.y - config.height
+    if pos.y < y0:
+        dy = y0 - pos.y
+    elif pos.y > y1:
+        dy = pos.y - y1
     return math.hypot(dx, dy)
 
 
 def chart_radiation_reason(*, level_theme: str) -> str:
+    if level_theme == "drift":
+        return "Deep void exposure exceeded safe limits."
     if level_theme == "solar":
         return "Chart radiation exceeded safe exposure beyond the star strip."
     return "Void radiation breached the hull outside the reef chart."
@@ -87,7 +125,8 @@ def chart_edge_hint_distances(config: WorldConfig) -> tuple[float, float]:
 
 def chart_edge_inset_distances(pos: Vec2, config: WorldConfig) -> tuple[float, float, float, float]:
     """Inside-chart distances to left, right, top, bottom edges."""
-    return (pos.x, config.width - pos.x, pos.y, config.height - pos.y)
+    x0, y0, x1, y1 = chart_limits(config)
+    return (pos.x - x0, x1 - pos.x, pos.y - y0, y1 - pos.y)
 
 
 def chart_edge_hint_strength(inset: float, *, start: float, full: float) -> float:
@@ -116,8 +155,9 @@ def chart_edge_hints_for_ship(pos: Vec2, config: WorldConfig) -> tuple[tuple[str
 
 def nudge_ship_into_chart(pos: Vec2, config: WorldConfig, *, inset: float = 6.0) -> Vec2:
     """Clamp to the inset chart rectangle — pulls OOB positions back inside."""
-    x = max(inset, min(config.width - inset, pos.x))
-    y = max(inset, min(config.height - inset, pos.y))
+    x0, y0, x1, y1 = chart_limits(config)
+    x = max(x0 + inset, min(x1 - inset, pos.x))
+    y = max(y0 + inset, min(y1 - inset, pos.y))
     return Vec2(x, y)
 
 

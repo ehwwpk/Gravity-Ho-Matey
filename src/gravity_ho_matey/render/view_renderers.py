@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import math
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.gravity_field import GravityField
+from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
+from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks
 from gravity_ho_matey.gameplay.world import GameWorld
@@ -12,7 +15,7 @@ from gravity_ho_matey.render.camera import ViewCamera
 from gravity_ho_matey.render.lighting import LightRig
 from gravity_ho_matey.render.light_compose import LightLayerBuilder
 from gravity_ho_matey.render.edge_hints import draw_edge_hints
-from gravity_ho_matey.render.asteroid_viz import draw_tactical_asteroid
+from gravity_ho_matey.render.asteroid_viz import asteroid_in_play_view, draw_tactical_asteroid
 from gravity_ho_matey.render.entity_viz import draw_beacon_marker, draw_gate_portal
 from gravity_ho_matey.render.explosion_fx import draw_explosions
 from gravity_ho_matey.render.world_draw import (
@@ -47,6 +50,13 @@ class TacticalViewRenderer:
             self._ambient_depth(canvas, vw, vh, hud_top)
         draw_gravity_heatmap(canvas, field, camera, y_offset=hud_top, alpha_step=4, world=world)
         for asteroid in world.asteroids:
+            if not asteroid_in_play_view(
+                asteroid,
+                ship_pos,
+                viewport_width=float(vw),
+                viewport_height=float(vh - hud_top),
+            ):
+                continue
             draw_tactical_asteroid(
                 canvas,
                 asteroid,
@@ -80,12 +90,19 @@ class TacticalViewRenderer:
         )
         for beacon in world.beacons:
             p = camera.world_to_screen(beacon.pos, ship_pos, world.ship.angle)
-            draw_beacon_marker(canvas, Vec2(p.x, p.y), beacon, hud_top=hud_top)
+            draw_beacon_marker(
+                canvas,
+                Vec2(p.x, p.y),
+                beacon,
+                hud_top=hud_top,
+                rig=rig,
+                elapsed=world.elapsed,
+            )
         for pickup in world.pickups:
             self._pickup(canvas, pickup.pos, pickup.kind, camera, ship_pos, hud_top)
         for enemy in world.enemies:
             if enemy.alive:
-                self._enemy(canvas, enemy.pos, enemy.radius, enemy.facing_angle, camera, ship_pos, hud_top)
+                self._draw_tactical_enemy(canvas, enemy, camera, ship_pos, world.ship.radius, hud_top)
         for projectile in world.projectiles:
             self._projectile(canvas, projectile, camera, ship_pos, hud_top)
         ship_screen = camera.world_to_screen(world.ship.pos, ship_pos, world.ship.angle)
@@ -118,6 +135,21 @@ class TacticalViewRenderer:
         }.get(kind, palette.BEACON)
         x, y = p.x, p.y + hud_top
         canvas.create_polygon(x, y - 12, x + 10, y, x, y + 12, x - 10, y, fill=color, outline="#fff")
+
+    def _draw_tactical_enemy(self, canvas, enemy, camera, ship_pos, ship_radius, hud_top) -> None:
+        p = camera.world_to_screen(enemy.pos, ship_pos, 0.0)
+        x, y = p.x, p.y + hud_top
+        if enemy.kind is EnemyKind.SQUID:
+            assert isinstance(enemy, SquidEnemy)
+            r = enemy.radius
+            coiled = enemy.clinging
+            for tip in enemy.tentacle_tips():
+                tp = camera.world_to_screen(tip, ship_pos, 0.0)
+                tx, ty = tp.x, tp.y + hud_top
+                canvas.create_line(x, y, tx, ty, fill=palette.SQUID_TENTACLE, width=3 if coiled else 2, smooth=True)
+            canvas.create_oval(x - r, y - r * 0.65, x + r, y + r * 0.55, fill=palette.SQUID_BODY, outline=palette.SQUID_CORE, width=2)
+            return
+        self._enemy(canvas, enemy.pos, enemy.radius, enemy.facing_angle, camera, ship_pos, hud_top)
 
     def _enemy(self, canvas: tk.Canvas, pos: Vec2, radius: float, facing: float, camera: ViewCamera, ship_pos: Vec2, hud_top: int) -> None:
         p = camera.world_to_screen(pos, ship_pos, 0.0)
@@ -188,8 +220,10 @@ class PerspectiveViewRenderer:
             draw_chase_enemy,
             draw_chase_gate,
             draw_chase_pickup,
-            draw_chase_projectile,
+            draw_chase_squid,
         )
+        from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
+        from gravity_ho_matey.render.chase_projectile_fx import draw_chase_projectile
         from gravity_ho_matey.render.chase_fx import (
             draw_chase_floor_gradient,
             draw_chase_sky,
@@ -236,6 +270,16 @@ class PerspectiveViewRenderer:
             if wp.visible:
                 wscale = max(0.25, camera.perspective_scale(wp.depth) / camera.focal_length)
                 light_layer.add_well(well, Vec2(wp.x, wp.y), scale=wscale, depth=wp.depth)
+        for beacon in world.beacons:
+            if beacon.collected:
+                continue
+            bp = camera.world_to_screen(beacon.pos, ship_pos, ship_angle)
+            if bp.visible:
+                bscale = max(
+                    CHASE_BEACON_SCALE_FLOOR,
+                    camera.perspective_scale(bp.depth) / camera.focal_length * CHASE_BEACON_VISUAL_BOOST,
+                )
+                light_layer.add_beacon(Vec2(bp.x, bp.y), scale=bscale, depth=bp.depth, collected=beacon.collected)
         light_layer.draw_onto_canvas(canvas, horizon_y=camera.chase_horizon_y())
 
         asteroid_sprites = collect_chase_asteroid_sprites(
@@ -315,16 +359,49 @@ class PerspectiveViewRenderer:
                 )
             elif kind == "beacon":
                 pos, beacon, b_scale = payload
-                draw_chase_beacon(canvas, pos, beacon, elapsed=elapsed, depth_scale=b_scale)
+                draw_chase_beacon(
+                    canvas,
+                    pos,
+                    beacon,
+                    elapsed=elapsed,
+                    depth_scale=b_scale,
+                    rig=rig,
+                )
             elif kind == "pickup":
                 pos, kind_enum = payload
                 draw_chase_pickup(canvas, pos, kind_enum)
             elif kind == "enemy":
                 pos, enemy, scale = payload
-                draw_chase_enemy(canvas, pos, radius=enemy.radius, facing=enemy.facing_angle, scale=scale)
+                if enemy.kind is EnemyKind.SQUID and isinstance(enemy, SquidEnemy):
+                    tip_screen: list[tuple[float, float]] = []
+                    for tip in enemy.tentacle_tips():
+                        tp = camera.world_to_screen(tip, ship_pos, ship_angle)
+                        if tp.visible:
+                            tip_screen.append((tp.x, tp.y))
+                    draw_chase_squid(
+                        canvas,
+                        pos,
+                        radius=enemy.radius,
+                        tentacle_reach=enemy.tentacle_reach,
+                        facing=enemy.facing_angle,
+                        scale=scale,
+                        coiled=enemy.clinging,
+                        elapsed=elapsed,
+                        ship_world=ship_pos,
+                        tip_screen=tuple(tip_screen) if tip_screen else None,
+                    )
+                else:
+                    draw_chase_enemy(canvas, pos, radius=enemy.radius, facing=enemy.facing_angle, scale=scale)
             elif kind == "projectile":
                 pos, projectile = payload
-                draw_chase_projectile(canvas, pos, projectile.vel, hostile=projectile.hostile)
+                draw_chase_projectile(
+                    canvas,
+                    pos,
+                    projectile,
+                    camera=camera,
+                    ship_pos=ship_pos,
+                    ship_angle=ship_angle,
+                )
 
         anchor_x, anchor_y = camera.chase_anchor()
         draw_speed_vignette(canvas, camera, world.ship.vel.length())

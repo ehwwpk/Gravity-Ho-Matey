@@ -5,8 +5,12 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Beacon, FinishGate, GravityWell, Ship, WorldConfig
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.asteroid_placements import build_cove_asteroids, build_solar_asteroids
+from gravity_ho_matey.levels.drift_belt_asteroids import build_drift_belt_asteroids
+from gravity_ho_matey.levels.drift_belt_layout import build_drift_layout
+from gravity_ho_matey.levels.drift_enemies import drift_squid_enemies
+from gravity_ho_matey.levels.level_profiles import chart_sector_config, open_sector_config
 from gravity_ho_matey.levels.solar_patrols import solar_patrol_enemies
-from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
+from gravity_ho_matey.settings import CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
 
 
 def build_cove_run_level() -> GameWorld:
@@ -22,18 +26,11 @@ def build_cove_run_level() -> GameWorld:
         Beacon(Vec2(600, 390)),
         Beacon(Vec2(870, 115)),
     ]
+    config = chart_sector_config(theme="cove", name="Smuggler's Cove")
     return GameWorld(
-        config=WorldConfig(
-            width=CANVAS_WIDTH,
-            height=CANVAS_HEIGHT,
-            viewport_width=CANVAS_WIDTH,
-            viewport_height=CANVAS_HEIGHT,
-            level_theme="cove",
-            level_name="Smuggler's Cove",
-            open_bounds=True,
-        ),
+        config=config,
         ship=Ship(pos=Vec2(80, 70), angle=0.58),
-        asteroids=build_cove_asteroids(),
+        asteroids=build_cove_asteroids(config),
         wells=wells,
         beacons=beacons,
         finish_gate=FinishGate(Rect(880, 550, 54, 54)),
@@ -64,23 +61,36 @@ def build_solar_crossing_level() -> GameWorld:
         Beacon(Vec2(480, strip_h * 0.52)),
         Beacon(Vec2(165, strip_h * 0.78)),
     ]
+    config = chart_sector_config(
+        theme="solar",
+        name="Singularity Crossing",
+        width=CANVAS_WIDTH,
+        height=int(strip_h),
+        gravity_scale=0.45,
+        turn_rate=5.2,
+        thrust=255.0,
+    )
     return GameWorld(
-        config=WorldConfig(
-            width=CANVAS_WIDTH,
-            height=strip_h,
-            viewport_width=CANVAS_WIDTH,
-            viewport_height=CANVAS_HEIGHT,
-            gravity_scale=0.45,
-            turn_rate=5.2,
-            thrust=255.0,
-            level_theme="solar",
-            level_name="Singularity Crossing",
-            open_bounds=True,
-        ),
+        config=config,
         ship=Ship(pos=Vec2(52, 120), angle=1.52),
         asteroids=build_solar_asteroids(),
         wells=wells,
         beacons=beacons,
         finish_gate=FinishGate(Rect(895, strip_h - 90, 50, 50)),
         enemies=solar_patrol_enemies(strip_h),
+    )
+
+
+def build_drift_belt_level() -> GameWorld:
+    """Level 3 — concentric belts, titan wells, void squids, north exit."""
+    layout = build_drift_layout()
+    config = open_sector_config(theme="drift", name="The Drift", arena_size=4800)
+    return GameWorld(
+        config=config,
+        ship=layout.spawn_ship,
+        asteroids=build_drift_belt_asteroids(config),
+        wells=list(layout.wells),
+        beacons=[],
+        finish_gate=layout.finish_gate,
+        enemies=drift_squid_enemies(layout),
     )

@@ -56,13 +56,28 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         scene.camera.update_follow(scene.world.ship.pos, scene.world.config, 1.0)
         self.assertGreater(scene.camera.center.y, 600.0)
 
-    def test_solar_campaign_complete_routes_to_end_scene(self) -> None:
-        from gravity_ho_matey.scenes.end import EndScene
+    def test_solar_win_routes_to_drift_briefing(self) -> None:
+        from gravity_ho_matey.scenes.chart_briefing import ChartBriefingScene
 
         scene = PlayScene("solar", CampaignState.new())
         host = _FakeHost()
         for beacon in scene.world.beacons:
             beacon.collected = True
+        scene.world.ship.pos = Vec2(
+            scene.world.finish_gate.rect.x + 10,
+            scene.world.finish_gate.rect.y + 10,
+        )
+        scene.update(host, 0.016)
+        self.assertIsInstance(host.last_scene, ChartBriefingScene)
+        briefing = host.last_scene
+        assert isinstance(briefing, ChartBriefingScene)
+        self.assertEqual(briefing.upcoming_level_id, "drift")
+
+    def test_drift_campaign_complete_routes_to_end_scene(self) -> None:
+        from gravity_ho_matey.scenes.end import EndScene
+
+        scene = PlayScene("drift", CampaignState.new())
+        host = _FakeHost()
         scene.world.ship.pos = Vec2(
             scene.world.finish_gate.rect.x + 10,
             scene.world.finish_gate.rect.y + 10,

@@ -25,3 +25,9 @@ class Scene:
 
     def on_key_press(self, host: SceneHost, keysym: str) -> None:
         pass
+
+    def on_pointer(self, host: SceneHost, x: float, y: float, button: int) -> None:
+        pass
+
+    def on_pointer_motion(self, host: SceneHost, x: float, y: float) -> None:
+        pass

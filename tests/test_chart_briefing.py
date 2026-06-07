@@ -102,7 +102,7 @@ class ChartBriefingLayoutTests(unittest.TestCase):
         )
         text_items = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
         joined = " ".join(str(t) for t in text_items if t)
-        self.assertIn("HOLO CHART OPEN", joined)
+        self.assertIn("CHART BRIEF", joined)
         self.assertIn("INITIAL BRIEF", joined)
         self.assertIn("BRIEFING", joined)
         self.assertGreater(len(canvas.find_all()), 40)

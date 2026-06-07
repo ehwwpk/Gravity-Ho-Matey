@@ -61,6 +61,10 @@ def _ring_color(kind: ExplosionKind, life_ratio: float) -> str:
         return "#ffd27a" if life_ratio > 0.35 else "#ff6b3a"
     if kind is ExplosionKind.SHIP_STRUCK:
         return "#fff0b5" if life_ratio > 0.35 else "#ff8a4a"
+    if kind is ExplosionKind.ASTEROID_DESTROYED:
+        return "#c8b8a0" if life_ratio > 0.35 else "#8a7060"
+    if kind is ExplosionKind.ASTEROID_BREAKUP:
+        return "#ffd080" if life_ratio > 0.35 else "#c86830"
     return "#ffffff" if life_ratio > 0.45 else "#ff4a3a"
 
 

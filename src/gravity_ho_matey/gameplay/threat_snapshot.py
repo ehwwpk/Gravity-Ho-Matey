@@ -15,6 +15,7 @@ class AsteroidThreatSnapshot:
 
 
 def build_asteroid_threat_snapshots(asteroids: list[Asteroid]) -> tuple[AsteroidThreatSnapshot, ...]:
+    """Narrow-phase hull meshes — only call for asteroids already filtered by broad phase."""
     snapshots: list[AsteroidThreatSnapshot] = []
     for asteroid in asteroids:
         verts = asteroid.world_vertices()

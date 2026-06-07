@@ -16,6 +16,9 @@ class EndScene(Scene):
     level_id: str = "cove"
     game_over: bool = False
 
+    def __post_init__(self) -> None:
+        self.hover_id: str | None = None
+
     def draw(self, host: SceneHost) -> None:
         host.renderer.draw_end(
             self.won,
@@ -24,33 +27,61 @@ class EndScene(Scene):
             self.level_id,
             self.campaign,
             self.game_over,
+            hover_id=self.hover_id,
         )
 
-    def on_key_press(self, host: SceneHost, keysym: str) -> None:
-        from gravity_ho_matey.scenes.game_flow import start_play
-        from gravity_ho_matey.scenes.title import TitleScene
+    def on_pointer_motion(self, host: SceneHost, x: float, y: float) -> None:
+        self.hover_id = host.renderer.end_hit_test(x, y)
 
+    def on_pointer(self, host: SceneHost, x: float, y: float, button: int) -> None:
+        if button != 1:
+            return
+        hit = host.renderer.end_hit_test(x, y)
+        if hit == "action_retry":
+            self._retry(host)
+        elif hit == "action_next":
+            self._next_chart(host)
+        elif hit == "action_title":
+            self._title(host)
+
+    def on_key_press(self, host: SceneHost, keysym: str) -> None:
         key = keysym.lower()
         if key == "return":
             if self.game_over:
-                host.set_scene(TitleScene())
-                return
-            if self.won:
+                self._title(host)
+            elif self.won:
                 upcoming = next_level_id(self.level_id)
                 if upcoming is not None:
-                    from gravity_ho_matey.scenes.game_flow import start_chart_briefing
-
-                    host.set_scene(
-                        start_chart_briefing(
-                            upcoming,
-                            campaign=self.campaign,
-                            cleared_level_id=self.level_id,
-                            elapsed=self.elapsed,
-                        )
-                    )
+                    self._next_chart(host)
                 else:
-                    host.set_scene(TitleScene())
+                    self._title(host)
             else:
-                host.set_scene(start_play(self.level_id, self.campaign))
+                self._retry(host)
         elif key == "escape":
-            host.set_scene(TitleScene())
+            self._title(host)
+
+    def _title(self, host: SceneHost) -> None:
+        from gravity_ho_matey.scenes.title import TitleScene
+
+        host.set_scene(TitleScene())
+
+    def _retry(self, host: SceneHost) -> None:
+        from gravity_ho_matey.scenes.game_flow import start_play
+
+        host.set_scene(start_play(self.level_id, self.campaign))
+
+    def _next_chart(self, host: SceneHost) -> None:
+        from gravity_ho_matey.scenes.game_flow import start_chart_briefing
+
+        upcoming = next_level_id(self.level_id)
+        if upcoming is None:
+            self._title(host)
+            return
+        host.set_scene(
+            start_chart_briefing(
+                upcoming,
+                campaign=self.campaign,
+                cleared_level_id=self.level_id,
+                elapsed=self.elapsed,
+            )
+        )

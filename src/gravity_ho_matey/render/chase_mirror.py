@@ -5,6 +5,7 @@ import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.gravity_field import GravityField
+from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
@@ -238,7 +239,10 @@ def draw_rear_view_mirror(
             continue
         px, py, aft = hit
         closing = _closing_from_behind(enemy.pos, enemy.vel, ship_pos, ship_vel, ship_angle)
-        blips.append((aft, closing, "enemy", px, py, 6.0, palette.ENEMY, enemy.vel))
+        if enemy.kind is EnemyKind.SQUID:
+            blips.append((aft, closing, "squid", px, py, 7.0, palette.SQUID_TENTACLE, enemy.vel))
+        else:
+            blips.append((aft, closing, "enemy", px, py, 6.0, palette.ENEMY, enemy.vel))
 
     for asteroid in world.asteroids:
         hit = world_to_mirror(asteroid.pos, ship_pos, ship_angle, mx, my, mw, mh)
@@ -264,12 +268,16 @@ def draw_rear_view_mirror(
     for _aft, closing, kind, px, py, size, color, vel in blips:
         boost = min(1.35, 1.0 + closing * 0.0018)
         draw_size = size * boost
-        if kind in ("well_lethal", "enemy", "hostile_shot", "asteroid") and closing > 40.0:
+        if kind in ("well_lethal", "enemy", "hostile_shot", "asteroid", "squid", "beacon") and closing > 40.0:
             ring_r = draw_size + 3.0 + pulse * 2.0
             if kind == "well_lethal":
                 ring_color = palette.BLACK_HOLE_RING
             elif kind == "enemy":
                 ring_color = palette.ENEMY_EDGE
+            elif kind == "squid":
+                ring_color = palette.SQUID_CORE
+            elif kind == "beacon":
+                ring_color = palette.BEACON
             elif kind == "hostile_shot":
                 ring_color = palette.HOSTILE_PROJECTILE
             else:
@@ -281,11 +289,21 @@ def draw_rear_view_mirror(
             canvas.create_oval(px - r, py - r * 0.55, px + r, py + r * 0.55, outline=color, width=2)
         elif kind == "beacon":
             s = draw_size
-            canvas.create_polygon(px, py - s, px + s, py, px, py + s, px - s, py, fill=color, outline="")
+            glow_r = s + 4.0 + pulse * 3.0
+            canvas.create_oval(px - glow_r, py - glow_r, px + glow_r, py + glow_r, outline=palette.BEACON, width=1)
+            canvas.create_polygon(px, py - s, px + s, py, px, py + s, px - s, py, fill=color, outline=palette.BEACON_COLLECTED, width=1)
+            canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill="#e8fff8", outline="")
         elif kind == "enemy":
             canvas.create_oval(px - draw_size, py - draw_size, px + draw_size, py + draw_size, fill=color, outline=palette.ENEMY_EDGE, width=1)
             if vel is not None:
                 _draw_velocity_chevron(canvas, px, py, vel, ship_angle, color=palette.ENEMY_EDGE)
+        elif kind == "squid":
+            for i in range(5):
+                angle = (math.tau * i / 5) + pulse * 0.5
+                tx = px + math.cos(angle) * draw_size * 2.4
+                ty = py + math.sin(angle) * draw_size * 2.4
+                canvas.create_line(px, py, tx, ty, fill=palette.SQUID_TENTACLE, width=2)
+            canvas.create_oval(px - draw_size, py - draw_size, px + draw_size, py + draw_size, fill=palette.SQUID_BODY, outline=palette.SQUID_CORE, width=1)
         elif kind == "asteroid":
             s = draw_size
             canvas.create_polygon(
@@ -304,10 +322,9 @@ def draw_rear_view_mirror(
             if vel is not None:
                 _draw_velocity_chevron(canvas, px, py, vel, ship_angle, color=color)
         elif kind == "hostile_shot":
-            canvas.create_oval(px - 3, py - 3, px + 3, py + 3, fill=color, outline="#fff2e8")
-            if vel is not None:
-                tail = Vec2(px, py) - vel.normalized() * 8
-                canvas.create_line(tail.x, tail.y, px, py, fill=color, width=2)
+            from gravity_ho_matey.render.chase_projectile_fx import draw_mirror_hostile_bolt
+
+            draw_mirror_hostile_bolt(canvas, px, py, vel, ship_angle, draw_size=draw_size)
         else:
             canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill=color, outline="")
 

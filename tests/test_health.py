@@ -114,7 +114,7 @@ class HealthWorldTests(unittest.TestCase):
         self.assertEqual(world.status, GameStatus.RUNNING)
 
     def test_open_bounds_radiation_chip_after_exposure_limit(self) -> None:
-        world = tiny_world(ship_pos=Vec2(-5, 100))
+        world = tiny_world(ship_pos=Vec2(-20, 100))
         remaining = CHART_RADIATION_EXPOSURE_LIMIT + 0.1
         while remaining > 0 and world.status is GameStatus.RUNNING:
             step = min(remaining, 0.05)
@@ -192,7 +192,7 @@ class HealthWorldTests(unittest.TestCase):
         world.last_damage = DamageEvent(DamageSource.CHART_RADIATION)
         recover_ship_in_place(world)
         self.assertEqual(world.status, GameStatus.RUNNING)
-        self.assertAlmostEqual(world.ship.pos.x, 6.0)
+        self.assertAlmostEqual(world.ship.pos.x, -4.0)
         self.assertAlmostEqual(world.ship.pos.y, 150.0)
         self.assertNotAlmostEqual(world.ship.pos.x, world.spawn_pos.x)
         self.assertEqual(world.ship.vel.length(), 0.0)

@@ -5,6 +5,7 @@ import tkinter as tk
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Beacon
 from gravity_ho_matey.render import palette
+from gravity_ho_matey.render.lighting import LightRig
 
 
 def gate_label(*, unlocked: bool, solar: bool) -> str:
@@ -80,11 +81,36 @@ def draw_gate_portal(
     )
 
 
-def draw_beacon_marker(canvas: tk.Canvas, pos: Vec2, beacon: Beacon, *, hud_top: float) -> None:
+def draw_beacon_marker(
+    canvas: tk.Canvas,
+    pos: Vec2,
+    beacon: Beacon,
+    *,
+    hud_top: float,
+    rig: LightRig | None = None,
+    elapsed: float = 0.0,
+) -> None:
+    from gravity_ho_matey.render.beacon_viz import beacon_seed_from_pos, draw_beacon_play
+
+    x = pos.x
+    y = pos.y + hud_top
+    if rig is not None:
+        draw_beacon_play(
+            canvas,
+            x,
+            y,
+            beacon,
+            scale=1.0,
+            rig=rig,
+            elapsed=elapsed,
+            seed=beacon_seed_from_pos(beacon.pos),
+            spark_orbits=not beacon.collected,
+        )
+        return
     draw_beacon_glyph(
         canvas,
-        pos.x,
-        pos.y + hud_top,
+        x,
+        y,
         collected=beacon.collected,
         scale=1.0,
         show_ring=True,

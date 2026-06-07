@@ -49,6 +49,23 @@ class LightLayerBuilder:
         colors = (palette.CHASE_ENGINE_CORE, palette.CHASE_ENGINE_GLOW, "#ff6020")
         self._sources.append(("engine", anchor_x, anchor_y + 8, r, colors, 0.7 if thrusting else 0.35))
 
+    def add_beacon(self, screen_pos: Vec2, *, scale: float, depth: float, collected: bool) -> None:
+        if collected:
+            return
+        radius = max(20.0, 32.0 * scale)
+        pulse = self.elapsed * 3.4
+        strength = max(0.5, min(1.0, 220.0 / max(depth, 40.0)))
+        self._sources.append(
+            (
+                "beacon",
+                screen_pos.x,
+                screen_pos.y,
+                radius,
+                palette.CHASE_FOG_BEACON,
+                strength * (0.88 + 0.12 * math.sin(pulse)),
+            )
+        )
+
     def draw_onto_canvas(self, canvas: tk.Canvas, *, horizon_y: float) -> None:
         """Draw light sinks first, then additive glows (Tk-safe approximation of multiply stack)."""
         for kind, x, y, radius, colors, strength in self._sources:
@@ -60,6 +77,23 @@ class LightLayerBuilder:
             scaled = tuple(colors) if isinstance(colors, tuple) else (str(colors),)
             if kind == "engine":
                 draw_fog_glow(canvas, x, y, radius * strength, scaled, pulse=self.elapsed * 8.0)
+            elif kind == "beacon":
+                draw_ground_fog_glow(
+                    canvas,
+                    x,
+                    y + 4,
+                    radius * strength * 1.08,
+                    scaled,
+                    pulse=self.elapsed * 3.4,
+                )
+                draw_fog_glow(
+                    canvas,
+                    x,
+                    y - radius * 0.45,
+                    radius * strength * 0.62,
+                    palette.CHASE_FOG_BEACON_PILLAR,
+                    pulse=self.elapsed * 2.8,
+                )
             else:
                 draw_ground_fog_glow(canvas, x, y + radius * 0.06, radius * strength, scaled, pulse=self.elapsed * 2.0)
 

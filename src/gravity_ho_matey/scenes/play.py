@@ -145,13 +145,19 @@ class PlayScene(Scene):
                 )
                 return
 
-            if damage.source is DamageSource.CHART_RADIATION:
+            if damage.source in (DamageSource.CHART_RADIATION, DamageSource.SQUID_CLING):
                 recover_ship_in_place(self.world)
                 self._sync_chart_bounds_state(suppress_toast=True)
-                self.hud_alert = (
-                    f"RADIATION BURN — {result.hull_chunks} CHUNK"
-                    f"{'S' if result.hull_chunks != 1 else ''} LEFT"
-                )
+                if damage.source is DamageSource.CHART_RADIATION:
+                    self.hud_alert = (
+                        f"RADIATION BURN — {result.hull_chunks} CHUNK"
+                        f"{'S' if result.hull_chunks != 1 else ''} LEFT"
+                    )
+                else:
+                    self.hud_alert = (
+                        f"SQUID CLING — {result.hull_chunks} CHUNK"
+                        f"{'S' if result.hull_chunks != 1 else ''} LEFT"
+                    )
             else:
                 respawn_ship_at_spawn(self.world)
                 self._sync_chart_bounds_state(suppress_toast=True)

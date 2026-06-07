@@ -73,6 +73,27 @@ class ChaseFogTests(unittest.TestCase):
         self.assertGreaterEqual(len(oval_items), len(palette.CHASE_FOG_BLACK_HOLE))
         root.destroy()
 
+    def test_beacon_fog_draws_pulse_layers(self) -> None:
+        from gravity_ho_matey.gameplay.entities import Beacon
+        from gravity_ho_matey.render.beacon_viz import draw_beacon_play
+        from gravity_ho_matey.render.lighting import LightRig
+
+        root, canvas = _tk_canvas()
+        rig = LightRig.for_play(theme="cove", camera_mode=CameraMode.TACTICAL)
+        draw_beacon_play(
+            canvas,
+            200,
+            200,
+            Beacon(Vec2(0, 0)),
+            scale=1.0,
+            rig=rig,
+            elapsed=1.25,
+            seed=0.5,
+            spark_orbits=True,
+        )
+        self.assertGreater(len(canvas.find_all()), len(palette.CHASE_FOG_BEACON))
+        root.destroy()
+
 
 class ChaseSpeedTests(unittest.TestCase):
     def test_speed_streaks_when_fast(self) -> None:

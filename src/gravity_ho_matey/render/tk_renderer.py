@@ -30,14 +30,28 @@ class TkRenderer:
     def clear(self) -> None:
         self.canvas.delete("all")
 
-    def draw_title(self, *, page: TitlePage = TitlePage.WELCOME) -> None:
+    def draw_title(
+        self,
+        *,
+        page: TitlePage = TitlePage.WELCOME,
+        deploy_focus: int = 0,
+        hover_id: str | None = None,
+        elapsed: float = 0.0,
+    ) -> None:
         self.clear()
         self._title.draw(
             self.canvas,
             page=page,
             solar_unlocked=is_level_selectable("solar"),
+            drift_unlocked=is_level_selectable("drift"),
             draw_ship=lambda cx, cy: self._draw_demo_ship(Vec2(cx, cy), angle=0.12, scale=1.55),
+            deploy_focus=deploy_focus,
+            hover_id=hover_id,
+            elapsed=elapsed,
         )
+
+    def title_hit_test(self, x: float, y: float) -> str | None:
+        return self._title.hits.hit(x, y)
 
     def draw_world(
         self,
@@ -123,6 +137,8 @@ class TkRenderer:
         upcoming_level_id: str,
         cleared_level_id: str | None = None,
         elapsed: float = 0.0,
+        hover_id: str | None = None,
+        anim: float = 0.0,
     ) -> None:
         self.clear()
         self._chart.draw(
@@ -133,7 +149,11 @@ class TkRenderer:
             upcoming_level_id=upcoming_level_id,
             cleared_level_id=cleared_level_id,
             elapsed=elapsed,
+            hover_id=hover_id,
         )
+
+    def chart_hit_test(self, x: float, y: float) -> str | None:
+        return self._chart.hits.hit(x, y)
 
     def draw_end(
         self,
@@ -143,44 +163,134 @@ class TkRenderer:
         level_id: str,
         campaign: CampaignState,
         game_over: bool = False,
+        *,
+        hover_id: str | None = None,
     ) -> None:
         from gravity_ho_matey.levels.level_registry import LEVEL_LABELS, LEVEL_ORDER, next_level_id
+        from gravity_ho_matey.render import hud_primitives as hp
+        from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button
 
         self.clear()
-        self.canvas.create_rectangle(0, 0, 960, 640, fill=palette.BACKGROUND, outline="")
-        self._draw_starfield()
+        self._end_hits = MenuHitMap()
+        accent = palette.HUD_ACCENT
+        dim = palette.HUD_DIM
+        frame = palette.HUD_FRAME
+        self.canvas.create_rectangle(0, 0, 960, 640, fill=palette.SOLAR_BG, outline="")
+        self._draw_starfield(dense=True)
+
+        px, py, pw, ph = 130.0, 120.0, 700.0, 360.0
+        hp.draw_panel(self.canvas, px, py, pw, ph, frame=frame, accent=accent, fill=palette.HUD_BG)
+        draw_holo_corners(self.canvas, px, py, pw, ph, accent=accent)
+
         if game_over:
-            title = "Campaign over."
+            title = "Campaign Over"
             subtitle = reason or "All three lives spent."
-            prompt = "Enter: return to title     Esc: title"
+            primary_id = "action_title"
+            primary_label = "RETURN TO NAV STATION"
+            show_secondary = False
         elif won:
             upcoming = next_level_id(level_id)
             if upcoming is not None:
-                title = "Treasure route cleared!" if level_id == "cove" else "Star chart cleared!"
-                subtitle = f"Finished in {elapsed:0.2f}s — next: {LEVEL_LABELS[upcoming]}"
-                level_num = LEVEL_ORDER.index(upcoming) + 1
-                prompt = f"Enter: open holo chart for level {level_num}     Esc: title"
+                title = "Sector Cleared"
+                subtitle = f"Cleared in {elapsed:0.1f}s · Next: {LEVEL_LABELS[upcoming]}"
+                primary_id = "action_next"
+                primary_label = "OPEN NEXT CHART"
+                show_secondary = True
             else:
-                title = "Campaign complete!"
-                subtitle = f"Singularity crossed in {elapsed:0.2f}s. Both charts cleared."
-                prompt = "Enter: return to title     Esc: title"
+                title = "Campaign Complete"
+                subtitle = f"The Drift cleared in {elapsed:0.1f}s."
+                primary_id = "action_title"
+                primary_label = "RETURN TO NAV STATION"
+                show_secondary = False
         else:
-            title = "Shipwrecked."
+            title = "Shipwrecked"
             subtitle = (
-                f"{reason or 'The void claims another captain.'}   "
-                f"Lives left: {campaign.lives}   Hull: {campaign.hull_chunks}/{CHUNKS_PER_LIFE}"
+                f"{reason or 'The void claims another captain.'}  "
+                f"Lives {campaign.lives} · Hull {campaign.hull_chunks}/{CHUNKS_PER_LIFE}"
             )
-            prompt = "Enter: try again     Esc: title"
-        self.canvas.create_text(480, 220, text=title, fill=palette.TEXT, font=("Courier", 30, "bold"))
-        self.canvas.create_text(480, 275, text=subtitle, fill=palette.MUTED_TEXT, font=("Courier", 16))
-        self.canvas.create_text(480, 355, text=prompt, fill=palette.TEXT, font=("Courier", 15))
+            primary_id = "action_retry"
+            primary_label = "TRY AGAIN"
+            show_secondary = True
+
+        self.canvas.create_text(480, py + 48, text=title, fill=palette.TEXT, font=("Courier New", 28, "bold"))
+        draw_fitted_text(
+            self.canvas,
+            480,
+            py + 92,
+            subtitle,
+            max_width=pw - 48,
+            color=palette.MUTED_TEXT,
+            font=("Courier New", 13),
+            anchor="center",
+        )
+
         if campaign.powerup_stacks:
-            perks = "Carried loot: " + ", ".join(
+            perks = "Carried: " + ", ".join(
                 f"{POWERUP_LABELS[kind]}" + (f" ×{count}" if count > 1 else "")
                 for kind, count in sorted(campaign.powerup_stacks.items(), key=lambda item: item[0].name)
                 if count > 0
             )
-            self.canvas.create_text(480, 410, text=perks, fill=palette.MUTED_TEXT, font=("Courier", 12))
+            draw_fitted_text(
+                self.canvas,
+                480,
+                py + 124,
+                perks,
+                max_width=pw - 48,
+                color=dim,
+                font=("Courier New", 11),
+                anchor="center",
+            )
+
+        btn_w = 220.0
+        btn_h = 40.0
+        btn_y = py + ph - 88
+        if show_secondary:
+            primary_x = 480 - btn_w - 12
+            secondary_x = 480 + 12
+        else:
+            primary_x = 480 - btn_w / 2
+            secondary_x = 0.0
+        self._end_hits.add(primary_id, primary_x, btn_y, btn_w, btn_h)
+        draw_menu_button(
+            self.canvas,
+            primary_x,
+            btn_y,
+            btn_w,
+            btn_h,
+            primary_label,
+            accent=accent,
+            dim=dim,
+            frame=frame,
+            selected=True,
+            hover=hover_id == primary_id,
+        )
+        if show_secondary:
+            self._end_hits.add("action_title", secondary_x, btn_y, btn_w, btn_h)
+            draw_menu_button(
+                self.canvas,
+                secondary_x,
+                btn_y,
+                btn_w,
+                btn_h,
+                "← NAV STATION",
+                accent=accent,
+                dim=dim,
+                frame=frame,
+                hover=hover_id == "action_title",
+            )
+        self.canvas.create_text(
+            480,
+            py + ph - 28,
+            text="Click buttons · Enter confirms · Esc to nav station",
+            fill=dim,
+            font=hp.FONT_SMALL,
+        )
+
+    def end_hit_test(self, x: float, y: float) -> str | None:
+        hits = getattr(self, "_end_hits", None)
+        if hits is None:
+            return None
+        return hits.hit(x, y)
 
     def _draw_starfield(self, dense: bool = False) -> None:
         count = 140 if dense else 80

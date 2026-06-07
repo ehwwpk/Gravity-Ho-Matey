@@ -15,8 +15,10 @@ def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> N
     top = camera.play_hud_top
     width = camera.viewport_width
     solar = world.config.level_theme == "solar"
-    sky_top = "#020408" if solar else "#040810"
-    sky_horizon = "#0a1830" if solar else "#081420"
+    drift = world.config.level_theme == "drift"
+    deep_space = solar or drift
+    sky_top = "#020408" if deep_space else "#040810"
+    sky_horizon = "#0a1830" if deep_space else "#081420"
     steps = 8
     band = max(1.0, (horizon - top) / steps)
     for i in range(steps):

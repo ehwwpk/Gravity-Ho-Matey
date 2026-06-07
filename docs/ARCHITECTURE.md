@@ -60,11 +60,32 @@ Three hull chunks per life; three chips on one life costs one campaign life. Par
 - `Ship`, `Projectile`, `PatrolEnemy`, `PowerUpPickup`
 - `Asteroid`, `GravityWell`, `Beacon`, `FinishGate`
 - `gameplay/asteroid_shape.py` — seeded procedural convex silhouettes
-- `gameplay/asteroid_motion.py` — drift profiles (slow/medium/fast/ring/shower), integration
+- `gameplay/asteroid_motion.py` — drift profiles (slow/medium/fast/ring/shower), integration, spawn
+- `gameplay/asteroid_tiers.py` — SMALL/LARGE tiers, hit budgets, generation cap
+- `gameplay/asteroid_mass.py` — polygon mass, fragment scaling, explosion scale helpers
+- `gameplay/asteroid_combat.py` — projectile hit resolution, breakup, list mutation contract
 - `levels/asteroid_placements.py` — per-level field layout
 - `GameStatus`, optional `on_powerup_collected` callback
 
 `WorldConfig` owns tuning constants and `level_theme` / `level_name`.
+
+## Asteroid combat
+
+Destructible asteroids use tiered hit budgets rolled once at spawn:
+
+| Tier | `size_class` | Hits to break | On final hit |
+|------|--------------|---------------|--------------|
+| LARGE | `boulder` | 5–10 (seeded) | 50% mass → breakup FX; 50% → 2–4 SMALL fragments |
+| MEDIUM | large `rock` (radius ≥ 51) | 3–5 (seeded) | 50% mass → breakup FX; 50% → 2–3 SMALL fragments |
+| SMALL | `pebble`, typical `rock` | 1–3 (seeded) | Removed completely |
+
+- Friendly and hostile projectiles call `asteroid_combat.apply_projectile_hit` with the same tier rules.
+- Fragment spawns inherit velocity + outward impulse; ring metadata is cleared so belt gaps persist naturally.
+- `GameWorld` refreshes `asteroid_threat_snapshots` after any combat list mutation so `_check_loss` never uses stale hulls.
+- Generation depth caps at 2 — deeper fragments vaporize instead of splitting again.
+- Global cap: 48 asteroids; at cap, breakup is vapor-only (no new fragments).
+
+Chip hits reuse `PROJECTILE_IMPACT`; final small/large hits use `ASTEROID_DESTROYED` / `ASTEROID_BREAKUP` (mass-scaled). Render adds extra craters from `hits_max - hits_remaining`.
 
 ## Levels
 
@@ -96,4 +117,4 @@ Presentation is split from simulation:
 
 ## Tests
 
-Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, registry alignment, and drifting asteroid shape/motion/collision/render paths.
+Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, registry alignment, drifting asteroid shape/motion/collision/render paths, and destructible asteroid combat (tiers, breakup, threat snapshot refresh).

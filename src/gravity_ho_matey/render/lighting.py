@@ -141,6 +141,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_pit="#2a5068",
             crater_rim_hi=palette.SHIP_TRIM,
         )
+    if kind == "beacon":
+        return MaterialTones(
+            highlight="#c8fff4",
+            mid=palette.BEACON,
+            shadow="#1a8870",
+            deep="#0a4838",
+            rim="#dff",
+            crater_pit="#063828",
+            crater_rim_hi="#e8fff8",
+        )
     return material_for("asteroid", theme=theme)
 
 

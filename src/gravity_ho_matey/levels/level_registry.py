@@ -3,20 +3,22 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from gravity_ho_matey.gameplay.world import GameWorld
-from gravity_ho_matey.levels.level_data import build_cove_run_level, build_solar_crossing_level
+from gravity_ho_matey.levels.level_data import build_cove_run_level, build_drift_belt_level, build_solar_crossing_level
 
 LevelBuilder = Callable[[], GameWorld]
 
 LEVEL_BUILDERS: dict[str, LevelBuilder] = {
     "cove": build_cove_run_level,
     "solar": build_solar_crossing_level,
+    "drift": build_drift_belt_level,
 }
 
-LEVEL_ORDER: tuple[str, ...] = ("cove", "solar")
+LEVEL_ORDER: tuple[str, ...] = ("cove", "solar", "drift")
 
 LEVEL_LABELS: dict[str, str] = {
     "cove": "1 — Smuggler's Cove",
     "solar": "2 — Singularity Crossing",
+    "drift": "3 — The Drift",
 }
 
 

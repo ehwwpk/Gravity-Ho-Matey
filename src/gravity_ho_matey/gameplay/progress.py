@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from gravity_ho_matey.levels.level_registry import LEVEL_ORDER
+from gravity_ho_matey.settings import DEV_UNLOCK_ALL_LEVELS
 
 _ALWAYS_SELECTABLE = frozenset({LEVEL_ORDER[0]} if LEVEL_ORDER else ())
 _unlocked_levels: set[str] = set(_ALWAYS_SELECTABLE)
@@ -19,6 +20,8 @@ def record_level_cleared(level_id: str) -> None:
 
 
 def is_level_selectable(level_id: str) -> bool:
+    if DEV_UNLOCK_ALL_LEVELS and level_id in LEVEL_ORDER:
+        return True
     return level_id in _unlocked_levels
 
 

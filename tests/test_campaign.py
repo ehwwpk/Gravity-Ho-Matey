@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
@@ -168,13 +169,21 @@ class EnemyTests(unittest.TestCase):
 class ProgressTests(unittest.TestCase):
     def setUp(self) -> None:
         reset_progress()
+        self._dev_patch = patch("gravity_ho_matey.gameplay.progress.DEV_UNLOCK_ALL_LEVELS", False)
+        self._dev_patch.start()
 
     def test_solar_locked_until_cove_cleared(self) -> None:
         self.assertFalse(is_level_selectable("solar"))
         record_level_cleared("cove")
         self.assertTrue(is_level_selectable("solar"))
 
+    def test_drift_locked_until_solar_cleared(self) -> None:
+        self.assertFalse(is_level_selectable("drift"))
+        record_level_cleared("solar")
+        self.assertTrue(is_level_selectable("drift"))
+
     def tearDown(self) -> None:
+        self._dev_patch.stop()
         reset_progress()
 
 

@@ -363,4 +363,40 @@ Tk `TclError` (missing `tk.tcl`) in this shell — environmental; 91 other tests
 
 ---
 
+## 2026-06-02 — Destructible asteroid combat (tiers, breakup, full stack)
+
+### +EV · Two-pass plan before code caught snapshot stale seam
+Research pass identified `_check_loss` using pre-projectile threat snapshots; implementation refreshes on combat mutation.
+
+### +EV · Centralized combat layer without bloating `GameWorld`
+- `asteroid_tiers.py` — SMALL/LARGE, seeded hit budgets, generation cap (2), 48-asteroid cap
+- `asteroid_mass.py` — shoelace mass, fragment scale, explosion scale
+- `asteroid_combat.py` — friendly/hostile hit resolution, 50/50 large breakup, fragment spawn
+- `entities.Asteroid` — tier, hits, mass, generation
+- `explosions` — `ASTEROID_DESTROYED`, `ASTEROID_BREAKUP`, mass-scaled spawn
+- `world._apply_asteroid_combat_result` + snapshot refresh
+- `asteroid_viz` — combat crater count from chip damage
+- `tests/test_asteroid_combat.py` — unit + integration (221 pytest green)
+
+### +EV · Pre-edit `devgov check` + post-edit `devgov run` on task string
+`destructible asteroid combat split system` — primary python slice + pytest.
+
+### neutral · Hostile shots unchanged behavior (block only)
+Enemy fire stops on rocks with impact FX; no HP change — intentional v1 to avoid fragment chaos from AI.
+
+---
+
+## 2026-06-02 — Destructible asteroids hostile parity + audit fixes
+
+### +EV · Hostile projectiles use same `apply_projectile_hit` as player
+Unified code path in `world._update_projectiles`; enemies can chip/split/clear cover rocks.
+
+### +EV · Cap formula fix at MAX_ASTEROIDS
+At 48 bodies, boulder breakup is vapor-only (no +1 slot leak). Partial cap redirects unspawned mass to larger breakup FX.
+
+### +EV · Regression tests added
+Hostile damage parity, overlap destroy without ghost chip, hostile blocked from ship by rock, cap vapor-only breakup.
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->

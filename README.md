@@ -98,4 +98,4 @@ No third-party packages are required.
 
 ## Design target
 
-This should feel like an arcade maze racer, not Snake with a gravity wrapper. The ship has inertia, gravity bends routes and shots, drifting asteroids create moving hazards, and the win condition forces a route-planning loop: collect beacons first, then escape through the gate.
+This should feel like an arcade maze racer, not Snake with a gravity wrapper. The ship has inertia, gravity bends routes and shots, drifting asteroids create moving hazards (most rocks and pebbles shatter in 1–3 hits; only the biggest rocks and boulders split into smaller debris), and the win condition forces a route-planning loop: collect beacons first, then escape through the gate.

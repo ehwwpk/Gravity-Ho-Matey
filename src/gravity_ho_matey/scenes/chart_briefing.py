@@ -27,6 +27,12 @@ class ChartBriefingScene(Scene):
             rows=max(24, int(24 * self._preview.config.height / max(1, self._preview.config.width))),
             gravity_scale=self._preview.config.gravity_scale,
         )
+        self.hover_id: str | None = None
+        self._anim = 0.0
+
+    def update(self, host: SceneHost, dt: float) -> None:
+        _ = host
+        self._anim += dt
 
     def draw(self, host: SceneHost) -> None:
         host.renderer.draw_chart_briefing(
@@ -36,14 +42,35 @@ class ChartBriefingScene(Scene):
             upcoming_level_id=self.upcoming_level_id,
             cleared_level_id=self.cleared_level_id,
             elapsed=self.elapsed,
+            hover_id=self.hover_id,
+            anim=self._anim,
         )
 
-    def on_key_press(self, host: SceneHost, keysym: str) -> None:
-        from gravity_ho_matey.scenes.game_flow import start_play
-        from gravity_ho_matey.scenes.title import TitleScene
+    def on_pointer_motion(self, host: SceneHost, x: float, y: float) -> None:
+        self.hover_id = host.renderer.chart_hit_test(x, y)
 
+    def on_pointer(self, host: SceneHost, x: float, y: float, button: int) -> None:
+        if button != 1:
+            return
+        hit = host.renderer.chart_hit_test(x, y)
+        if hit == "launch":
+            self._launch(host)
+        elif hit == "back_title":
+            self._back(host)
+
+    def on_key_press(self, host: SceneHost, keysym: str) -> None:
         key = keysym.lower()
         if key == "return":
-            host.set_scene(start_play(self.upcoming_level_id, self.campaign))
+            self._launch(host)
         elif key == "escape":
-            host.set_scene(TitleScene())
+            self._back(host)
+
+    def _launch(self, host: SceneHost) -> None:
+        from gravity_ho_matey.scenes.game_flow import start_play
+
+        host.set_scene(start_play(self.upcoming_level_id, self.campaign))
+
+    def _back(self, host: SceneHost) -> None:
+        from gravity_ho_matey.scenes.title import TitleScene
+
+        host.set_scene(TitleScene())

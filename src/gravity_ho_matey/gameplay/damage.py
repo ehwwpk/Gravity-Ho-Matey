@@ -15,6 +15,7 @@ class DamageSource(Enum):
     CHART_RADIATION = auto()
     ENEMY = auto()
     ENEMY_PROJECTILE = auto()
+    SQUID_CLING = auto()
     GRAVITY_MAW = auto()
 
 
@@ -46,6 +47,7 @@ DAMAGE_RULES: dict[DamageSource, DamageSpec] = {
     DamageSource.CHART_RADIATION: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.ENEMY: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.ENEMY_PROJECTILE: DamageSpec(DamageSeverity.CHIP, 1),
+    DamageSource.SQUID_CLING: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.GRAVITY_MAW: DamageSpec(DamageSeverity.LETHAL, 3),
 }
 
@@ -64,6 +66,8 @@ def default_reason(source: DamageSource, level_theme: str = "cove") -> str:
         return "Chart radiation exceeded safe exposure." if solar else "Void radiation breached the hull."
     if source is DamageSource.ENEMY:
         return "Hull breached by a patrol skiff."
+    if source is DamageSource.SQUID_CLING:
+        return "Void squid tentacles crushed the hull."
     if source is DamageSource.ENEMY_PROJECTILE:
         return "Patrol battery scored a direct hit."
     if source is DamageSource.GRAVITY_MAW:

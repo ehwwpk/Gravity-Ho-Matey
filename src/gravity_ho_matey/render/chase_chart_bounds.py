@@ -3,7 +3,7 @@ from __future__ import annotations
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.chart_bounds import chart_edge_hints_for_ship
+from gravity_ho_matey.gameplay.chart_bounds import chart_edge_hints_for_ship, chart_limits
 from gravity_ho_matey.gameplay.entities import WorldConfig
 from gravity_ho_matey.render.camera import ViewCamera
 
@@ -29,13 +29,12 @@ def draw_chase_chart_edge_hints(
     if not hints:
         return
 
-    ww = config.width
-    wh = config.height
+    x0, y0, x1, y1 = chart_limits(config)
     edge_segments: dict[str, tuple[Vec2, Vec2]] = {
-        "left": (Vec2(0.0, 0.0), Vec2(0.0, wh)),
-        "right": (Vec2(ww, 0.0), Vec2(ww, wh)),
-        "top": (Vec2(0.0, 0.0), Vec2(ww, 0.0)),
-        "bottom": (Vec2(0.0, wh), Vec2(ww, wh)),
+        "left": (Vec2(x0, y0), Vec2(x0, y1)),
+        "right": (Vec2(x1, y0), Vec2(x1, y1)),
+        "top": (Vec2(x0, y0), Vec2(x1, y0)),
+        "bottom": (Vec2(x0, y1), Vec2(x1, y1)),
     }
 
     for tag, strength in hints:

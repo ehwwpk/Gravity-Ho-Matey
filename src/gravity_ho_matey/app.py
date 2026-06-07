@@ -24,6 +24,8 @@ class GravityHoMateyApp:
         self.scene.on_enter(self)
         self.root.bind("<KeyPress>", self._on_key_press)
         self.root.bind("<KeyRelease>", self._on_key_release)
+        self.root.bind("<Button-1>", self._on_pointer)
+        self.root.bind("<Motion>", self._on_pointer_motion)
 
     def run(self) -> None:
         self.timekeeper.reset()
@@ -47,3 +49,9 @@ class GravityHoMateyApp:
 
     def _on_key_release(self, event: tk.Event) -> None:
         self.input_state.set_key(str(event.keysym), False)
+
+    def _on_pointer(self, event: tk.Event) -> None:
+        self.scene.on_pointer(self, float(event.x), float(event.y), int(getattr(event, "num", 1)))
+
+    def _on_pointer_motion(self, event: tk.Event) -> None:
+        self.scene.on_pointer_motion(self, float(event.x), float(event.y))

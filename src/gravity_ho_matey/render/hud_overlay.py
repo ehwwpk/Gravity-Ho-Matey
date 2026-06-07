@@ -68,18 +68,29 @@ class SciFiHudOverlay:
             self._draw_hull_fittings(canvas, 170, 38, campaign.powerup_stacks, dim, cargo_highlight)
 
         self._panel(canvas, 336, 6, 128, 42, frame, accent)
-        self._label(canvas, 344, 12, "NAV BEACONS", dim)
-        remaining = world.beacons_remaining
-        total = len(world.beacons)
-        beacon_color = palette.BEACON if remaining else palette.BEACON_COLLECTED
-        canvas.create_text(
-            344,
-            30,
-            anchor="w",
-            text=f"{remaining:02d} / {total:02d}",
-            fill=beacon_color,
-            font=("Courier New", 14, "bold"),
-        )
+        if world.beacons:
+            self._label(canvas, 344, 12, "NAV BEACONS", dim)
+            remaining = world.beacons_remaining
+            total = len(world.beacons)
+            beacon_color = palette.BEACON if remaining else palette.BEACON_COLLECTED
+            canvas.create_text(
+                344,
+                30,
+                anchor="w",
+                text=f"{remaining:02d} / {total:02d}",
+                fill=beacon_color,
+                font=("Courier New", 14, "bold"),
+            )
+        else:
+            self._label(canvas, 344, 12, "EXIT VECTOR", dim)
+            canvas.create_text(
+                344,
+                30,
+                anchor="w",
+                text="NORTH GATE",
+                fill=palette.GATE_OPEN if world.finish_unlocked else palette.GATE_LOCKED,
+                font=("Courier New", 11, "bold"),
+            )
 
         self._panel(canvas, 470, 6, 118, 42, frame, accent)
         self._label(canvas, 478, 12, "CHRONO", dim)

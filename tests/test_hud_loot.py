@@ -39,9 +39,10 @@ class LootHudTests(unittest.TestCase):
     def test_loot_banner_draw_smoke(self) -> None:
         try:
             import tkinter as tk
+
+            root = tk.Tk()
         except tk.TclError:
             self.skipTest("Tk unavailable")
-        root = tk.Tk()
         root.withdraw()
         canvas = tk.Canvas(root, width=960, height=640)
         overlay = SciFiHudOverlay()

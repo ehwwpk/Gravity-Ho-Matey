@@ -6,6 +6,7 @@ from enum import Enum, auto
 
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
+from gravity_ho_matey.gameplay.asteroid_tiers import AsteroidTier
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 
 
@@ -67,7 +68,15 @@ class Asteroid:
     seed: int = 0
     ring_anchor: Vec2 | None = None
     ring_radius: float = 0.0
+    ring_orbit_radius: float = 0.0
+    ring_phase: float = 0.0
     ring_sign: float = 1.0
+    tier: AsteroidTier = AsteroidTier.SMALL
+    hits_max: int = 1
+    hits_remaining: int = 1
+    mass: float = 1.0
+    generation: int = 0
+    free_bounds: bool = False
 
     def approximate_radius(self) -> float:
         if not self.local_verts:
@@ -117,3 +126,6 @@ class WorldConfig:
     level_theme: str = "cove"
     level_name: str = "Level"
     open_bounds: bool = True
+    chart_margin_frac: float = 0.05
+    radiation_enabled: bool = True
+    max_asteroids: int = 48

@@ -16,6 +16,49 @@ from gravity_ho_matey.render.lighting import (
 )
 from gravity_ho_matey.render.lit_draw import draw_illustrated_polygon, draw_simplified_polygon
 
+# Chase follow-cam — generous world frustum so belt rocks scroll in, not pop.
+CHASE_ASTEROID_FORWARD_REACH = 2800.0
+CHASE_ASTEROID_LATERAL_REACH = 1320.0
+CHASE_ASTEROID_BEHIND_REACH = 420.0
+CHASE_ASTEROID_MIN_AHEAD = 6.0
+CHASE_ASTEROID_SCREEN_MARGIN = 260.0
+
+
+def asteroid_in_chase_view(asteroid: Asteroid, ship_pos: Vec2, ship_angle: float) -> bool:
+    """Forward-biased chase cull — much farther ahead than tactical box culling."""
+    rel = asteroid.pos - ship_pos
+    forward = Vec2.from_angle(ship_angle)
+    right = forward.rotated(math.pi / 2.0)
+    ahead = rel.dot(forward)
+    lateral = abs(rel.dot(right))
+    pad = asteroid.approximate_radius() + 24.0
+    if ahead < -CHASE_ASTEROID_BEHIND_REACH - pad:
+        return False
+    if ahead > CHASE_ASTEROID_FORWARD_REACH + pad:
+        return False
+    return lateral <= CHASE_ASTEROID_LATERAL_REACH + pad
+
+
+def asteroid_in_play_view(
+    asteroid: Asteroid,
+    ship_pos: Vec2,
+    *,
+    viewport_width: float,
+    viewport_height: float,
+    margin: float = 80.0,
+) -> bool:
+    """Skip drawing rocks far off-screen — they still exist and collide when you reach them."""
+    half_w = viewport_width * 0.58 + margin
+    half_h = viewport_height * 0.58 + margin
+    return abs(asteroid.pos.x - ship_pos.x) <= half_w and abs(asteroid.pos.y - ship_pos.y) <= half_h
+
+
+def _combat_crater_count(asteroid: Asteroid) -> int | None:
+    hits_taken = asteroid.hits_max - asteroid.hits_remaining
+    if hits_taken <= 0:
+        return None
+    return min(6, 2 + hits_taken)
+
 
 def draw_tactical_asteroid(
     canvas: tk.Canvas,
@@ -33,14 +76,24 @@ def draw_tactical_asteroid(
     for vert in asteroid.world_vertices():
         p = camera.world_to_screen(vert, anchor, ship_angle)
         screen_points.append((p.x, p.y + hud_top))
-    draw_illustrated_polygon(
-        canvas,
-        screen_points,
-        rig=rig,
-        material=material,
-        seed=asteroid.seed,
-        radius_hint=asteroid.approximate_radius(),
-    )
+    if asteroid.size_class == "pebble":
+        draw_simplified_polygon(
+            canvas,
+            screen_points,
+            rig=rig,
+            material=material,
+            outline_width=1,
+        )
+    else:
+        draw_illustrated_polygon(
+            canvas,
+            screen_points,
+            rig=rig,
+            material=material,
+            seed=asteroid.seed,
+            radius_hint=asteroid.approximate_radius(),
+            crater_count=_combat_crater_count(asteroid),
+        )
     if asteroid.vel.length_sq() > 120.0:
         center = camera.world_to_screen(asteroid.pos, anchor, ship_angle)
         tail = asteroid.vel.normalized() * min(18.0, asteroid.vel.length() * 0.12)
@@ -85,11 +138,19 @@ def chase_asteroid_screen_outline(
     ship_pos: Vec2,
     ship_angle: float,
 ) -> tuple[list[tuple[float, float]], float, float] | None:
-    """Rigid-body chase projection — one depth per rock so faceted lighting stays clean."""
-    center = camera.world_to_screen(asteroid.pos, ship_pos, ship_angle)
-    if not center.visible or center.depth < camera.min_depth:
+    """Rigid-body chase projection — extended frustum for belt readability."""
+    if not asteroid_in_chase_view(asteroid, ship_pos, ship_angle):
         return None
-    if center.y < camera.chase_horizon_y() - 12:
+    center = camera.world_to_chase_screen(
+        asteroid.pos,
+        ship_pos,
+        ship_angle,
+        min_ahead=CHASE_ASTEROID_MIN_AHEAD,
+        screen_margin=CHASE_ASTEROID_SCREEN_MARGIN,
+    )
+    if not center.visible:
+        return None
+    if center.y < camera.chase_horizon_y() - CHASE_ASTEROID_SCREEN_MARGIN * 0.5:
         return None
 
     forward = Vec2.from_angle(ship_angle)
@@ -119,9 +180,13 @@ def collect_chase_asteroid_sprites(
     camera: ViewCamera,
     ship_pos: Vec2,
     ship_angle: float,
+    *,
+    cull: bool = True,
 ) -> list[tuple[float, list[tuple[float, float]], Asteroid, float]]:
     sprites: list[tuple[float, list[tuple[float, float]], Asteroid, float]] = []
     for asteroid in asteroids:
+        if cull and not asteroid_in_chase_view(asteroid, ship_pos, ship_angle):
+            continue
         projected = chase_asteroid_screen_outline(asteroid, camera, ship_pos, ship_angle)
         if projected is None:
             continue
@@ -195,22 +260,34 @@ def draw_chase_asteroids(
             depth_fade=depth_fade,
         )
 
-        crater_cap = None
-        if display_scale < 0.55:
-            crater_cap = 1
-        elif display_scale < 0.75:
-            crater_cap = 2
+        crater_cap = _combat_crater_count(asteroid)
+        if crater_cap is None:
+            if display_scale < 0.55:
+                crater_cap = 1
+            elif display_scale < 0.75:
+                crater_cap = 2
+            else:
+                crater_cap = None
 
-        draw_illustrated_polygon(
-            canvas,
-            screen_points,
-            rig=rig,
-            material=material,
-            seed=asteroid.seed,
-            radius_hint=radius_hint,
-            outline_width=max(1, min(2, int(1 + display_scale * 0.75))),
-            crater_count=crater_cap,
-        )
+        if asteroid.size_class == "pebble":
+            draw_simplified_polygon(
+                canvas,
+                screen_points,
+                rig=rig,
+                material=material,
+                outline_width=1,
+            )
+        else:
+            draw_illustrated_polygon(
+                canvas,
+                screen_points,
+                rig=rig,
+                material=material,
+                seed=asteroid.seed,
+                radius_hint=radius_hint,
+                outline_width=max(1, min(2, int(1 + display_scale * 0.75))),
+                crater_count=crater_cap,
+            )
         _draw_chase_motion_streak(
             canvas,
             asteroid,
