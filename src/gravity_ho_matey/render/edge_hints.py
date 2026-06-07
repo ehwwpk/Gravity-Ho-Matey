@@ -34,9 +34,13 @@ def draw_edge_hints(
     if world.finish_unlocked:
         gate = world.finish_gate.rect
         gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
-        color = palette.GATE_OPEN if world.finish_unlocked else palette.GATE_LOCKED
-        tag = "GO" if world.finish_unlocked else "GT"
+        color = palette.GATE_OPEN
+        tag = "GO"
         _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top)
+    elif world.config.level_theme == "siege":
+        gate = world.finish_gate.rect
+        gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
+        _maybe_hint(hints, camera, gc, ship, ship_angle, "GT", palette.GATE_LOCKED, vw, vh, play_top)
 
     hints.sort(key=lambda item: item[0])
     for angle, tag, color in hints[:4]:

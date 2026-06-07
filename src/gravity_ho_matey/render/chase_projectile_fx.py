@@ -5,9 +5,48 @@ import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Projectile
+from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
 from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
+
+
+def _bolt_palette(projectile: Projectile) -> tuple[str, str, str, str]:
+    if projectile.hostile:
+        return (
+            palette.CHASE_BOLT_HOSTILE_CORE,
+            palette.CHASE_BOLT_HOSTILE_MID,
+            palette.CHASE_BOLT_HOSTILE_TAIL,
+            palette.CHASE_BOLT_HOSTILE_GLOW,
+        )
+    track = projectile.weapon_track
+    if track is WeaponTrack.LASER:
+        return (
+            palette.WEAPON_LASER_CORE,
+            palette.WEAPON_LASER_MID,
+            palette.WEAPON_LASER_TAIL,
+            palette.WEAPON_LASER_GLOW,
+        )
+    if track is WeaponTrack.EXPLOSIVE:
+        return (
+            palette.WEAPON_EXPLOSIVE_CORE,
+            palette.WEAPON_EXPLOSIVE_MID,
+            palette.WEAPON_EXPLOSIVE_TAIL,
+            palette.WEAPON_EXPLOSIVE_GLOW,
+        )
+    if track is WeaponTrack.SHOTGUN:
+        return (
+            palette.WEAPON_SHOTGUN_CORE,
+            palette.WEAPON_SHOTGUN_MID,
+            palette.WEAPON_SHOTGUN_TAIL,
+            palette.WEAPON_SHOTGUN_GLOW,
+        )
+    return (
+        palette.CHASE_BOLT_PLAYER_CORE,
+        palette.CHASE_BOLT_PLAYER_MID,
+        palette.CHASE_BOLT_PLAYER_TAIL,
+        palette.CHASE_BOLT_PLAYER_GLOW,
+    )
 
 
 def _screen_streak(
@@ -26,6 +65,10 @@ def _screen_streak(
     streak_len = min(56.0, 14.0 + speed * 0.16)
     if projectile.hostile:
         streak_len = min(62.0, 16.0 + speed * 0.18)
+    elif projectile.weapon_track is WeaponTrack.EXPLOSIVE:
+        streak_len = min(48.0, 18.0 + speed * 0.12)
+    elif projectile.weapon_track is WeaponTrack.LASER:
+        streak_len = min(72.0, 20.0 + speed * 0.2)
 
     tail_world = projectile.pos - projectile.vel.normalized() * streak_len
     tail_pt = camera.world_to_screen(tail_world, ship_pos, ship_angle)
@@ -59,11 +102,9 @@ def _draw_tapered_bolt(
     uy = (hy - ty) / length
     px, py = -uy, ux
 
-    # Volumetric bloom — ground-hugging so bolts read on the chase floor plane.
     bloom_r = 10.0 if hostile else 8.0
     draw_ground_fog_glow(canvas, hx, hy + 2, bloom_r, (glow, mid), pulse=0.0)
 
-    # Layered energy streak (wide → narrow, tail → head).
     layers: tuple[tuple[float, str, int], ...]
     if hostile:
         layers = (
@@ -85,7 +126,6 @@ def _draw_tapered_bolt(
         ly = hy - uy * length * frac
         canvas.create_line(lx, ly, hx, hy, fill=color, width=width, capstyle=tk.ROUND)
 
-    # Ion flicker side wisps (player) or plasma licks (hostile).
     wisp_count = 3 if hostile else 2
     for i in range(wisp_count):
         t = (i + 1) / (wisp_count + 1)
@@ -102,7 +142,6 @@ def _draw_tapered_bolt(
             width=1,
         )
 
-    # Hot head — white core + corona ring.
     head_r = 4.5 if hostile else 3.8
     canvas.create_oval(hx - head_r * 1.5, hy - head_r, hx + head_r * 1.5, hy + head_r * 0.65, fill="", outline=mid, width=1)
     canvas.create_oval(hx - head_r, hy - head_r * 0.75, hx + head_r, hy + head_r * 0.55, fill=core, outline=mid, width=1)
@@ -126,35 +165,20 @@ def draw_chase_projectile(
         ship_pos=ship_pos,
         ship_angle=ship_angle,
     )
-
-    if projectile.hostile:
-        _draw_tapered_bolt(
-            canvas,
-            hx=hx,
-            hy=hy,
-            tx=tx,
-            ty=ty,
-            length=length,
-            core=palette.CHASE_BOLT_HOSTILE_CORE,
-            mid=palette.CHASE_BOLT_HOSTILE_MID,
-            tail=palette.CHASE_BOLT_HOSTILE_TAIL,
-            glow=palette.CHASE_BOLT_HOSTILE_GLOW,
-            hostile=True,
-        )
-    else:
-        _draw_tapered_bolt(
-            canvas,
-            hx=hx,
-            hy=hy,
-            tx=tx,
-            ty=ty,
-            length=length,
-            core=palette.CHASE_BOLT_PLAYER_CORE,
-            mid=palette.CHASE_BOLT_PLAYER_MID,
-            tail=palette.CHASE_BOLT_PLAYER_TAIL,
-            glow=palette.CHASE_BOLT_PLAYER_GLOW,
-            hostile=False,
-        )
+    core, mid, tail, glow = _bolt_palette(projectile)
+    _draw_tapered_bolt(
+        canvas,
+        hx=hx,
+        hy=hy,
+        tx=tx,
+        ty=ty,
+        length=length,
+        core=core,
+        mid=mid,
+        tail=tail,
+        glow=glow,
+        hostile=projectile.hostile,
+    )
 
 
 def draw_mirror_hostile_bolt(
@@ -185,5 +209,5 @@ def draw_mirror_hostile_bolt(
         lat = vel.dot(right)
         mag = min(10.0, vel.length() * 0.04)
         tip_x = px + right.x * lat * 0.015
-        tip_y = py + right.y * lat * 0.015 - forward.y * mag * 0.02
-        canvas.create_line(px, py, tip_x, tip_y, fill=palette.CHASE_BOLT_HOSTILE_TAIL, width=2)
+        tip_y = py + right.y * lat * 0.015
+        canvas.create_line(px, py, tip_x - forward.x * mag, tip_y - forward.y * mag, fill=palette.CHASE_BOLT_HOSTILE_TAIL, width=2)

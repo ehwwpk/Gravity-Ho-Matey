@@ -41,11 +41,20 @@ class TacticalViewRenderer:
         vh = camera.viewport_height
         solar = world.config.level_theme == "solar"
         rift = world.config.level_theme == "rift"
+        siege = world.config.level_theme == "siege"
         ship_pos = world.ship.pos
         rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=camera.mode)
-        bg = palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.BACKGROUND
+        bg = (
+            palette.SOLAR_BG
+            if solar
+            else palette.RIFT_BG
+            if rift
+            else palette.SIEGE_BG
+            if siege
+            else palette.BACKGROUND
+        )
         canvas.create_rectangle(0, hud_top, vw, vh, fill=bg, outline="")
-        if solar or rift:
+        if solar or rift or siege:
             self._starfield(canvas, vw, vh, hud_top, dense=True)
         else:
             self._ambient_depth(canvas, vw, vh, hud_top)
@@ -169,6 +178,20 @@ class TacticalViewRenderer:
             )
         for jewel in world.jewels:
             self._jewel(canvas, jewel.pos, camera, ship_pos, hud_top, elapsed=world.elapsed)
+        if world.space_station is not None and world.space_station.alive:
+            from gravity_ho_matey.render.station_viz import draw_space_station_tactical
+
+            draw_space_station_tactical(
+                canvas,
+                world.space_station,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=world.ship.angle,
+                hud_top=hud_top,
+                rig=rig,
+                elapsed=world.elapsed,
+                tractor=world.tractor_beam,
+            )
         for enemy in world.enemies:
             if enemy.alive:
                 self._draw_tactical_enemy(
@@ -422,7 +445,7 @@ class PerspectiveViewRenderer:
         thrusting = world.ship.boost_flash > 0.0 or world.pad_flash > 0.0
         camera.chase_thrust_boost = 1.12 if thrusting else 1.0
 
-        bg = palette.RIFT_BG if rift else palette.BACKGROUND
+        bg = palette.RIFT_BG if rift else palette.SIEGE_BG if world.config.level_theme == "siege" else palette.BACKGROUND
         canvas.create_rectangle(0, 0, vw, vh, fill=bg, outline="")
 
         draw_chase_sky(canvas, camera, world)
@@ -574,6 +597,11 @@ class PerspectiveViewRenderer:
             if p.visible:
                 scale = max(0.45, camera.perspective_scale(p.depth) / camera.focal_length)
                 sprites.append((p.depth, "boss", (Vec2(p.x, p.y), world.mega_squid, scale)))
+        if world.space_station is not None and world.space_station.alive:
+            p = camera.world_to_screen(world.space_station.pos, ship_pos, ship_angle)
+            if p.visible:
+                scale = max(0.42, camera.perspective_scale(p.depth) / camera.focal_length)
+                sprites.append((p.depth, "station", (Vec2(p.x, p.y), world.space_station, scale)))
         for projectile in world.projectiles:
             p = camera.world_to_screen(projectile.pos, ship_pos, ship_angle)
             if p.visible:
@@ -632,6 +660,19 @@ class PerspectiveViewRenderer:
                     ship_radius=world.ship.radius,
                     elapsed=elapsed,
                     scrape_flash=world.boss_scrape_flash,
+                    rig=rig,
+                )
+            elif kind == "station":
+                from gravity_ho_matey.render.station_viz import draw_space_station_chase
+
+                pos, station, scale = payload
+                draw_space_station_chase(
+                    canvas,
+                    station,
+                    camera,
+                    ship_pos=ship_pos,
+                    ship_angle=ship_angle,
+                    elapsed=elapsed,
                     rig=rig,
                 )
             elif kind == "ally":

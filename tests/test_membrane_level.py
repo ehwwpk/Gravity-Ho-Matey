@@ -23,7 +23,8 @@ from gravity_ho_matey.levels.membrane_layout import (
 class MembraneLevelTests(unittest.TestCase):
     def test_registry_chain_includes_rift(self) -> None:
         self.assertEqual(next_level_id("drift"), "rift")
-        self.assertIsNone(next_level_id("rift"))
+        self.assertEqual(next_level_id("rift"), "siege")
+        self.assertIsNone(next_level_id("siege"))
 
     def test_starter_zone_and_off_path_use_neutral_physics(self) -> None:
         layout = build_membrane_layout()
@@ -70,8 +71,10 @@ class MembraneLevelTests(unittest.TestCase):
         boss = world.mega_squid
         assert boss is not None
         boss.hits_remaining = 1
+        from gravity_ho_matey.gameplay.entities import Projectile
+
         world._projectile_hits_boss(
-            type("P", (), {"hostile": False, "pos": boss.pos, "radius": 4.0})()
+            Projectile(pos=Vec2(boss.pos.x, boss.pos.y), vel=Vec2(), hostile=False)
         )
         self.assertTrue(world.boss_cleared)
         self.assertTrue(world.finish_unlocked)

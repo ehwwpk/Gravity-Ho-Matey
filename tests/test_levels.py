@@ -9,8 +9,8 @@ def test_all_registered_levels_build() -> None:
         world = build_level(level_id)
         assert world.config.viewport_width == 960
         assert world.config.viewport_height == 640
-        assert len(world.beacons) >= 3 or level_id in ("drift", "rift")
-        assert len(world.wells) >= 3 or level_id in ("drift", "rift")
+        assert len(world.beacons) >= 3 or level_id in ("drift", "rift", "siege")
+        assert len(world.wells) >= 3 or level_id in ("drift", "rift", "siege")
         if level_id == "cove":
             assert world.config.height == 640
         if level_id == "solar":
@@ -22,6 +22,13 @@ def test_all_registered_levels_build() -> None:
             assert world.config.width == 2000
             assert world.config.height == 5000
             assert world.config.exit_requires_boss is True
+        if level_id == "siege":
+            assert world.config.width == 5200
+            assert world.config.height == 3200
+            assert world.config.exit_requires_roster_clear is True
+            assert len(world.enemies) == 12
+            assert len(world.allies) == 12
+            assert world.space_station is not None
 
 
 def test_all_registered_levels_have_asteroids() -> None:
@@ -94,7 +101,8 @@ def test_campaign_level_order() -> None:
     assert next_level_id("cove") == "solar"
     assert next_level_id("solar") == "drift"
     assert next_level_id("drift") == "rift"
-    assert next_level_id("rift") is None
+    assert next_level_id("rift") == "siege"
+    assert next_level_id("siege") is None
 
 
 def test_solar_level_has_patrol_enemies() -> None:

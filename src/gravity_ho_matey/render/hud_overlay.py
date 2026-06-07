@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE, MAX_LIVES
-from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_HUD_TAGS, POWERUP_LABELS, PowerUpKind
+from gravity_ho_matey.gameplay.campaign import CampaignState, MAX_LIVES
+from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.chart_bounds import (
     CHART_RADIATION_EXPOSURE_LIMIT,
     ChartBoundsToast,
@@ -60,11 +60,14 @@ class SciFiHudOverlay:
         width = world.config.viewport_width
         solar = world.config.level_theme == "solar"
         rift = world.config.level_theme == "rift"
+        siege = world.config.level_theme == "siege"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
             else palette.RIFT_HUD_ACCENT
             if rift
+            else palette.SIEGE_HUD_ACCENT
+            if siege
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM
@@ -82,7 +85,15 @@ class SciFiHudOverlay:
 
         self._panel(canvas, 162, 6, 168, 42, frame, accent)
         self._label(canvas, 170, 12, "HULL INTEGRITY", dim)
-        self._draw_hull_chunks(canvas, 170, 24, campaign.hull_chunks, CHUNKS_PER_LIFE, accent, palette.HUD_HULL_EMPTY)
+        self._draw_hull_chunks(
+            canvas,
+            170,
+            24,
+            campaign.hull_chunks,
+            campaign.max_hull_chunks_per_life,
+            accent,
+            palette.HUD_HULL_EMPTY,
+        )
         if campaign.powerup_stacks:
             self._draw_hull_fittings(canvas, 170, 38, campaign.powerup_stacks, dim, cargo_highlight)
 
@@ -101,7 +112,33 @@ class SciFiHudOverlay:
                 font=("Courier New", 14, "bold"),
             )
         else:
-            if rift:
+            if siege and world.config.exit_requires_roster_clear:
+                self._label(canvas, 344, 12, "HOSTILE ROSTER", dim)
+                defeated = world.roster_enemies_defeated
+                total = world.roster_enemies_total
+                if world.finish_unlocked:
+                    roster_txt, roster_color = "LANE OPEN", palette.GATE_OPEN
+                else:
+                    roster_txt = f"{defeated:02d} / {total:02d}"
+                    roster_color = palette.HUD_WARN
+                canvas.create_text(
+                    344,
+                    30,
+                    anchor="w",
+                    text=roster_txt,
+                    fill=roster_color,
+                    font=("Courier New", 11, "bold"),
+                )
+                if world.space_station is not None and world.space_station.alive:
+                    canvas.create_text(
+                        344,
+                        44,
+                        anchor="w",
+                        text=f"STN {world.space_station.hits_remaining:02d} HP",
+                        fill=palette.HUD_DIM,
+                        font=self.FONT_SMALL,
+                    )
+            elif rift:
                 self._label(canvas, 344, 12, "BROOD-MOTHER", dim)
                 if world.boss_cleared:
                     boss_txt, boss_color = "PORTAL OPEN", palette.GATE_OPEN
@@ -188,7 +225,7 @@ class SciFiHudOverlay:
                 font=self.FONT_SMALL,
             )
 
-        if rift and world.allies:
+        if (rift or siege) and world.allies:
             alive_wings = sum(1 for ally in world.allies if ally.alive)
             wing_y = 54
             if world.squid_cling_timer > 0.0:
@@ -207,7 +244,7 @@ class SciFiHudOverlay:
             rubber_y = 34
             if world.squid_cling_timer > 0.0:
                 rubber_y = 54
-            elif rift and world.allies:
+            elif (rift or siege) and world.allies:
                 rubber_y = 74
             self._badge(
                 canvas,
@@ -224,17 +261,17 @@ class SciFiHudOverlay:
             drone_y = 34
             if world.squid_cling_timer > 0.0:
                 drone_y = 54
-            elif rift and world.allies:
+            elif (rift or siege) and world.allies:
                 drone_y = 74
             if campaign.rubber_hull_charges > 0:
                 drone_y += 20
-            drone_txt = f"DRONE {drone.hits_remaining:02d}/5"
+            drone_txt = f"DRONE {drone.hits_remaining:02d}/{drone.hits_max}"
             drone_color = palette.DRONE_CORE
             if drone.is_overheated:
                 drone_txt = "DRONE COOLING"
                 drone_color = palette.HUD_WARN
             elif drone.heat > 0.55:
-                drone_txt = f"DRONE {drone.hits_remaining:02d}/5 · HOT"
+                drone_txt = f"DRONE {drone.hits_remaining:02d}/{drone.hits_max} · HOT"
                 drone_color = palette.DRONE_HEAT
             self._badge(
                 canvas,
@@ -325,11 +362,14 @@ class SciFiHudOverlay:
         height = world.config.viewport_height
         solar = world.config.level_theme == "solar"
         rift = world.config.level_theme == "rift"
+        siege = world.config.level_theme == "siege"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
             else palette.RIFT_HUD_ACCENT
             if rift
+            else palette.SIEGE_HUD_ACCENT
+            if siege
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM

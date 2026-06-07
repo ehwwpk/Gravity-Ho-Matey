@@ -47,10 +47,15 @@ from gravity_ho_matey.gameplay.friendly_fighter import FriendlyFighter
 from gravity_ho_matey.gameplay.drone_config import DRONE_ASTEROID_QUERY_RADIUS
 from gravity_ho_matey.gameplay.drone_wingman import DroneWingman
 from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
+from gravity_ho_matey.gameplay.space_station import SpaceStation
+from gravity_ho_matey.gameplay.tractor_beam import TractorBeamState
 from gravity_ho_matey.gameplay.squid_pod import SquidPod
 from gravity_ho_matey.levels.membrane_layout import MembraneLayout
 from gravity_ho_matey.gameplay.asteroid_spatial import AsteroidSpatialGrid
 from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot, build_asteroid_threat_snapshots
+from gravity_ho_matey.gameplay.weapon_combat import HitDisposition, apply_explosive_burst, resolve_projectile_after_hit
+from gravity_ho_matey.gameplay.weapon_fire import player_fire_cooldown, spawn_player_shots
+from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 
 EnemyUnit = PatrolEnemy | SquidEnemy
 
@@ -98,6 +103,12 @@ class GameWorld:
     boss_scrape_flash: float = 0.0
     allies: list[FriendlyFighter] = field(default_factory=list)
     drone_wingman: DroneWingman | None = None
+    space_station: SpaceStation | None = None
+    tractor_beam: TractorBeamState | None = None
+    station_cleared: bool = False
+    roster_enemies_total: int = 0
+    roster_enemies_remaining: int = 0
+    player_weapon_track: WeaponTrack | None = None
 
     def refresh_threat_snapshots(self) -> None:
         """Narrow-phase meshes for interaction zone only — far belt rocks stay motion-only."""
@@ -124,6 +135,8 @@ class GameWorld:
 
     @property
     def finish_unlocked(self) -> bool:
+        if self.config.exit_requires_roster_clear:
+            return self.roster_enemies_remaining <= 0
         if self.config.exit_requires_boss:
             return self.boss_cleared
         required = self.beacons_required_for_exit
@@ -131,6 +144,10 @@ class GameWorld:
             return True
         collected = len(self.beacons) - self.beacons_remaining
         return collected >= required
+
+    @property
+    def roster_enemies_defeated(self) -> int:
+        return max(0, self.roster_enemies_total - self.roster_enemies_remaining)
 
     def update(self, dt: float, intent: ControlIntent, *, beacon_capture_slack: float = 0.0) -> None:
         dt = max(0.0, min(dt, 1.0 / 20.0))
@@ -140,6 +157,7 @@ class GameWorld:
             return
 
         self._tick_invuln(dt)
+        self._update_tractor_beam(dt)
         self._update_asteroids(dt)
         self.asteroid_spatial.rebuild(self.asteroids)
         self._update_ship(dt, intent)
@@ -147,6 +165,7 @@ class GameWorld:
         self._update_allies(dt)
         self._update_drone_wingman(dt)
         self._update_boss_and_pods(dt)
+        self._update_space_station(dt)
         self._update_projectiles(dt)
         self.refresh_threat_snapshots()
         self._collect_beacons(beacon_capture_slack)
@@ -300,11 +319,20 @@ class GameWorld:
             self.fire_projectile()
 
     def fire_projectile(self) -> None:
-        direction = Vec2.from_angle(self.ship.angle)
-        muzzle = self.ship.pos + direction * (self.ship.radius + 8.0)
-        velocity = self.ship.vel * 0.35 + direction * self.config.projectile_speed
-        self.projectiles.append(Projectile(pos=muzzle, vel=velocity, hostile=False))
-        self.ship.cooldown = self.config.ship_fire_cooldown * self.ship.fire_cooldown_multiplier
+        shots = spawn_player_shots(
+            ship_pos=self.ship.pos,
+            ship_vel=self.ship.vel,
+            ship_angle=self.ship.angle,
+            ship_radius=self.ship.radius,
+            projectile_speed=self.config.projectile_speed,
+            track=self.player_weapon_track,
+        )
+        self.projectiles.extend(shots)
+        self.ship.cooldown = player_fire_cooldown(
+            self.config.ship_fire_cooldown,
+            self.ship.fire_cooldown_multiplier,
+            self.player_weapon_track,
+        )
 
     def _apply_asteroid_combat_result(self, result: AsteroidCombatResult) -> None:
         for fx in result.fx:
@@ -339,33 +367,68 @@ class GameWorld:
             hit = self._asteroid_hit_at(projectile.pos, projectile.radius, use_spatial=True)
             if hit is not None:
                 impact = Vec2(projectile.pos.x, projectile.pos.y)
-                self._apply_asteroid_combat_result(
-                    apply_projectile_hit(
-                        hit,
+                if projectile.explosive_radius > 0.0:
+                    apply_explosive_burst(
+                        self,
                         impact,
-                        projectile.vel,
-                        world_asteroid_count=len(self.asteroids),
-                        max_asteroids=self.config.max_asteroids,
+                        projectile.explosive_radius,
+                        drop_loot=not projectile.from_ally,
                     )
-                )
+                else:
+                    self._apply_asteroid_combat_result(
+                        apply_projectile_hit(
+                            hit,
+                            impact,
+                            projectile.vel,
+                            world_asteroid_count=len(self.asteroids),
+                            max_asteroids=self.config.max_asteroids,
+                        )
+                    )
                 continue
             if projectile.hostile:
                 if self._projectile_hits_ship(projectile):
+                    continue
+                if self._projectile_hits_ally_hostile(projectile):
                     continue
                 if self._projectile_hits_drone(projectile):
                     continue
             elif self._projectile_hits_ally(projectile):
                 continue
-            elif self._projectile_hits_boss(projectile):
-                continue
-            elif self._projectile_hits_enemy(projectile, drop_loot=not projectile.from_ally):
-                continue
+            else:
+                disposition = self._projectile_hits_boss(projectile)
+                if disposition != "none":
+                    if disposition == "pierce":
+                        kept.append(projectile)
+                    continue
+                disposition = self._projectile_hits_station(projectile)
+                if disposition != "none":
+                    if disposition == "pierce":
+                        kept.append(projectile)
+                    continue
+                disposition = self._projectile_hits_enemy(projectile, drop_loot=not projectile.from_ally)
+                if disposition != "none":
+                    if disposition == "pierce":
+                        kept.append(projectile)
+                    continue
             kept.append(projectile)
         self.projectiles = kept
 
-    def _projectile_hits_enemy(self, projectile: Projectile, *, drop_loot: bool = True) -> bool:
+    def _projectile_hits_enemy(self, projectile: Projectile, *, drop_loot: bool = True) -> HitDisposition:
         if projectile.hostile:
-            return False
+            return "none"
+        if projectile.explosive_radius > 0.0:
+            for enemy in self.enemies:
+                if not enemy.alive:
+                    continue
+                if (enemy.pos - projectile.pos).length() <= enemy.radius + projectile.radius:
+                    apply_explosive_burst(
+                        self,
+                        Vec2(projectile.pos.x, projectile.pos.y),
+                        projectile.explosive_radius,
+                        drop_loot=drop_loot,
+                    )
+                    return "consume"
+            return "none"
         for enemy in self.enemies:
             if not enemy.alive:
                 continue
@@ -383,8 +446,9 @@ class GameWorld:
                         drop_count = jewel_count_for_enemy(enemy)
                         if drop_count > 0:
                             self._spawn_jewels_at(enemy_pos, drop_count)
+                    self._register_roster_kill(enemy)
                     self._prune_dead_enemies()
-                return True
+                return resolve_projectile_after_hit(projectile, hit=True)
             if (enemy.pos - projectile.pos).length() <= enemy.radius + projectile.radius:
                 hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
                 enemy_pos = Vec2(enemy.pos.x, enemy.pos.y)
@@ -395,21 +459,113 @@ class GameWorld:
                     drop_count = jewel_count_for_enemy(enemy)
                     if drop_count > 0:
                         self._spawn_jewels_at(enemy_pos, drop_count)
+                self._register_roster_kill(enemy)
                 self._prune_dead_enemies()
-                return True
-        return False
+                return resolve_projectile_after_hit(projectile, hit=True)
+        return "none"
 
-    def _projectile_hits_boss(self, projectile: Projectile) -> bool:
+    def _register_roster_kill(self, enemy: EnemyUnit) -> None:
+        if not self.config.exit_requires_roster_clear:
+            return
+        roster_id = getattr(enemy, "skirmish_roster_id", None)
+        if roster_id is None:
+            return
+        self.roster_enemies_remaining = max(0, self.roster_enemies_remaining - 1)
+
+    def _projectile_hits_station(self, projectile: Projectile) -> HitDisposition:
+        station = self.space_station
+        if station is None or not station.alive or projectile.hostile:
+            return "none"
+        if not station.body_hit_by_projectile(projectile.pos, projectile.radius):
+            return "none"
+        hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
+        if projectile.explosive_radius > 0.0:
+            apply_explosive_burst(
+                self,
+                hit_pos,
+                projectile.explosive_radius,
+                drop_loot=not projectile.from_ally,
+            )
+            return "consume"
+        self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
+        if station.apply_shot():
+            self._on_station_defeated()
+        return resolve_projectile_after_hit(projectile, hit=True)
+
+    def _on_station_defeated(self) -> None:
+        station = self.space_station
+        if station is None:
+            return
+        station_pos = Vec2(station.pos.x, station.pos.y)
+        self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, station_pos, scale=2.0)
+        drop_count = 10 + int(station.anchor.x) % 5
+        self._spawn_jewels_at(station_pos, drop_count)
+        self.station_cleared = True
+
+    def _update_tractor_beam(self, dt: float) -> None:
+        station = self.space_station
+        tractor = self.tractor_beam
+        if station is None or tractor is None or not station.alive:
+            return
+        station.tick_tractor(
+            dt,
+            tractor,
+            self.asteroids,
+            self.ship.pos,
+            self.allies,
+        )
+
+    def _update_space_station(self, dt: float) -> None:
+        station = self.space_station
+        if station is None or not station.alive:
+            return
+        station.integrate(
+            dt,
+            self.wells,
+            gravity_scale=self.config.gravity_scale,
+            drag=self.config.drag,
+        )
+        station.tick_combat(dt)
+        drone = self.drone_wingman
+        drone_pos = drone.pos if drone is not None and drone.alive else None
+        shot = station.try_fire(
+            self.ship.pos,
+            self.ship.vel,
+            self.allies,
+            drone_pos=drone_pos,
+        )
+        if shot is not None:
+            self.projectiles.append(shot)
+        alive_patrols = sum(
+            1
+            for e in self.enemies
+            if e.alive
+            and e.kind is not EnemyKind.SQUID
+            and getattr(e, "skirmish_roster_id", None) is None
+        )
+        spawned = station.tick_spawns(dt, alive_patrols)
+        if spawned is not None:
+            self.enemies.append(spawned)
+
+    def _projectile_hits_boss(self, projectile: Projectile) -> HitDisposition:
         boss = self.mega_squid
         if boss is None or not boss.alive or projectile.hostile:
-            return False
+            return "none"
         if not boss.body_hit_by_projectile(projectile.pos, projectile.radius):
-            return False
+            return "none"
         hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
+        if projectile.explosive_radius > 0.0:
+            apply_explosive_burst(
+                self,
+                hit_pos,
+                projectile.explosive_radius,
+                drop_loot=not projectile.from_ally,
+            )
+            return "consume"
         self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
         if boss.apply_shot():
             self._on_boss_defeated()
-        return True
+        return resolve_projectile_after_hit(projectile, hit=True)
 
     def _on_boss_defeated(self) -> None:
         boss = self.mega_squid
@@ -483,6 +639,14 @@ class GameWorld:
         return True
 
     def _update_enemies(self, dt: float) -> None:
+        patrol_threats: list[tuple[Vec2, Vec2]] = [(self.ship.pos, self.ship.vel)]
+        for ally in self.allies:
+            if ally.alive:
+                patrol_threats.append((ally.pos, ally.vel))
+        drone = self.drone_wingman
+        if drone is not None and drone.alive:
+            patrol_threats.append((drone.pos, drone.vel))
+
         for enemy in self.enemies:
             if not enemy.alive:
                 continue
@@ -499,6 +663,7 @@ class GameWorld:
                     well_maw_radius=self.config.well_maw_radius,
                     ship_radius=self.ship.radius,
                 )
+                shot = enemy.try_fire(self.ship.pos, self.ship.vel)
             else:
                 enemy.integrate(
                     dt,
@@ -507,7 +672,7 @@ class GameWorld:
                     drag=self.config.drag,
                     well_maw_radius=self.config.well_maw_radius,
                 )
-            shot = enemy.try_fire(self.ship.pos, self.ship.vel)
+                shot = enemy.try_fire_at_threats(patrol_threats)
             if shot is not None:
                 self.projectiles.append(shot)
 
@@ -666,11 +831,29 @@ class GameWorld:
             return True
         return False
 
+    def _projectile_hits_ally_hostile(self, projectile: Projectile) -> bool:
+        if not projectile.hostile:
+            return False
+        for ally in self.allies:
+            if not ally.alive:
+                continue
+            if not ally.body_hit_by_projectile(projectile.pos, projectile.radius):
+                continue
+            self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
+            self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(ally.pos.x, ally.pos.y), scale=0.85)
+            ally.alive = False
+            return True
+        return False
+
     def _check_ally_hazards(self) -> None:
         if self.status is not GameStatus.RUNNING:
             return
         for ally in self.allies:
             if not ally.alive:
+                continue
+            if self._asteroid_hit_at(ally.pos, ally.radius) is not None:
+                self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(ally.pos.x, ally.pos.y), scale=0.75)
+                ally.alive = False
                 continue
             for enemy in self.enemies:
                 if not enemy.alive:
@@ -756,6 +939,7 @@ class GameWorld:
                     continue
                 self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(enemy.pos.x, enemy.pos.y))
                 enemy.alive = False
+                self._register_roster_kill(enemy)
                 self._prune_dead_enemies()
                 self._register_ship_hit(DamageSource.ENEMY)
                 return

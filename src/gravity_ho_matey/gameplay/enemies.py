@@ -35,6 +35,7 @@ class PatrolEnemy:
     min_range: float = 70.0
     aim_lead_factor: float = PATROL_AIM_LEAD_FACTOR
     aim_spread_rad: float = PATROL_AIM_SPREAD_RAD
+    skirmish_roster_id: int | None = None
 
     @property
     def kind(self) -> EnemyKind:
@@ -89,18 +90,30 @@ class PatrolEnemy:
             self.fire_cooldown = max(0.0, self.fire_cooldown - dt)
 
     def try_fire(self, ship_pos: Vec2, ship_vel: Vec2) -> Projectile | None:
-        if not self.can_shoot or not self.alive or self.fire_cooldown > 0.0:
+        return self.try_fire_at_threats([(ship_pos, ship_vel)])
+
+    def try_fire_at_threats(self, threats: list[tuple[Vec2, Vec2]]) -> Projectile | None:
+        if not self.can_shoot or not self.alive or self.fire_cooldown > 0.0 or not threats:
             return None
 
-        to_ship = ship_pos - self.pos
-        dist = to_ship.length()
-        if dist < self.min_range or dist > self.engage_range:
+        best_pos: Vec2 | None = None
+        best_vel = Vec2()
+        best_dist = self.engage_range + 1.0
+        for pos, vel in threats:
+            dist = (pos - self.pos).length()
+            if dist < self.min_range or dist > self.engage_range:
+                continue
+            if dist < best_dist:
+                best_pos = pos
+                best_vel = vel
+                best_dist = dist
+        if best_pos is None:
             return None
 
         aim_dir = lead_aim_direction(
             self.pos,
-            ship_pos,
-            ship_vel * self.aim_lead_factor,
+            best_pos,
+            best_vel * self.aim_lead_factor,
             self.shot_speed,
             refine_passes=1,
         )

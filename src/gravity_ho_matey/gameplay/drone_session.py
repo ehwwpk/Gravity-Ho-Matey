@@ -9,8 +9,9 @@ def deploy_drone_wingman(world: GameWorld, campaign: CampaignState) -> None:
     """Spawn carried drone at level start — pending purchase or surviving HP."""
     if world.drone_wingman is not None:
         return
+    hp_max = campaign.drone_hits_max
     if campaign.drone_wingman_pending:
-        world.drone_wingman = DroneWingman.spawn_behind_player(world.ship)
+        world.drone_wingman = DroneWingman.spawn_behind_player(world.ship, hits_max=hp_max)
         campaign.drone_wingman_hp = world.drone_wingman.hits_remaining
         campaign.drone_wingman_pending = False
         return
@@ -18,6 +19,7 @@ def deploy_drone_wingman(world: GameWorld, campaign: CampaignState) -> None:
         world.drone_wingman = DroneWingman.spawn_behind_player(
             world.ship,
             hits_remaining=campaign.drone_wingman_hp,
+            hits_max=hp_max,
         )
 
 

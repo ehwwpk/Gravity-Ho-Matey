@@ -80,9 +80,58 @@ Expected Phase-1 mapping gap — not a gameplay failure.
 
 **Net:** strong +EV — user-reported squid death traced to one-shot hazard rule; AI pass adds layered dodge.
 
+### +EV (medium) · Double-check: `_combat_move` Vec2 unary-minus bug fixed
+Review found `flee = -radial` / `-radial * 0.72` in `_combat_move` — `Vec2` has no `__neg__` (TypeError on panic/kite-back branches). Masked in play because dodge-first path often wins before `_combat_move`; direct call reproduced crash. Fixed to `radial * -1.0` / `radial * -0.72`; added `test_combat_move_kite_branches_do_not_crash`.
+
 ---
 
-## 2026-06-07 — Drift density, titan wells, squid aggro
+## 2026-06-07 — Level 5 The Siege Line (full skirmish)
+
+### +EV (strong) · End-to-end L5: forces, station, roster win, tests
+`devgov check` → implement → `devgov run` → primary **372 pytest** green. Registry id `siege`: 5200×3200 arena, 12 roster patrols + 12 friendly wing, spiral asteroid belt, 4 black holes, hostile `SpaceStation` (24 HP, gun, tractor toss, spawn bay ~17.5s).
+
+### +EV (medium) · Standardized station entity for future friendly/neutral
+`SpaceStation` + `StationFaction` + `TractorBeamState`; roster kill quota via `exit_requires_roster_clear` / `skirmish_roster_id` on patrols; station spawns do not count toward exit.
+
+### +EV (medium) · UI + campaign chain
+HUD roster counter, station HP line, tactical/chase `station_viz`, title/chart briefing, `rift` → `siege` → campaign complete.
+
+**Net:** strong +EV — planned skirmish archetype shipped with hostile pass and regression coverage.
+
+---
+
+## 2026-06-07 — L5 audit pass + holo shop upgrades
+
+### +EV (medium) · L5 code audit fixes
+Station spawns were blocked while all 12 roster patrols lived — spawn director counted roster in `max_alive`. Fixed to count only non-roster patrols. Spawn interval jitter now rolls once per cycle (`_pending_spawn_interval`). Patrol `try_fire_at_threats` for allies/drone on siege. Chart briefing `rift` NameError fixed.
+
+### +EV (medium) · Shop: Bulkhead Plating + drone upkeep
+**Bulkhead Plating** (`HULL_REINFORCE`): +2 hull chunks per life (3→5→7→9), max 3 buys, **×3** cost each tier (18 / 54 / 162). **Drone Field Kit** (flat 12★, heal to full when damaged). **Drone Armor Kit** (24★ once, cap 5→8 HP). Drone-only catalog rows appear after wingman contract. HUD/chart use `max_hull_chunks_per_life` and `drone_hits_max`.
+
+### +EV (medium) · Tests + hostile pass
+New shop tests; `test_station_spawns_while_roster_full`; **377 pytest** green (375 excl. Tk-env flake). `devgov run` primary slice green after ruff cleanup.
+
+**Net:** strong +EV — L5 spawn bug would have made station feel dead; shop upgrades match spec.
+
+---
+
+## 2026-06-07 — Weapon doctrine skill tree + Gatling nerf
+
+### +EV (strong) · Exclusive weapon specialization (shop)
+Three mutually exclusive campaign tracks in holo shop **WEAPON DOCTRINE** row: **Phase Lance** (pierce ×6), **Scatter Cannon** (2-bolt slight spread), **Nova Shell** (slow, 54u AoE). Data model: `WeaponTrack`, `weapon_fire`, `weapon_combat`; pierce/AoE in `world._update_projectiles`. Chase bolt colors per track.
+
+### +EV (medium) · Gatling Rigging one-time + slower
+`RAPID_FIRE` max 1 buy, flat 14★, cooldown ×0.82 (~6.7/s vs old ×0.55 stack to ~10/s).
+
+### +EV (medium) · Tests + hostile pass
+`tests/test_weapons.py` (shop exclusivity, fire spawn, pierce, AoE); **385 pytest** green. `devgov run` primary slice green after ruff fix.
+
+### neutral · DevGov on this diff
+Pre-edit `check` useful for boundary list (HIGH, 30+ files). `run` primary slice caught one unused import — **+EV**. Sub:tests skip still **bleh** (expected).
+
+**Net:** strong +EV — professional exclusive-branch pattern; room to tier each doctrine later.
+
+---
 
 ### +EV · Full loop on a focused tuning diff
 `devgov check --task "Drift outer ring density titan wells squids"` on clean tree → implement → `devgov run` → primary slice **ruff + compileall + pytest** all passed (265 tests). Honest gate before/after edits.

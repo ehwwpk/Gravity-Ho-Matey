@@ -21,13 +21,20 @@ from gravity_ho_matey.gameplay.jewel_pickup import JewelPickup, spawn_scattered_
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.progress import is_level_selectable, record_level_cleared, reset_progress
 from gravity_ho_matey.gameplay.session import wire_world_for_campaign
-from gravity_ho_matey.gameplay.shop_catalog import shop_price_for
 from gravity_ho_matey.gameplay.upgrade_config import (
     ACCEL_BONUS_PER_STACK,
     BOOST_TAP_BONUS_PER_STACK,
+    DRONE_ARMOR_PRICE,
+    DRONE_REPAIR_PRICE,
+    HULL_REINFORCE_BASE_PRICE,
+    HULL_REINFORCE_BONUS,
+    HULL_REINFORCE_COST_MULTIPLIER,
+    HULL_REINFORCE_MAX_PURCHASES,
     RUBBER_HULL_BOUNCE_CHARGES,
     UPGRADE_MAX_STACKS,
 )
+from gravity_ho_matey.gameplay.drone_config import DRONE_ARMORED_HITS_MAX
+from gravity_ho_matey.gameplay.shop_catalog import shop_price_for, shop_visible_catalog
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
 from gravity_ho_matey.scenes.chart_briefing import _kind_from_shop_hit
@@ -367,8 +374,90 @@ class ShopHitTests(unittest.TestCase):
         self.assertEqual(_kind_from_shop_hit("shop_boost_tap"), PowerUpKind.BOOST_TAP)
         self.assertEqual(_kind_from_shop_hit("shop_rubber_hull"), PowerUpKind.RUBBER_HULL)
         self.assertEqual(_kind_from_shop_hit("shop_drone_wingman"), PowerUpKind.DRONE_WINGMAN)
+        self.assertEqual(_kind_from_shop_hit("shop_hull_reinforce"), PowerUpKind.HULL_REINFORCE)
+        self.assertEqual(_kind_from_shop_hit("shop_drone_repair"), PowerUpKind.DRONE_REPAIR)
+        self.assertEqual(_kind_from_shop_hit("shop_drone_armor"), PowerUpKind.DRONE_ARMOR)
+        self.assertEqual(_kind_from_shop_hit("shop_weapon_laser"), PowerUpKind.WEAPON_LASER)
+        self.assertEqual(_kind_from_shop_hit("shop_weapon_shotgun"), PowerUpKind.WEAPON_SHOTGUN)
+        self.assertEqual(_kind_from_shop_hit("shop_weapon_explosive"), PowerUpKind.WEAPON_EXPLOSIVE)
         self.assertIsNone(_kind_from_shop_hit("launch"))
 
+
+class HullReinforceShopTests(unittest.TestCase):
+    def test_hull_reinforce_triple_cost_and_cap(self) -> None:
+        campaign = CampaignState()
+        campaign.jewels = 999
+        self.assertEqual(campaign.max_hull_chunks_per_life, 3)
+        self.assertEqual(
+            shop_price_for(
+                PowerUpKind.HULL_REINFORCE,
+                stacks=0,
+                rubber_hull_purchases=0,
+                hull_reinforce_purchases=0,
+            ),
+            HULL_REINFORCE_BASE_PRICE,
+        )
+        self.assertTrue(campaign.try_purchase(PowerUpKind.HULL_REINFORCE))
+        self.assertEqual(campaign.hull_reinforce_purchases, 1)
+        self.assertEqual(campaign.max_hull_chunks_per_life, 3 + HULL_REINFORCE_BONUS)
+        self.assertEqual(
+            shop_price_for(
+                PowerUpKind.HULL_REINFORCE,
+                stacks=0,
+                rubber_hull_purchases=0,
+                hull_reinforce_purchases=1,
+            ),
+            HULL_REINFORCE_BASE_PRICE * HULL_REINFORCE_COST_MULTIPLIER,
+        )
+        campaign.jewels = 999
+        self.assertTrue(campaign.try_purchase(PowerUpKind.HULL_REINFORCE))
+        self.assertTrue(campaign.try_purchase(PowerUpKind.HULL_REINFORCE))
+        self.assertEqual(campaign.hull_reinforce_purchases, HULL_REINFORCE_MAX_PURCHASES)
+        self.assertEqual(
+            campaign.max_hull_chunks_per_life,
+            3 + HULL_REINFORCE_BONUS * HULL_REINFORCE_MAX_PURCHASES,
+        )
+        self.assertFalse(campaign.can_purchase(PowerUpKind.HULL_REINFORCE))
+
+    def test_hull_reinforce_refills_active_life(self) -> None:
+        campaign = CampaignState()
+        campaign.jewels = 999
+        campaign.hull_chunks = 1
+        campaign.try_purchase(PowerUpKind.HULL_REINFORCE)
+        self.assertEqual(campaign.max_hull_chunks_per_life, 5)
+        self.assertEqual(campaign.hull_chunks, 3)
+
+
+class DroneUpgradeShopTests(unittest.TestCase):
+    def test_drone_catalog_hidden_without_contract(self) -> None:
+        campaign = CampaignState()
+        kinds = {entry.kind for entry in shop_visible_catalog(campaign)}
+        self.assertNotIn(PowerUpKind.DRONE_REPAIR, kinds)
+        self.assertNotIn(PowerUpKind.DRONE_ARMOR, kinds)
+
+    def test_drone_repair_and_armor(self) -> None:
+        campaign = CampaignState()
+        campaign.jewels = 999
+        campaign.try_purchase(PowerUpKind.DRONE_WINGMAN)
+        kinds = {entry.kind for entry in shop_visible_catalog(campaign)}
+        self.assertIn(PowerUpKind.DRONE_REPAIR, kinds)
+        self.assertIn(PowerUpKind.DRONE_ARMOR, kinds)
+        self.assertEqual(shop_price_for(PowerUpKind.DRONE_REPAIR, stacks=0, rubber_hull_purchases=0), DRONE_REPAIR_PRICE)
+        self.assertEqual(shop_price_for(PowerUpKind.DRONE_ARMOR, stacks=0, rubber_hull_purchases=0), DRONE_ARMOR_PRICE)
+
+        campaign.drone_wingman_pending = False
+        campaign.drone_wingman_hp = 1
+        self.assertTrue(campaign.try_purchase(PowerUpKind.DRONE_REPAIR))
+        self.assertEqual(campaign.drone_wingman_hp, campaign.drone_hits_max)
+        self.assertEqual(
+            shop_price_for(PowerUpKind.DRONE_REPAIR, stacks=0, rubber_hull_purchases=0),
+            DRONE_REPAIR_PRICE,
+        )
+
+        self.assertTrue(campaign.try_purchase(PowerUpKind.DRONE_ARMOR))
+        self.assertTrue(campaign.drone_armored)
+        self.assertEqual(campaign.drone_hits_max, DRONE_ARMORED_HITS_MAX)
+        self.assertFalse(campaign.can_purchase(PowerUpKind.DRONE_ARMOR))
 
 if __name__ == "__main__":
     unittest.main()

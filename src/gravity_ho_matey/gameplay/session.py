@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from gravity_ho_matey.gameplay.chart_bounds import nudge_ship_into_chart
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.campaign import CHUNKS_PER_LIFE, CampaignState
+from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.gameplay.drone_session import deploy_drone_wingman
 from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
@@ -23,7 +23,7 @@ def capture_level_spawn(world: GameWorld) -> None:
 def ensure_active_life_hull(campaign: CampaignState) -> None:
     """Refill hull when starting a fresh life; keep partial hull between levels."""
     if campaign.lives > 0 and campaign.hull_chunks <= 0:
-        campaign.hull_chunks = CHUNKS_PER_LIFE
+        campaign.hull_chunks = campaign.max_hull_chunks_per_life
 
 
 def wire_world_for_campaign(
@@ -42,6 +42,7 @@ def wire_world_for_campaign(
 
     world.on_jewels_collected = on_jewels_collected
     world.consume_rubber_hull_bounce = campaign.try_consume_rubber_hull_bounce
+    world.player_weapon_track = campaign.weapon_track
     deploy_drone_wingman(world, campaign)
 
 

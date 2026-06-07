@@ -206,6 +206,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_pit="#100818",
             crater_rim_hi="#ffa0e0",
         )
+    if kind == "space_station":
+        return MaterialTones(
+            highlight=palette.STATION_HOSTILE_GLOW,
+            mid=palette.STATION_HOSTILE_HULL,
+            shadow="#301810",
+            deep="#100808",
+            rim=palette.STATION_HOSTILE_RING,
+            crater_pit="#180808",
+            crater_rim_hi=palette.STATION_HOSTILE_GLOW,
+        )
     if kind == "friendly_ship":
         return MaterialTones(
             highlight=palette.FRIENDLY_SHIP_TRIM,

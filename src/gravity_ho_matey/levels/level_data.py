@@ -11,12 +11,18 @@ from gravity_ho_matey.gameplay.boost_pad import BoostPad
 from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
 from gravity_ho_matey.levels.drift_enemies import drift_squid_enemies
 from gravity_ho_matey.gameplay.chart_bounds import COVE_CHART_MARGIN_FRAC
-from gravity_ho_matey.levels.level_profiles import chart_sector_config, membrane_strip_config, open_sector_config
+from gravity_ho_matey.levels.level_profiles import chart_sector_config, membrane_strip_config, open_sector_config, skirmish_arena_config
 from gravity_ho_matey.levels.membrane_enemies import membrane_road_squids
 from gravity_ho_matey.levels.membrane_escorts import membrane_friendly_fighters
 from gravity_ho_matey.levels.membrane_layout import all_void_wells, build_membrane_layout
 from gravity_ho_matey.levels.membrane_props import build_membrane_props
 from gravity_ho_matey.levels.solar_patrols import solar_patrol_enemies
+from gravity_ho_matey.levels.siege_asteroids import siege_spiral_asteroids
+from gravity_ho_matey.levels.siege_enemies import siege_roster_patrols
+from gravity_ho_matey.levels.siege_escorts import siege_friendly_fighters
+from gravity_ho_matey.levels.siege_layout import ROSTER_KILL_QUOTA, build_siege_layout
+from gravity_ho_matey.levels.siege_station import siege_hostile_station
+from gravity_ho_matey.gameplay.tractor_beam import TractorBeamState
 from gravity_ho_matey.settings import CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
 
 
@@ -142,4 +148,31 @@ def build_membrane_run_level() -> GameWorld:
         boost_pads=pads,
         mega_squid=MegaSquidBoss(pos=Vec2(layout.boss_anchor.x, layout.boss_anchor.y), anchor=layout.boss_anchor),
         allies=membrane_friendly_fighters(layout),
+    )
+
+
+def build_siege_line_level() -> GameWorld:
+    """Level 5 — two-force skirmish across a spiral belt; hostile station guards exit."""
+    layout = build_siege_layout()
+    config = skirmish_arena_config(
+        theme="siege",
+        name="The Siege Line",
+        width=layout.width,
+        height=layout.height,
+        roster_kill_quota=ROSTER_KILL_QUOTA,
+    )
+    roster = siege_roster_patrols(layout)
+    return GameWorld(
+        config=config,
+        ship=_spawn_ship_copy(layout.spawn_ship),
+        asteroids=siege_spiral_asteroids(layout, config),
+        wells=list(layout.wells),
+        beacons=[],
+        finish_gate=layout.finish_gate,
+        enemies=roster,
+        allies=siege_friendly_fighters(layout),
+        space_station=siege_hostile_station(layout),
+        tractor_beam=TractorBeamState(),
+        roster_enemies_total=config.roster_kill_quota,
+        roster_enemies_remaining=config.roster_kill_quota,
     )

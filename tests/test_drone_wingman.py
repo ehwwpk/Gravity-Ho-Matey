@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from gravity_ho_matey.core.geometry import Rect
@@ -155,6 +156,27 @@ class DroneCombatTests(unittest.TestCase):
         self.assertIsNotNone(threat)
         assert threat is not None
         self.assertTrue(threat.is_squid)
+
+    def test_combat_move_kite_branches_do_not_crash(self) -> None:
+        drone = DroneWingman.spawn_behind_player(Ship(pos=Vec2(400, 300)))
+        form = drone.formation_target(Vec2(400, 300), 0.0)
+        form_dir = (form - drone.pos).normalized()
+        form_dist = (form - drone.pos).length()
+        threat = ThreatTarget(pos=Vec2(520, 300), vel=Vec2(), radius=18.0, danger_radius=40.0)
+        for dodge_urgency in (0.0, 0.6):
+            move, heading = drone._combat_move(
+                threat,
+                form,
+                form_dir,
+                form_dist,
+                1.0,
+                Vec2(400, 300),
+                0.0,
+                dodge_urgency,
+                Vec2(),
+            )
+            self.assertGreater(move.length_sq(), 1.0)
+            self.assertTrue(math.isfinite(heading))
 
     def test_drone_dodges_incoming_hostile_bolt(self) -> None:
         from gravity_ho_matey.gameplay.entities import Projectile

@@ -73,19 +73,26 @@ class DroneWingman:
     engage_range: float = DRONE_ENGAGE_RANGE
 
     @classmethod
-    def spawn_behind_player(cls, ship: object, *, hits_remaining: int | None = None) -> DroneWingman:
+    def spawn_behind_player(
+        cls,
+        ship: object,
+        *,
+        hits_remaining: int | None = None,
+        hits_max: int | None = None,
+    ) -> DroneWingman:
         angle = getattr(ship, "angle", 0.0)
         pos = getattr(ship, "pos", Vec2())
         forward = Vec2.from_angle(angle)
         right = forward.rotated(math.pi / 2.0)
         spawn = pos - forward * (DRONE_FORMATION_TRAIL + 8.0) + right * DRONE_FORMATION_LATERAL
-        hp = DRONE_HITS_MAX if hits_remaining is None else max(0, min(DRONE_HITS_MAX, hits_remaining))
+        hp_cap = DRONE_HITS_MAX if hits_max is None else hits_max
+        hp = hp_cap if hits_remaining is None else max(0, min(hp_cap, hits_remaining))
         return cls(
             pos=Vec2(spawn.x, spawn.y),
             angle=angle,
             facing_angle=angle,
             hits_remaining=hp,
-            hits_max=DRONE_HITS_MAX,
+            hits_max=hp_cap,
             alive=hp > 0,
         )
 
@@ -322,12 +329,12 @@ class DroneWingman:
         gap = dist - danger - self.radius
 
         if gap < DRONE_SQUID_PANIC_RADIUS * 0.65 or dodge_urgency > 0.55:
-            flee = -radial
+            flee = radial * -1.0
             if avoid_accel.length_sq() > 1.0:
                 flee = (flee * 0.55 + avoid_accel.normalized() * 0.45).normalized()
             move_dir = flee * 0.82 + form_dir * (0.18 * form_weight)
         elif dist < ideal * 0.82:
-            move_dir = (-radial * 0.72 + tangent * 0.18 + form_dir * (0.10 * form_weight)).normalized()
+            move_dir = (radial * -0.72 + tangent * 0.18 + form_dir * (0.10 * form_weight)).normalized()
         elif dist > ideal * 1.25:
             move_dir = (radial * 0.38 + form_dir * (0.42 * form_weight)).normalized()
         else:

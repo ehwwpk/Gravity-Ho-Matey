@@ -7,6 +7,7 @@ from gravity_ho_matey.levels.level_data import (
     build_cove_run_level,
     build_drift_belt_level,
     build_membrane_run_level,
+    build_siege_line_level,
     build_solar_crossing_level,
 )
 
@@ -17,15 +18,17 @@ LEVEL_BUILDERS: dict[str, LevelBuilder] = {
     "solar": build_solar_crossing_level,
     "drift": build_drift_belt_level,
     "rift": build_membrane_run_level,
+    "siege": build_siege_line_level,
 }
 
-LEVEL_ORDER: tuple[str, ...] = ("cove", "solar", "drift", "rift")
+LEVEL_ORDER: tuple[str, ...] = ("cove", "solar", "drift", "rift", "siege")
 
 LEVEL_LABELS: dict[str, str] = {
     "cove": "1 — Smuggler's Cove",
     "solar": "2 — Singularity Crossing",
     "drift": "3 — The Drift",
     "rift": "4 — The Membrane Run",
+    "siege": "5 — The Siege Line",
 }
 
 

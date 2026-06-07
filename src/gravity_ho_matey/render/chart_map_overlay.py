@@ -5,11 +5,12 @@ import tkinter as tk
 from dataclasses import dataclass
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE, MAX_LIVES
+from gravity_ho_matey.gameplay.campaign import CampaignState, MAX_LIVES
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks, powerup_hud_tag
+from gravity_ho_matey.gameplay.weapon_kinds import WEAPON_TRACK_SHORT
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.holo_shop_overlay import HoloShopOverlay
 from gravity_ho_matey.levels.level_registry import LEVEL_LABELS
@@ -74,13 +75,29 @@ class ChartMapOverlay:
         solar = world.config.level_theme == "solar"
         drift = world.config.level_theme == "drift"
         rift = world.config.level_theme == "rift"
-        accent = palette.HUD_ACCENT_SOLAR if solar else palette.RIFT_HUD_ACCENT if rift else palette.HUD_ACCENT
+        siege = world.config.level_theme == "siege"
+        accent = (
+            palette.HUD_ACCENT_SOLAR
+            if solar
+            else palette.RIFT_HUD_ACCENT
+            if rift
+            else palette.SIEGE_HUD_ACCENT
+            if siege
+            else palette.HUD_ACCENT
+        )
         dim = palette.HUD_DIM
         frame = palette.HUD_FRAME
         bg = palette.HUD_BG
 
-        canvas.create_rectangle(0, 0, vw, vh, fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.BACKGROUND, outline="")
-        self._starfield(canvas, vw, vh, dense=solar or drift or rift)
+        canvas.create_rectangle(
+            0,
+            0,
+            vw,
+            vh,
+            fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.SIEGE_BG if siege else palette.BACKGROUND,
+            outline="",
+        )
+        self._starfield(canvas, vw, vh, dense=solar or drift or rift or siege)
         self._draw_command_bar(canvas, world, campaign, cleared_level_id, accent, dim, frame, bg)
         self._draw_status_banner(canvas, vw, cleared_level_id, upcoming_level_id, elapsed, accent, dim)
         body_top = _HEADER_H + _CLEARED_H + 8
@@ -163,7 +180,7 @@ class ChartMapOverlay:
 
         hp.draw_panel(canvas, 162, 6, 168, 42, frame=frame, accent=accent)
         hp.draw_panel_title(canvas, 170, 12, "HULL INTEGRITY", color=dim)
-        self._draw_hull_chunks(canvas, 170, 24, campaign.hull_chunks, accent)
+        self._draw_hull_chunks(canvas, 170, 24, campaign.hull_chunks, campaign.max_hull_chunks_per_life, accent)
 
         hp.draw_panel(canvas, 336, 6, 128, 42, frame=frame, accent=accent)
         hp.draw_panel_title(canvas, 344, 12, "NAV BEACONS", color=dim)
@@ -330,7 +347,19 @@ class ChartMapOverlay:
         hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
         if cleared_level_id is None:
             hp.draw_panel_title(canvas, x + 10, y + 10, "BRIEFING", color=dim)
-            if upcoming_level_id == "rift":
+            if upcoming_level_id == "siege":
+                rows = [
+                    ("OBJECTIVE", "Eliminate 12 hostiles"),
+                    ("", "Exit opens on roster clear"),
+                    ("", "Station optional · blocks lane"),
+                    ("ALLIES", "12 wing escorts"),
+                    ("", "Push through spiral belt"),
+                    ("HAZARDS", "Hostile station · tractor"),
+                    ("", "Reinforcements ~17s"),
+                    ("", "4 black hole pockets"),
+                    ("STATUS", "Ready to launch"),
+                ]
+            elif upcoming_level_id == "rift":
                 rows = [
                     ("OBJECTIVE", "Race boost braids north"),
                     ("", "Kill Brood-Mother"),
@@ -392,7 +421,16 @@ class ChartMapOverlay:
         ry = self._draw_kv_line(canvas, x, ry, w, "LAST SECTOR", short_cleared, accent=accent, dim=dim)
         ry = self._draw_kv_line(canvas, x, ry, w, "CLEAR TIME", f"{elapsed:05.1f}s", accent=accent, dim=dim)
         ry = self._draw_kv_line(canvas, x, ry, w, "LIVES", str(campaign.lives), accent=accent, dim=dim)
-        ry = self._draw_kv_line(canvas, x, ry, w, "HULL", f"{campaign.hull_chunks}/{CHUNKS_PER_LIFE}", accent=accent, dim=dim)
+        ry = self._draw_kv_line(
+            canvas,
+            x,
+            ry,
+            w,
+            "HULL",
+            f"{campaign.hull_chunks}/{campaign.max_hull_chunks_per_life}",
+            accent=accent,
+            dim=dim,
+        )
         ry = self._draw_kv_line(
             canvas,
             x,
@@ -416,6 +454,18 @@ class ChartMapOverlay:
                 dim=dim,
                 value_color=palette.PICKUP_RUBBER,
             )
+        if campaign.weapon_track is not None:
+            ry = self._draw_kv_line(
+                canvas,
+                x,
+                ry,
+                w,
+                "WEAPON DOCTRINE",
+                WEAPON_TRACK_SHORT[campaign.weapon_track],
+                accent=accent,
+                dim=dim,
+                value_color=palette.WEAPON_LASER_MID,
+            )
         if campaign.drone_wingman_pending:
             ry = self._draw_kv_line(
                 canvas,
@@ -435,7 +485,7 @@ class ChartMapOverlay:
                 ry,
                 w,
                 "GUARDIAN DRONE",
-                f"{campaign.drone_wingman_hp}/5 HP escort",
+                f"{campaign.drone_wingman_hp}/{campaign.drone_hits_max} HP escort",
                 accent=accent,
                 dim=dim,
                 value_color=palette.DRONE_CORE,
@@ -523,18 +573,31 @@ class ChartMapOverlay:
         strip = cfg.height > cfg.viewport_height * 1.25
         hostiles = sum(1 for e in world.enemies if e.alive)
         squids = sum(1 for e in world.enemies if e.alive and e.kind is EnemyKind.SQUID)
+        roster = world.roster_enemies_total if world.config.exit_requires_roster_clear else 0
         hostile_label = "SQUIDS" if squids and squids == hostiles else "HOSTILES"
-        ry = y + 28
-        for label, value in (
+        intel_rows: list[tuple[str, str]] = [
             ("CHART ID", upcoming_level_id.upper()),
             ("THEME", cfg.level_theme.upper()),
             ("EXTENT", f"{cfg.width}×{cfg.height}"),
             ("BEACONS", str(len(world.beacons)) if world.beacons else "NONE"),
             ("WELLS", str(len(world.wells))),
             (hostile_label, str(hostiles) if hostiles else "—"),
-            ("ASTEROIDS", str(len(world.asteroids))),
-            ("BOUNDS", "OPEN" if cfg.open_bounds else "BOUNDED"),
-        ):
+        ]
+        if roster:
+            intel_rows.append(("ROSTER", f"{world.roster_enemies_remaining}/{roster}"))
+        if world.allies:
+            alive_wings = sum(1 for a in world.allies if a.alive)
+            intel_rows.append(("ALLIES", f"{alive_wings}/{len(world.allies)}"))
+        if world.space_station is not None and world.space_station.alive:
+            intel_rows.append(("STATION", f"{world.space_station.hits_remaining} HP"))
+        intel_rows.extend(
+            [
+                ("ASTEROIDS", str(len(world.asteroids))),
+                ("BOUNDS", "OPEN" if cfg.open_bounds else "BOUNDED"),
+            ]
+        )
+        ry = y + 28
+        for label, value in intel_rows:
             ry = self._draw_kv_line(canvas, x, ry, w, label, value, accent=accent, dim=dim, row_h=28.0)
         hp.draw_panel_title(canvas, x + 10, ry + 4, "LEGEND", color=dim)
         legend_y = ry + 20
@@ -911,8 +974,8 @@ class ChartMapOverlay:
             canvas.create_polygon(cx, y + 2, cx + 7, y + 14, cx - 7, y + 14, fill=color, outline=accent if i < lives else palette.HUD_LIFE_EMPTY)
 
     @staticmethod
-    def _draw_hull_chunks(canvas: tk.Canvas, x: float, y: float, chunks: int, accent: str) -> None:
-        for i in range(CHUNKS_PER_LIFE):
+    def _draw_hull_chunks(canvas: tk.Canvas, x: float, y: float, chunks: int, max_chunks: int, accent: str) -> None:
+        for i in range(max_chunks):
             color = accent if i < chunks else palette.HUD_HULL_EMPTY
             sx = x + i * 28
             canvas.create_rectangle(sx, y, sx + 22, y + 12, fill=color, outline=accent if i < chunks else palette.HUD_HULL_EMPTY, width=1)

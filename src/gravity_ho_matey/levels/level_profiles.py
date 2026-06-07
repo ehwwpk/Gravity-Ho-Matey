@@ -87,3 +87,33 @@ def membrane_strip_config(
         pad_overspeed_cap=1.18,
     )
     return replace(base, **overrides) if overrides else base
+
+
+def skirmish_arena_config(
+    *,
+    theme: str,
+    name: str,
+    width: int,
+    height: int,
+    roster_kill_quota: int,
+    **overrides: float | int | str | bool,
+) -> WorldConfig:
+    """Wide force-vs-force arena — roster kill quota unlocks exit."""
+    base = WorldConfig(
+        width=width,
+        height=height,
+        viewport_width=CANVAS_WIDTH,
+        viewport_height=CANVAS_HEIGHT,
+        level_theme=theme,
+        level_name=name,
+        open_bounds=True,
+        radiation_enabled=False,
+        chart_margin_frac=0.46,
+        max_asteroids=80,
+        gravity_scale=0.47,
+        turn_rate=5.15,
+        thrust=254.0,
+        exit_requires_roster_clear=True,
+        roster_kill_quota=roster_kill_quota,
+    )
+    return replace(base, **overrides) if overrides else base

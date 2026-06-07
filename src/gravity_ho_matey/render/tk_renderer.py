@@ -3,11 +3,11 @@ from __future__ import annotations
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.campaign import CampaignState, CHUNKS_PER_LIFE
+from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.chart_bounds import ChartBoundsToast
-from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_LABELS, PowerUpKind
+from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_LABELS
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.gameplay.progress import is_level_selectable
 from gravity_ho_matey.render import palette
@@ -45,6 +45,7 @@ class TkRenderer:
             solar_unlocked=is_level_selectable("solar"),
             drift_unlocked=is_level_selectable("drift"),
             rift_unlocked=is_level_selectable("rift"),
+            siege_unlocked=is_level_selectable("siege"),
             draw_ship=lambda cx, cy: self._draw_demo_ship(Vec2(cx, cy), angle=0.12, scale=1.55),
             deploy_focus=deploy_focus,
             hover_id=hover_id,
@@ -205,7 +206,7 @@ class TkRenderer:
             title = "Shipwrecked"
             subtitle = (
                 f"{reason or 'The void claims another captain.'}  "
-                f"Lives {campaign.lives} · Hull {campaign.hull_chunks}/{CHUNKS_PER_LIFE}"
+                f"Lives {campaign.lives} · Hull {campaign.hull_chunks}/{campaign.max_hull_chunks_per_life}"
             )
             primary_id = "action_retry"
             primary_label = "TRY AGAIN"

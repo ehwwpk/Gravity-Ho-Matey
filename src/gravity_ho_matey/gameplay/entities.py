@@ -7,6 +7,7 @@ from enum import Enum, auto
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.asteroid_tiers import AsteroidTier
+from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 
 
 class GameStatus(Enum):
@@ -38,6 +39,9 @@ class Projectile:
     radius: float = 4.0
     hostile: bool = False
     from_ally: bool = False
+    pierce_remaining: int = 0
+    explosive_radius: float = 0.0
+    weapon_track: WeaponTrack | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,5 +128,7 @@ class WorldConfig:
     radiation_enabled: bool = True
     max_asteroids: int = 48
     exit_requires_boss: bool = False
+    exit_requires_roster_clear: bool = False
+    roster_kill_quota: int = 0
     pad_overspeed_cap: float = 1.18
     pad_flash_seconds: float = 0.42

@@ -3,6 +3,7 @@ from __future__ import annotations
 # Campaign drone buddy — one life, 5 HP, deploys from holo shop.
 DRONE_WINGMAN_SHOP_PRICE = 20
 DRONE_WINGMAN_HITS_MAX = 5
+DRONE_ARMORED_HITS_MAX = 8
 DRONE_HITS_MAX = DRONE_WINGMAN_HITS_MAX
 
 # Flight — tighter escort than L4 friendlies; high agility for dodge-first AI.

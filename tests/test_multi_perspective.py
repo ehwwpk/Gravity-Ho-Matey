@@ -99,8 +99,8 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         assert isinstance(briefing, ChartBriefingScene)
         self.assertEqual(briefing.upcoming_level_id, "rift")
 
-    def test_rift_campaign_complete_routes_to_end_scene(self) -> None:
-        from gravity_ho_matey.scenes.end import EndScene
+    def test_rift_win_routes_to_siege_briefing(self) -> None:
+        from gravity_ho_matey.scenes.chart_briefing import ChartBriefingScene
 
         scene = PlayScene("rift", CampaignState.new())
         host = _FakeHost()
@@ -109,6 +109,23 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
             scene.world.finish_gate.rect.x + 10,
             scene.world.finish_gate.rect.y + 10,
         )
+        scene.update(host, 0.016)
+        self.assertIsInstance(host.last_scene, ChartBriefingScene)
+        briefing = host.last_scene
+        assert isinstance(briefing, ChartBriefingScene)
+        self.assertEqual(briefing.upcoming_level_id, "siege")
+
+    def test_siege_campaign_complete_routes_to_end_scene(self) -> None:
+        from gravity_ho_matey.scenes.end import EndScene
+
+        scene = PlayScene("siege", CampaignState.new())
+        host = _FakeHost()
+        for enemy in scene.world.enemies:
+            enemy.alive = False
+            scene.world._register_roster_kill(enemy)
+        scene.world._prune_dead_enemies()
+        gate = scene.world.finish_gate.rect
+        scene.world.ship.pos = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         scene.update(host, 0.016)
         self.assertIsInstance(host.last_scene, EndScene)
         end = host.last_scene
