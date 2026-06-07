@@ -43,6 +43,27 @@ DevGov MCP not in enabled server folder; next sessions should use MCP when avail
 
 ---
 
+## 2026-06-02 — L3 chase black hole rings (purple splotch fix)
+
+### +EV (strong) · Pre-edit check scoped render + test boundaries
+`devgov check --task "Fix L3 chase black hole ring viz"` → LOW on clean tree; T0 listed python + tests before touching chase well/ground/light paths.
+
+### +EV (medium) · Primary slice green after fix (358 pytest)
+`devgov run` → primary **ruff + compileall + pytest** passed; exit 12 only on generic `sub:tests` skips (expected, neutral).
+
+### +EV (medium) · Root cause: titan wells used world radius for screen FX
+Drift wells ~1900u radius → chase fog glow `well.radius * scale * 0.42` painted huge purple slabs; heatmap cells uncapped; ring segments dropped at 160px on wide arcs. Fixed: screen-capped glow from projected ring span, suppress heatmap inside well footprints, cap heatmap cell px, denser floor samples + dynamic segment length for mega rings.
+
+### neutral · `sub:tests` slice skips (no Phase-1 mapping)
+Same pattern as prior sessions — not a gameplay failure.
+
+### neutral · Stale cove asteroid tests updated during run
+`test_asteroid_combat` expected pre-rim counts (16 OOB / 1 medium); aligned to 20 OOB / 5 medium to unblock full pytest in primary slice.
+
+**Net:** strong +EV — DevGov run caught stale tests; chase viz fix is screen-space correct for titans.
+
+---
+
 ## 2026-06-07 — Drift density, titan wells, squid aggro
 
 ### +EV · Full loop on a focused tuning diff

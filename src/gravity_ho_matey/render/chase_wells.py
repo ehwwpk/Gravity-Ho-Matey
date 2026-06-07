@@ -18,7 +18,10 @@ from gravity_ho_matey.render.lighting import (
 CHASE_RING_FRACS = (1.0, 0.82, 0.64, 0.46, 0.28)
 CHASE_RING_FRACS_COMPACT = (1.0, 0.72, 0.44)
 _FLOOR_SEGMENTS = 48
+_FLOOR_SEGMENTS_LARGE = 72
+_LARGE_WELL_RADIUS = 400.0
 _MAX_SEGMENT_PX = 160.0
+_CHASE_GLOW_RADIUS_CAP = 148.0
 _HORIZON_RING_SLACK = 22.0
 _MIN_RING_SPAN_PX = 10.0
 _LETHAL_KINDS = frozenset({"black_hole", "planet"})
@@ -38,9 +41,10 @@ def project_floor_ring(
         return []
     margin = max(240.0, world_radius * 0.42)
     min_ahead = -world_radius * 0.92
+    segments = _FLOOR_SEGMENTS_LARGE if world_radius >= _LARGE_WELL_RADIUS else _FLOOR_SEGMENTS
     pts: list[tuple[float, float] | None] = []
-    for i in range(_FLOOR_SEGMENTS + 1):
-        a = (i / _FLOOR_SEGMENTS) * math.tau
+    for i in range(segments + 1):
+        a = (i / segments) * math.tau
         wp = center + Vec2(math.cos(a), math.sin(a)) * world_radius
         p = camera.world_to_chase_screen(
             wp,
@@ -54,6 +58,35 @@ def project_floor_ring(
         else:
             pts.append((p.x, p.y))
     return pts
+
+
+def chase_well_screen_ring_span(
+    camera: ViewCamera,
+    well: GravityWell,
+    ship_pos: Vec2,
+    ship_angle: float,
+) -> float:
+    """Visible outer-ring width on the chase floor plane (screen px)."""
+    horizon = camera.chase_horizon_y()
+    outer_pts = project_floor_ring(
+        camera, well.pos, well.radius, ship_pos, ship_angle, horizon=horizon,
+    )
+    return floor_ring_span(outer_pts)
+
+
+def chase_well_glow_radius(
+    camera: ViewCamera,
+    well: GravityWell,
+    ship_pos: Vec2,
+    ship_angle: float,
+    *,
+    scale: float,
+) -> float:
+    """Screen-space fog radius — never scale raw titan world radii into a purple slab."""
+    span = chase_well_screen_ring_span(camera, well, ship_pos, ship_angle)
+    if span >= _MIN_RING_SPAN_PX:
+        return max(22.0, min(span * 0.38, _CHASE_GLOW_RADIUS_CAP))
+    return max(22.0, min(well.radius * scale * 0.14, 96.0))
 
 
 def chase_well_drawable(
@@ -136,7 +169,8 @@ def draw_chase_well(
             continue
         any_ring = True
         width = 3 if frac >= 0.82 else (2 if frac >= 0.5 else 1)
-        _stroke_ring_lit(canvas, pts, screen_cx, screen_cy, rig, material, width)
+        ring_span = floor_ring_span(pts)
+        _stroke_ring_lit(canvas, pts, screen_cx, screen_cy, rig, material, width, ring_span=ring_span)
 
     if not any_ring:
         return
@@ -179,8 +213,11 @@ def _stroke_ring_lit(
     rig: LightRig,
     material,
     width: int,
+    *,
+    ring_span: float = 0.0,
 ) -> None:
-    for ax, ay, bx, by in _ring_segments(pts):
+    max_px = _max_segment_px(ring_span)
+    for ax, ay, bx, by in _ring_segments(pts, max_px=max_px):
         mx, my = (ax + bx) * 0.5, (ay + by) * 0.5
         color = arc_tone_for_point(mx, my, center_x, center_y, rig, material)
         canvas.create_line(ax, ay, bx, by, fill=color, width=width)
@@ -225,13 +262,23 @@ def _fill_ring(
     canvas.create_polygon(*flat, fill=fill, outline=outline, width=1)
 
 
-def _ring_segments(pts: list[tuple[float, float] | None]) -> list[tuple[float, float, float, float]]:
+def _max_segment_px(ring_span: float) -> float:
+    if ring_span <= _MIN_RING_SPAN_PX:
+        return _MAX_SEGMENT_PX
+    return max(_MAX_SEGMENT_PX, ring_span / 5.5)
+
+
+def _ring_segments(
+    pts: list[tuple[float, float] | None],
+    *,
+    max_px: float | None = None,
+) -> list[tuple[float, float, float, float]]:
     """Short arc segments only — no wrap chords, no (0,0) spikes."""
+    max_sq = (max_px if max_px is not None else _MAX_SEGMENT_PX) ** 2
     segments: list[tuple[float, float, float, float]] = []
     prev: tuple[float, float] | None = None
     first: tuple[float, float] | None = None
     last: tuple[float, float] | None = None
-    max_sq = _MAX_SEGMENT_PX * _MAX_SEGMENT_PX
 
     for pt in pts:
         if pt is None:

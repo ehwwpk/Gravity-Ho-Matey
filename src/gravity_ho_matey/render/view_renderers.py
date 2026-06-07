@@ -487,13 +487,20 @@ class PerspectiveViewRenderer:
         )
 
         light_layer = LightLayerBuilder(rig, elapsed=elapsed)
-        from gravity_ho_matey.render.chase_wells import chase_well_drawable
+        from gravity_ho_matey.render.chase_wells import chase_well_drawable, chase_well_glow_radius
 
         for well in world.wells:
             drawable, anchor, depth = chase_well_drawable(camera, well, ship_pos, ship_angle)
             if drawable:
                 wscale = max(0.25, camera.perspective_scale(depth) / camera.focal_length)
-                light_layer.add_well(well, anchor, scale=wscale, depth=depth)
+                glow_r = chase_well_glow_radius(camera, well, ship_pos, ship_angle, scale=wscale)
+                light_layer.add_well(
+                    well,
+                    anchor,
+                    scale=wscale,
+                    depth=depth,
+                    screen_glow_radius=glow_r,
+                )
         for beacon in world.beacons:
             if beacon.collected:
                 continue

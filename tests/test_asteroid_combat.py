@@ -345,18 +345,19 @@ class AsteroidCombatWorldTests(unittest.TestCase):
                 elif asteroid.approximate_radius() >= ROCK_MEDIUM_MIN_RADIUS:
                     self.assertEqual(asteroid.tier, AsteroidTier.MEDIUM)
 
-    def test_cove_has_one_authored_medium_rock(self) -> None:
+    def test_cove_has_authored_medium_and_chart_rim(self) -> None:
         world = build_level("cove")
         medium_rocks = [a for a in world.asteroids if a.tier is AsteroidTier.MEDIUM]
-        self.assertEqual(len(medium_rocks), 1)
-        self.assertEqual(medium_rocks[0].seed, 102)
+        self.assertEqual(len(medium_rocks), 5)
+        authored = [a for a in medium_rocks if a.seed == 102]
+        self.assertEqual(len(authored), 1)
 
     def test_cove_has_oob_chart_ring(self) -> None:
         from gravity_ho_matey.gameplay.chart_bounds import oob_ring_radius
 
         world = build_level("cove")
         ring = [a for a in world.asteroids if a.free_bounds]
-        self.assertEqual(len(ring), 16)
+        self.assertEqual(len(ring), 20)
         expected_radius = oob_ring_radius(world.config)
         anchor = Vec2(world.config.width * 0.5, world.config.height * 0.5)
         main_ring = [a for a in ring if a.ring_radius and abs(a.ring_radius - expected_radius) < 1.0]

@@ -27,10 +27,14 @@ class LightLayerBuilder:
         *,
         scale: float,
         depth: float,
+        screen_glow_radius: float | None = None,
     ) -> None:
         kind = well_material_kind(well.kind)
         mat = material_for(kind, theme=self.rig.theme)
-        radius = max(24.0, well.radius * scale * 0.42)
+        if screen_glow_radius is not None:
+            radius = screen_glow_radius
+        else:
+            radius = max(24.0, min(well.radius * scale * 0.14, 96.0))
         if well.kind == "black_hole":
             self._sources.append(("sink", screen_pos.x, screen_pos.y, radius * 0.55, (mat.deep,), 1.0))
             colors = palette.CHASE_FOG_BLACK_HOLE

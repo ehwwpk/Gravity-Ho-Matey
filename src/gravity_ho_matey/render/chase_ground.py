@@ -8,6 +8,22 @@ from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.camera import ViewCamera
 from gravity_ho_matey.render.world_draw import gravity_field_color
 
+_CHASE_HEATMAP_CELL_CAP_PX = 44.0
+
+_CHASE_HEATMAP_NORM_FLOOR = 0.24
+_WELL_HEATMAP_SUPPRESS_FRAC = 0.92
+
+
+def _inside_well_footprint(world: GameWorld, wx: float, wy: float) -> bool:
+    for well in world.wells:
+        if well.kind != "black_hole":
+            continue
+        dx = wx - well.pos.x
+        dy = wy - well.pos.y
+        if dx * dx + dy * dy <= (well.radius * _WELL_HEATMAP_SUPPRESS_FRAC) ** 2:
+            return True
+    return False
+
 
 def draw_chase_gravity_heatmap(
     canvas: tk.Canvas,
@@ -19,7 +35,7 @@ def draw_chase_gravity_heatmap(
     step: int = 2,
     _world: GameWorld | None = None,
 ) -> None:
-    """Purple floor wash — flat projection, no grid lines."""
+    """Subtle purple floor wash — capped screen cells; rings carry well read at titans."""
     horizon = camera.chase_horizon_y()
     for row in range(0, field.rows, step):
         for col in range(0, field.cols, step):
@@ -27,10 +43,12 @@ def draw_chase_gravity_heatmap(
             if cell.magnitude <= 1e-6:
                 continue
             norm = cell.magnitude / field.max_magnitude
-            if norm < 0.18:
+            if norm < _CHASE_HEATMAP_NORM_FLOOR:
                 continue
             wx = field.origin.x + col * field.cell_size + field.cell_size * 0.5
             wy = field.origin.y + row * field.cell_size + field.cell_size * 0.5
+            if _world is not None and _inside_well_footprint(_world, wx, wy):
+                continue
             wp = Vec2(wx, wy)
             p = camera.world_to_chase_screen(
                 wp,
@@ -42,8 +60,11 @@ def draw_chase_gravity_heatmap(
             if p.y < horizon or not p.visible:
                 continue
             depth_scale = camera.perspective_scale(p.depth) / camera.focal_length
-            half_w = field.cell_size * step * 0.58 * depth_scale
-            half_h = half_w * 0.32
+            half_w = min(
+                _CHASE_HEATMAP_CELL_CAP_PX,
+                field.cell_size * step * 0.58 * depth_scale,
+            )
+            half_h = min(_CHASE_HEATMAP_CELL_CAP_PX * 0.32, half_w * 0.32)
             tone = gravity_field_color(norm)
             canvas.create_rectangle(
                 p.x - half_w,

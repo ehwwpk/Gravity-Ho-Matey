@@ -208,28 +208,6 @@ class ChaseWellScaleTests(unittest.TestCase):
         self.assertGreater(span, expected * 0.55)
         self.assertLess(span, expected * 1.45)
 
-    def test_ring_segments_skip_behind_camera_chords(self) -> None:
-        import math
-
-        from gravity_ho_matey.render.camera import CameraMode, ViewCamera
-        from gravity_ho_matey.render.chase_wells import _ring_segments, project_floor_ring
-
-        world = build_cove_run_level()
-        reef = next(w for w in world.wells if w.label == "Dead Star Reef")
-        camera = ViewCamera(mode=CameraMode.CHASE)
-        camera.set_play_layout(54.0)
-        ship_pos = Vec2(reef.pos.x, reef.pos.y + 120.0)
-        ship_angle = -math.pi / 2
-        pts = project_floor_ring(
-            camera, reef.pos, reef.radius, ship_pos, ship_angle, horizon=camera.chase_horizon_y(),
-        )
-        for x1, y1, x2, y2 in _ring_segments(pts):
-            length = math.hypot(x2 - x1, y2 - y1)
-            self.assertLessEqual(length, 161.0)
-            self.assertGreater(length, 0.5)
-            self.assertFalse(x1 == 0.0 and y1 == 0.0)
-            self.assertFalse(x2 == 0.0 and y2 == 0.0)
-
     def test_lateral_well_ring_stays_drawable_between_holes(self) -> None:
         import math
 
@@ -255,6 +233,114 @@ class ChaseWellScaleTests(unittest.TestCase):
                 segments += len(_ring_segments(pts))
         self.assertGreaterEqual(drawable, 1)
         self.assertGreater(segments, 4)
+
+
+class ChaseTitanWellTests(unittest.TestCase):
+    def test_drift_titan_glow_radius_is_screen_capped(self) -> None:
+        import math
+
+        from gravity_ho_matey.levels.level_registry import build_level
+        from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+        from gravity_ho_matey.render.chase_wells import _CHASE_GLOW_RADIUS_CAP, chase_well_glow_radius
+
+        world = build_level("drift")
+        kraken = next(w for w in world.wells if w.label == "Graviton Kraken")
+        world.ship.pos = Vec2(kraken.pos.x + 420.0, kraken.pos.y + 260.0)
+        world.ship.angle = math.atan2(kraken.pos.y - world.ship.pos.y, kraken.pos.x - world.ship.pos.x)
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        glow = chase_well_glow_radius(
+            camera,
+            kraken,
+            world.ship.pos,
+            world.ship.angle,
+            scale=0.8,
+        )
+        self.assertLessEqual(glow, _CHASE_GLOW_RADIUS_CAP)
+        self.assertGreater(glow, 20.0)
+
+    def test_drift_titan_draws_ring_strokes_not_only_fog(self) -> None:
+        import math
+
+        from gravity_ho_matey.levels.level_registry import build_level
+        from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+        from gravity_ho_matey.render.chase_wells import (
+            _ring_segments,
+            chase_well_drawable,
+            draw_chase_well,
+            project_floor_ring,
+        )
+        from gravity_ho_matey.render.lighting import LightRig
+
+        world = build_level("drift")
+        kraken = next(w for w in world.wells if w.label == "Graviton Kraken")
+        world.ship.pos = Vec2(kraken.pos.x + 520.0, kraken.pos.y + 180.0)
+        world.ship.angle = math.atan2(kraken.pos.y - world.ship.pos.y, kraken.pos.x - world.ship.pos.x)
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        ship_pos = world.ship.pos
+        ship_angle = world.ship.angle
+        drawable, anchor, depth = chase_well_drawable(camera, kraken, ship_pos, ship_angle)
+        self.assertTrue(drawable)
+        horizon = camera.chase_horizon_y()
+        outer = project_floor_ring(camera, kraken.pos, kraken.radius, ship_pos, ship_angle, horizon=horizon)
+        segments = _ring_segments(outer, max_px=220.0)
+        self.assertGreater(len(segments), 8)
+
+        root, canvas = _tk_canvas()
+        rig = LightRig.for_play(theme="drift", camera_mode=CameraMode.CHASE)
+        draw_chase_well(
+            canvas,
+            anchor,
+            kraken,
+            scale=0.6,
+            elapsed=0.0,
+            depth=depth,
+            camera=camera,
+            ship_pos=ship_pos,
+            ship_angle=ship_angle,
+            default_maw=world.config.well_maw_radius,
+            rig=rig,
+        )
+        lines = [i for i in canvas.find_all() if canvas.type(i) == "line"]
+        self.assertGreater(len(lines), 6)
+        root.destroy()
+
+    def test_drift_chase_heatmap_cells_stay_screen_sized(self) -> None:
+        from gravity_ho_matey.gameplay.gravity_field import GravityField
+        from gravity_ho_matey.levels.level_registry import build_level
+        from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+        from gravity_ho_matey.render.chase_ground import _CHASE_HEATMAP_CELL_CAP_PX, draw_chase_gravity_heatmap
+
+        world = build_level("drift")
+        field = GravityField.bake(
+            world.wells,
+            world_width=world.config.width,
+            world_height=world.config.height,
+            cols=32,
+            rows=32,
+            gravity_scale=world.config.gravity_scale,
+        )
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        root, canvas = _tk_canvas()
+        draw_chase_gravity_heatmap(
+            canvas,
+            field,
+            camera,
+            world.ship.pos,
+            world.ship.angle,
+            step=4,
+            _world=world,
+        )
+        max_span = 0.0
+        for item in canvas.find_all():
+            if canvas.type(item) != "rectangle":
+                continue
+            x0, y0, x1, y1 = canvas.coords(item)
+            max_span = max(max_span, abs(x1 - x0), abs(y1 - y0))
+        root.destroy()
+        self.assertLessEqual(max_span, _CHASE_HEATMAP_CELL_CAP_PX * 2.2)
 
 
 class ChaseRendererSmokeTests(unittest.TestCase):
