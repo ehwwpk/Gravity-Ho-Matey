@@ -68,6 +68,15 @@ TITAN_WELLS: tuple[GravityWell, ...] = (
 SQUID_RING_RADIUS = FINAL_RING_RADIUS - 60.0
 SQUID_ANGLES_DEG: tuple[float, ...] = (35.0, 65.0, 95.0, 155.0, 215.0, 245.0, 275.0)
 
+# One lurker per belt from the third ring outward — angles sit between rock slots.
+RING_LURKER_SPECS: tuple[tuple[int, float], ...] = (
+    (2, 118.0),
+    (3, 241.0),
+    (4, 14.0),
+    (5, 307.0),
+    (6, 52.0),
+)
+
 
 @dataclass(frozen=True, slots=True)
 class DriftLayout:
@@ -77,6 +86,7 @@ class DriftLayout:
     wells: tuple[GravityWell, ...]
     squid_angles_deg: tuple[float, ...]
     squid_ring_radius: float
+    ring_lurker_specs: tuple[tuple[int, float], ...]
 
 
 def build_drift_layout() -> DriftLayout:
@@ -96,4 +106,5 @@ def build_drift_layout() -> DriftLayout:
         wells=TITAN_WELLS,
         squid_angles_deg=SQUID_ANGLES_DEG,
         squid_ring_radius=SQUID_RING_RADIUS,
+        ring_lurker_specs=RING_LURKER_SPECS,
     )

@@ -27,12 +27,18 @@ def draw_chase_gravity_heatmap(
             if cell.magnitude <= 1e-6:
                 continue
             norm = cell.magnitude / field.max_magnitude
-            if norm < 0.12:
+            if norm < 0.18:
                 continue
             wx = field.origin.x + col * field.cell_size + field.cell_size * 0.5
             wy = field.origin.y + row * field.cell_size + field.cell_size * 0.5
             wp = Vec2(wx, wy)
-            p = camera.world_to_screen(wp, ship_pos, ship_angle)
+            p = camera.world_to_chase_screen(
+                wp,
+                ship_pos,
+                ship_angle,
+                min_ahead=camera.min_depth * 0.5,
+                screen_margin=160.0,
+            )
             if p.y < horizon or not p.visible:
                 continue
             depth_scale = camera.perspective_scale(p.depth) / camera.focal_length

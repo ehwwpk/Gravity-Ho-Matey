@@ -9,6 +9,7 @@ from gravity_ho_matey.render.camera import CameraMode
 
 _KEY_COVE = Vec2(-0.65, -0.75).normalized()
 _KEY_SOLAR = Vec2(-0.55, -0.80).normalized()
+_KEY_RIFT = Vec2(-0.48, -0.82).normalized()
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,17 +25,21 @@ class LightRig:
     @staticmethod
     def for_play(*, theme: str, camera_mode: CameraMode) -> LightRig:
         solar = theme == "solar"
-        key = _KEY_SOLAR if solar else _KEY_COVE
+        rift = theme == "rift"
+        key = _KEY_SOLAR if solar else _KEY_RIFT if rift else _KEY_COVE
         view = "chase" if camera_mode is CameraMode.CHASE else "tactical"
         rim = 0.55 if view == "chase" else 0.45
         if solar:
             rim += 0.05
+        elif rift:
+            rim += 0.08
+        ambient = 0.28 if solar else 0.38 if rift else 0.35
         return LightRig(
             theme=theme,
             view=view,
             key_dir=key,
-            ambient=0.28 if solar else 0.35,
-            rim_strength=min(0.65, rim),
+            ambient=ambient,
+            rim_strength=min(0.72, rim),
         )
 
 
@@ -150,6 +155,66 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             rim="#dff",
             crater_pit="#063828",
             crater_rim_hi="#e8fff8",
+        )
+    if kind == "rift_ribbon":
+        if view == "chase":
+            return MaterialTones(
+                highlight=palette.RIFT_RIBBON_STRIPE,
+                mid=lerp_hex(palette.RIFT_RIBBON_CORE, palette.CHASE_ASTEROID_REGOLITH, 0.32),
+                shadow=lerp_hex(palette.RIFT_RIBBON_EDGE, palette.CHASE_ASTEROID_SIDE, 0.38),
+                deep=lerp_hex(palette.RIFT_ROAD_BED, palette.CHASE_ASTEROID_SIDE_DARK, 0.55),
+                rim=palette.RIFT_RIBBON_RAIL,
+                crater_pit=palette.ASTEROID_CRATER,
+                crater_rim_hi=lerp_hex(palette.RIFT_ROAD_REGOLITH, palette.CHASE_ASTEROID_REGOLITH, 0.5),
+            )
+        return MaterialTones(
+            highlight=palette.RIFT_RIBBON_STRIPE,
+            mid=lerp_hex(palette.RIFT_RIBBON_CORE, palette.HOLO_ASTEROID_TOP, 0.28),
+            shadow=lerp_hex(palette.RIFT_RIBBON_EDGE, palette.HOLO_ASTEROID_SIDE, 0.35),
+            deep=lerp_hex(palette.RIFT_ROAD_BED, palette.HOLO_ASTEROID_SIDE_DARK, 0.45),
+            rim=palette.RIFT_RIBBON_RAIL,
+            crater_pit=palette.ASTEROID_CRATER,
+            crater_rim_hi=lerp_hex(palette.RIFT_ROAD_REGOLITH, palette.HOLO_ASTEROID_REGOLITH, 0.55),
+        )
+    if kind == "boost_pad":
+        return MaterialTones(
+            highlight=palette.RIFT_PAD_FLASH,
+            mid=palette.RIFT_PAD_MK_YELLOW,
+            shadow=lerp_hex(palette.RIFT_PAD_MK_ORANGE, "#604020", 0.35),
+            deep="#302018",
+            rim="#fff0d0",
+            crater_pit="#281808",
+            crater_rim_hi=palette.RIFT_PAD_ZIGZAG,
+        )
+    if kind == "squid":
+        return MaterialTones(
+            highlight="#c878e8",
+            mid="#7038a0",
+            shadow="#381850",
+            deep="#180828",
+            rim="#a048d0",
+            crater_pit="#100818",
+            crater_rim_hi="#e0a0ff",
+        )
+    if kind == "mega_squid":
+        return MaterialTones(
+            highlight="#e0a0ff",
+            mid="#8040c0",
+            shadow="#401858",
+            deep="#180828",
+            rim="#c058ff",
+            crater_pit="#100818",
+            crater_rim_hi="#ffa0e0",
+        )
+    if kind == "friendly_ship":
+        return MaterialTones(
+            highlight=palette.FRIENDLY_SHIP_TRIM,
+            mid=palette.FRIENDLY_SHIP,
+            shadow=palette.FRIENDLY_SHIP_SHADOW,
+            deep="#143038",
+            rim=palette.RIFT_HUD_ACCENT,
+            crater_pit="#0a2028",
+            crater_rim_hi=palette.FRIENDLY_SHIP_TRIM,
         )
     return material_for("asteroid", theme=theme)
 

@@ -45,6 +45,17 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         after = (scene.world.ship.pos.x, scene.world.ship.pos.y, scene.world.ship.vel.x, scene.world.ship.angle)
         self.assertEqual(before, after)
 
+    def test_cove_play_scene_snaps_tactical_camera_on_start(self) -> None:
+        scene = PlayScene("cove", CampaignState.new())
+        scene.world.ship.pos = Vec2(880, 550)
+        scene.camera.snap_tactical_to_ship(scene.world.ship.pos, scene.world.config)
+        p = scene.camera.world_to_screen(scene.world.ship.pos, scene.world.ship.pos, 0.0)
+        hud = 54
+        self.assertGreater(p.x, 16.0)
+        self.assertLess(p.x, scene.world.config.viewport_width - 16.0)
+        self.assertGreater(p.y + hud, hud + 16.0)
+        self.assertLess(p.y + hud, scene.world.config.viewport_height - 16.0)
+
     def test_solar_strip_exceeds_viewport_height(self) -> None:
         scene = PlayScene("solar", CampaignState.new())
         self.assertGreater(scene.world.config.height, scene.world.config.viewport_height)
@@ -73,11 +84,27 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         assert isinstance(briefing, ChartBriefingScene)
         self.assertEqual(briefing.upcoming_level_id, "drift")
 
-    def test_drift_campaign_complete_routes_to_end_scene(self) -> None:
-        from gravity_ho_matey.scenes.end import EndScene
+    def test_drift_campaign_complete_routes_to_rift_briefing(self) -> None:
+        from gravity_ho_matey.scenes.chart_briefing import ChartBriefingScene
 
         scene = PlayScene("drift", CampaignState.new())
         host = _FakeHost()
+        scene.world.ship.pos = Vec2(
+            scene.world.finish_gate.rect.x + 10,
+            scene.world.finish_gate.rect.y + 10,
+        )
+        scene.update(host, 0.016)
+        self.assertIsInstance(host.last_scene, ChartBriefingScene)
+        briefing = host.last_scene
+        assert isinstance(briefing, ChartBriefingScene)
+        self.assertEqual(briefing.upcoming_level_id, "rift")
+
+    def test_rift_campaign_complete_routes_to_end_scene(self) -> None:
+        from gravity_ho_matey.scenes.end import EndScene
+
+        scene = PlayScene("rift", CampaignState.new())
+        host = _FakeHost()
+        scene.world.boss_cleared = True
         scene.world.ship.pos = Vec2(
             scene.world.finish_gate.rect.x + 10,
             scene.world.finish_gate.rect.y + 10,

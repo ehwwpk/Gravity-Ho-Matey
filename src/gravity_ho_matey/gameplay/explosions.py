@@ -15,6 +15,7 @@ class ExplosionKind(Enum):
     SHIP_DESTROYED = auto()
     ASTEROID_DESTROYED = auto()
     ASTEROID_BREAKUP = auto()
+    JEWEL_COLLECT = auto()
 
 
 @dataclass(slots=True)
@@ -57,6 +58,7 @@ _PRESETS: dict[ExplosionKind, tuple[int, float, float]] = {
     ExplosionKind.SHIP_DESTROYED: (34, 52.0, 0.38),
     ExplosionKind.ASTEROID_DESTROYED: (14, 20.0, 0.2),
     ExplosionKind.ASTEROID_BREAKUP: (22, 38.0, 0.3),
+    ExplosionKind.JEWEL_COLLECT: (18, 22.0, 0.32),
 }
 
 
@@ -69,6 +71,7 @@ def spawn_explosion(kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> Ex
         ExplosionKind.SHIP_DESTROYED: 1.35,
         ExplosionKind.ASTEROID_DESTROYED: 0.75,
         ExplosionKind.ASTEROID_BREAKUP: 1.05,
+        ExplosionKind.JEWEL_COLLECT: 0.85,
     }[kind]
     scale = max(0.35, min(1.8, scale * base_scale))
 
@@ -77,10 +80,42 @@ def spawn_explosion(kind: ExplosionKind, pos: Vec2, *, scale: float = 1.0) -> Ex
         pos=Vec2(pos.x, pos.y),
         ring_max=ring_max * scale,
         ring_life=ring_life,
-        flash_life=0.08 + ring_life * 0.35,
+        flash_life=0.06 + ring_life * (0.25 if kind is ExplosionKind.JEWEL_COLLECT else 0.35),
     )
-    explosion.particles = _build_particles(pos, max(4, int(count * scale)), scale)
+    if kind is ExplosionKind.JEWEL_COLLECT:
+        explosion.particles = _build_jewel_collect_particles(pos, max(6, int(count * scale)), scale)
+    else:
+        explosion.particles = _build_particles(pos, max(4, int(count * scale)), scale)
     return explosion
+
+
+def _build_jewel_collect_particles(origin: Vec2, count: int, scale: float) -> list[ExplosionParticle]:
+    particles: list[ExplosionParticle] = []
+    for i in range(count):
+        angle = random.uniform(0.0, math.tau)
+        speed = random.uniform(90.0, 260.0) * scale
+        if i % 4 == 0:
+            particle_type = "gem"
+            max_life = random.uniform(0.18, 0.42)
+            size = random.uniform(2.5, 5.0) * scale
+        else:
+            particle_type = "spark"
+            max_life = random.uniform(0.14, 0.34)
+            size = random.uniform(1.8, 3.8) * scale
+            speed *= 1.15
+        bias = Vec2(0.0, -1.0) * random.uniform(20.0, 70.0) * scale
+        vel = Vec2(math.cos(angle) * speed, math.sin(angle) * speed) + bias
+        particles.append(
+            ExplosionParticle(
+                pos=Vec2(origin.x, origin.y),
+                vel=vel,
+                life=max_life,
+                max_life=max_life,
+                size=size,
+                particle_type=particle_type,
+            )
+        )
+    return particles
 
 
 def _build_particles(origin: Vec2, count: int, scale: float) -> list[ExplosionParticle]:
@@ -125,8 +160,8 @@ def update_explosion(explosion: Explosion, dt: float) -> None:
         explosion.ring_radius + dt * explosion.ring_max * 4.5,
     )
 
-    drag = 0.965
-    gravity = 28.0
+    drag = 0.978 if explosion.kind is ExplosionKind.JEWEL_COLLECT else 0.965
+    gravity = 12.0 if explosion.kind is ExplosionKind.JEWEL_COLLECT else 28.0
     kept: list[ExplosionParticle] = []
     for particle in explosion.particles:
         particle.life -= dt

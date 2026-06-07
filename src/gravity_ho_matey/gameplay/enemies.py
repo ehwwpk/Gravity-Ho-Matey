@@ -9,7 +9,11 @@ from gravity_ho_matey.gameplay.enemy_aim import lead_aim_direction
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.entities import GravityWell, Projectile
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+
+# Armed patrol baseline — 10% slower bolts, 10% wider aim spread, 10% less velocity lead.
+PATROL_SHOT_SPEED = 228.0 * 0.90
+PATROL_AIM_LEAD_FACTOR = 0.68 * 0.90
+PATROL_AIM_SPREAD_RAD = 0.055 * 1.10
 
 
 @dataclass(slots=True)
@@ -18,7 +22,6 @@ class PatrolEnemy:
     thrust: float = 235.0
     max_speed: float = 105.0
     radius: float = 14.0
-    drop_kind: PowerUpKind = PowerUpKind.THRUST_BOOST
     pos: Vec2 = field(default_factory=Vec2)
     vel: Vec2 = field(default_factory=Vec2)
     waypoint_index: int = 0
@@ -27,11 +30,11 @@ class PatrolEnemy:
     can_shoot: bool = False
     fire_cooldown: float = 0.0
     fire_interval: float = 2.85
-    shot_speed: float = 228.0
+    shot_speed: float = PATROL_SHOT_SPEED
     engage_range: float = 440.0
     min_range: float = 70.0
-    aim_lead_factor: float = 0.68
-    aim_spread_rad: float = 0.055
+    aim_lead_factor: float = PATROL_AIM_LEAD_FACTOR
+    aim_spread_rad: float = PATROL_AIM_SPREAD_RAD
 
     @property
     def kind(self) -> EnemyKind:

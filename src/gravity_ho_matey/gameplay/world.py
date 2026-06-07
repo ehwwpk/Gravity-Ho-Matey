@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -12,6 +11,7 @@ from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSeverity, Damage
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.explosions import ExplosionKind, ExplosionSystem
+from gravity_ho_matey.gameplay.asteroid_bounce import resolve_rubber_hull_bounce
 from gravity_ho_matey.gameplay.asteroid_combat import (
     AsteroidCombatResult,
     apply_projectile_hit,
@@ -23,15 +23,32 @@ from gravity_ho_matey.gameplay.entities import (
     FinishGate,
     GameStatus,
     GravityWell,
-    PowerUpPickup,
     Projectile,
     Ship,
     WorldConfig,
 )
-from gravity_ho_matey.core.geometry import circle_intersects_convex_polygon
+from gravity_ho_matey.core.geometry import Rect, circle_intersects_convex_polygon
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
+from gravity_ho_matey.gameplay.jewel_drops import (
+    jewel_count_for_asteroid,
+    jewel_count_for_beacon,
+    jewel_count_for_boss,
+    jewel_count_for_enemy,
+)
+from gravity_ho_matey.gameplay.jewel_pickup import JewelPickup, spawn_scattered_jewels, tick_jewels
+from gravity_ho_matey.gameplay.boost_lane import LaneProbe, LaneState, probe_lane
+from gravity_ho_matey.gameplay.boost_pad import BoostPad, tick_boost_pads, try_trigger_pad
 from gravity_ho_matey.gameplay.squid_enemy import SQUID_CLING_DAMAGE_INTERVAL, SquidEnemy
+from gravity_ho_matey.gameplay.lane_physics import (
+    apply_lane_centering,
+    lane_modifiers,
+)
+from gravity_ho_matey.gameplay.friendly_fighter import FriendlyFighter
+from gravity_ho_matey.gameplay.drone_config import DRONE_ASTEROID_QUERY_RADIUS
+from gravity_ho_matey.gameplay.drone_wingman import DroneWingman
+from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
+from gravity_ho_matey.gameplay.squid_pod import SquidPod
+from gravity_ho_matey.levels.membrane_layout import MembraneLayout
 from gravity_ho_matey.gameplay.asteroid_spatial import AsteroidSpatialGrid
 from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot, build_asteroid_threat_snapshots
 
@@ -57,8 +74,9 @@ class GameWorld:
     finish_gate: FinishGate
     projectiles: list[Projectile] = field(default_factory=list)
     enemies: list[EnemyUnit] = field(default_factory=list)
-    pickups: list[PowerUpPickup] = field(default_factory=list)
-    on_powerup_collected: Callable[[PowerUpKind], None] | None = None
+    jewels: list[JewelPickup] = field(default_factory=list)
+    on_jewels_collected: Callable[[int], None] | None = None
+    consume_rubber_hull_bounce: Callable[[], bool] | None = None
     status: GameStatus = GameStatus.RUNNING
     elapsed: float = 0.0
     last_damage: DamageEvent | None = None
@@ -70,6 +88,16 @@ class GameWorld:
     asteroid_spatial: AsteroidSpatialGrid = field(default_factory=AsteroidSpatialGrid)
     chart_radiation_exposure: float = 0.0
     squid_cling_timer: float = 0.0
+    membrane_layout: MembraneLayout | None = None
+    boost_pads: list[BoostPad] = field(default_factory=list)
+    mega_squid: MegaSquidBoss | None = None
+    squid_pods: list[SquidPod] = field(default_factory=list)
+    boss_cleared: bool = False
+    lane_probe: LaneProbe | None = None
+    pad_flash: float = 0.0
+    boss_scrape_flash: float = 0.0
+    allies: list[FriendlyFighter] = field(default_factory=list)
+    drone_wingman: DroneWingman | None = None
 
     def refresh_threat_snapshots(self) -> None:
         """Narrow-phase meshes for interaction zone only — far belt rocks stay motion-only."""
@@ -86,8 +114,23 @@ class GameWorld:
         return sum(1 for beacon in self.beacons if not beacon.collected)
 
     @property
+    def beacons_required_for_exit(self) -> int:
+        """Beacon-gated chart sectors (Cove, Solar): total beacons minus one may be skipped."""
+        if not self.beacons:
+            return 0
+        if self.config.level_theme in ("cove", "solar"):
+            return max(1, len(self.beacons) - 1)
+        return len(self.beacons)
+
+    @property
     def finish_unlocked(self) -> bool:
-        return self.beacons_remaining == 0
+        if self.config.exit_requires_boss:
+            return self.boss_cleared
+        required = self.beacons_required_for_exit
+        if required == 0:
+            return True
+        collected = len(self.beacons) - self.beacons_remaining
+        return collected >= required
 
     def update(self, dt: float, intent: ControlIntent, *, beacon_capture_slack: float = 0.0) -> None:
         dt = max(0.0, min(dt, 1.0 / 20.0))
@@ -101,10 +144,13 @@ class GameWorld:
         self.asteroid_spatial.rebuild(self.asteroids)
         self._update_ship(dt, intent)
         self._update_enemies(dt)
+        self._update_allies(dt)
+        self._update_drone_wingman(dt)
+        self._update_boss_and_pods(dt)
         self._update_projectiles(dt)
         self.refresh_threat_snapshots()
         self._collect_beacons(beacon_capture_slack)
-        self._collect_pickups()
+        self._update_jewels(dt)
         self._check_squid_cling_damage(dt)
         if self.status is GameStatus.RUNNING:
             self._check_patrol_enemy_collisions()
@@ -190,28 +236,62 @@ class GameWorld:
             self.ship.boost_energy + self.config.boost_regen_rate * dt,
         )
 
-        accel = gravity_acceleration_at(self.ship.pos, self.wells) * self.config.gravity_scale
-        if intent.thrust:
-            thrust = self.config.thrust * self.ship.thrust_multiplier
-            accel += Vec2.from_angle(self.ship.angle) * thrust
+        if self.pad_flash > 0.0:
+            self.pad_flash = max(0.0, self.pad_flash - dt)
+        if self.boss_scrape_flash > 0.0:
+            self.boss_scrape_flash = max(0.0, self.boss_scrape_flash - dt)
 
-        self.ship.vel = (self.ship.vel + accel * dt) * self.config.drag
+        lane_probe: LaneProbe | None = None
+        lane_mods = None
+        gravity_scale = self.config.gravity_scale
+        drag = self.config.drag
+        thrust_mult = self.ship.thrust_multiplier
+        max_speed = self.config.max_ship_speed
+
+        if self.membrane_layout is not None:
+            lane_probe = probe_lane(self.ship.pos, self.membrane_layout)
+            self.lane_probe = lane_probe
+            if lane_probe.state is LaneState.ON_RIBBON:
+                lane_mods = lane_modifiers(
+                    lane_probe,
+                    base_drag=self.config.drag,
+                    base_max_speed=self.config.max_ship_speed,
+                )
+                drag = lane_mods.drag
+                thrust_mult *= lane_mods.thrust_mult
+                max_speed = lane_mods.max_speed
+
+        accel = gravity_acceleration_at(self.ship.pos, self.wells) * gravity_scale
+        if intent.thrust:
+            accel += Vec2.from_angle(self.ship.angle) * (self.config.thrust * thrust_mult)
+
+        if lane_probe is not None and lane_mods is not None:
+            accel = apply_lane_centering(accel, lane_probe, lane_mods)
+
+        self.ship.vel = (self.ship.vel + accel * dt) * drag
+
+        if self.membrane_layout is not None and self.boost_pads:
+            tick_boost_pads(self.boost_pads, dt)
+            if try_trigger_pad(
+                self.boost_pads,
+                self.ship,
+                self.membrane_layout,
+                pad_flash_seconds=self.config.pad_flash_seconds,
+            ):
+                self.pad_flash = self.config.pad_flash_seconds
 
         if intent.boost_tap and self.ship.boost_energy >= self.config.boost_energy_cost:
             forward = Vec2.from_angle(self.ship.angle)
-            burst = (
-                self.config.max_ship_speed
-                * self.config.boost_burst_fraction
-                * self.ship.thrust_multiplier
-            )
+            burst = max_speed * self.config.boost_burst_fraction * thrust_mult * self.ship.boost_tap_multiplier
             burst += max(0.0, self.ship.vel.dot(forward)) * 0.12
             self.ship.vel = self.ship.vel + forward * burst
             self.ship.boost_energy = max(0.0, self.ship.boost_energy - self.config.boost_energy_cost)
             self.ship.boost_flash = self.config.boost_flash_seconds
 
-        speed_cap = self.config.max_ship_speed * (
-            self.config.boost_overspeed_cap if self.ship.boost_flash > 0.0 else 1.0
-        )
+        overspeed = self.config.boost_overspeed_cap
+        if self.pad_flash > 0.0:
+            overspeed = max(overspeed, self.config.pad_overspeed_cap)
+        speed_cap = max_speed * (overspeed if self.ship.boost_flash > 0.0 or self.pad_flash > 0.0 else 1.0)
         self.ship.vel = self.ship.vel.clamped_length(speed_cap)
         self.ship.pos = self.ship.pos + self.ship.vel * dt
         self.ship.cooldown = max(0.0, self.ship.cooldown - dt)
@@ -232,11 +312,17 @@ class GameWorld:
         for asteroid in result.asteroids_removed:
             if asteroid in self.asteroids:
                 self.asteroids.remove(asteroid)
+            drop_count = jewel_count_for_asteroid(asteroid)
+            if drop_count > 0:
+                self._spawn_jewels_at(asteroid.pos, drop_count)
         if result.asteroids_added:
             self.asteroids.extend(result.asteroids_added)
         if result.snapshots_dirty:
             self.asteroid_spatial.rebuild(self.asteroids)
             self.refresh_threat_snapshots()
+
+    def _spawn_jewels_at(self, pos: Vec2, count: int) -> None:
+        self.jewels.extend(spawn_scattered_jewels(pos, count))
 
     def _update_projectiles(self, dt: float) -> None:
         kept: list[Projectile] = []
@@ -266,12 +352,18 @@ class GameWorld:
             if projectile.hostile:
                 if self._projectile_hits_ship(projectile):
                     continue
-            elif self._projectile_hits_enemy(projectile):
+                if self._projectile_hits_drone(projectile):
+                    continue
+            elif self._projectile_hits_ally(projectile):
+                continue
+            elif self._projectile_hits_boss(projectile):
+                continue
+            elif self._projectile_hits_enemy(projectile, drop_loot=not projectile.from_ally):
                 continue
             kept.append(projectile)
         self.projectiles = kept
 
-    def _projectile_hits_enemy(self, projectile: Projectile) -> bool:
+    def _projectile_hits_enemy(self, projectile: Projectile, *, drop_loot: bool = True) -> bool:
         if projectile.hostile:
             return False
         for enemy in self.enemies:
@@ -287,7 +379,10 @@ class GameWorld:
                     enemy_pos = Vec2(enemy.pos.x, enemy.pos.y)
                     enemy.alive = False
                     self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, enemy_pos)
-                    self.pickups.append(PowerUpPickup(pos=enemy_pos, kind=enemy.drop_kind))
+                    if drop_loot:
+                        drop_count = jewel_count_for_enemy(enemy)
+                        if drop_count > 0:
+                            self._spawn_jewels_at(enemy_pos, drop_count)
                     self._prune_dead_enemies()
                 return True
             if (enemy.pos - projectile.pos).length() <= enemy.radius + projectile.radius:
@@ -296,10 +391,87 @@ class GameWorld:
                 enemy.alive = False
                 self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
                 self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, enemy_pos)
-                self.pickups.append(PowerUpPickup(pos=enemy_pos, kind=enemy.drop_kind))
+                if drop_loot:
+                    drop_count = jewel_count_for_enemy(enemy)
+                    if drop_count > 0:
+                        self._spawn_jewels_at(enemy_pos, drop_count)
                 self._prune_dead_enemies()
                 return True
         return False
+
+    def _projectile_hits_boss(self, projectile: Projectile) -> bool:
+        boss = self.mega_squid
+        if boss is None or not boss.alive or projectile.hostile:
+            return False
+        if not boss.body_hit_by_projectile(projectile.pos, projectile.radius):
+            return False
+        hit_pos = Vec2(projectile.pos.x, projectile.pos.y)
+        self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, hit_pos)
+        if boss.apply_shot():
+            self._on_boss_defeated()
+        return True
+
+    def _on_boss_defeated(self) -> None:
+        boss = self.mega_squid
+        if boss is None:
+            return
+        boss_pos = Vec2(boss.pos.x, boss.pos.y)
+        self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, boss_pos, scale=2.4)
+        drop_count = jewel_count_for_boss(boss.anchor)
+        if drop_count > 0:
+            self._spawn_jewels_at(boss_pos, drop_count)
+        self.boss_cleared = True
+        gate_half = 34.0
+        portal_y = boss.anchor.y - 90.0
+        self.finish_gate = FinishGate(
+            Rect(
+                boss.anchor.x - gate_half,
+                portal_y - gate_half,
+                gate_half * 2.0,
+                gate_half * 2.0,
+            )
+        )
+
+    def _update_boss_and_pods(self, dt: float) -> None:
+        boss = self.mega_squid
+        if boss is not None and boss.alive:
+            boss.integrate(
+                dt,
+                self.wells,
+                gravity_scale=self.config.gravity_scale,
+                drag=self.config.drag,
+            )
+            alive_squids = sum(1 for e in self.enemies if e.alive and e.kind is EnemyKind.SQUID)
+            squid, pod = boss.tick_spawns(dt, self.ship.pos, alive_squids)
+            if squid is not None:
+                self.enemies.append(squid)
+            if pod is not None:
+                self.squid_pods.append(pod)
+            if (
+                self.status is GameStatus.RUNNING
+                and (boss.pos - self.ship.pos).length() <= boss.radius + self.ship.radius
+                and self.invuln_remaining <= 0.0
+            ):
+                self.boss_scrape_flash = 0.45
+                self._register_ship_hit(DamageSource.ENEMY, reason="Brood-Mother hull scrape — chunk lost.")
+
+        kept_pods: list[SquidPod] = []
+        for pod in self.squid_pods:
+            if not pod.alive:
+                continue
+            if pod.tick(dt):
+                self.enemies.append(
+                    SquidEnemy(
+                        pos=Vec2(pod.pos.x, pod.pos.y),
+                        tentacle_reach=62.0,
+                        max_speed=185.0,
+                        detect_range=760.0,
+                        engage_range=620.0,
+                    )
+                )
+            else:
+                kept_pods.append(pod)
+        self.squid_pods = kept_pods
 
     def _projectile_hits_ship(self, projectile: Projectile) -> bool:
         if not projectile.hostile or self.status is not GameStatus.RUNNING:
@@ -339,6 +511,179 @@ class GameWorld:
             if shot is not None:
                 self.projectiles.append(shot)
 
+    def _update_allies(self, dt: float) -> None:
+        if not self.allies:
+            return
+        for ally in self.allies:
+            if not ally.alive:
+                continue
+            ally.tick_combat(dt)
+            if ally.boost_flash > 0.0:
+                ally.boost_flash = max(0.0, ally.boost_flash - dt)
+            threat = ally.pick_threat(self.enemies, self.mega_squid)
+            gravity_scale = self.config.gravity_scale
+            drag = self.config.drag
+            thrust_mult = 1.0
+            lane_probe: LaneProbe | None = None
+            lane_mods = None
+            pad_overspeed = self.config.boost_overspeed_cap
+            if self.membrane_layout is not None:
+                lane_probe = probe_lane(ally.pos, self.membrane_layout)
+                if lane_probe.state is LaneState.ON_RIBBON:
+                    lane_mods = lane_modifiers(
+                        lane_probe,
+                        base_drag=self.config.drag,
+                        base_max_speed=self.config.max_ship_speed,
+                    )
+                    drag = lane_mods.drag
+                    thrust_mult = lane_mods.thrust_mult
+                if self.boost_pads:
+                    try_trigger_pad(
+                        self.boost_pads,
+                        ally,
+                        self.membrane_layout,
+                        pad_flash_seconds=self.config.pad_flash_seconds,
+                    )
+                if ally.boost_flash > 0.0:
+                    pad_overspeed = max(pad_overspeed, self.config.pad_overspeed_cap)
+            ally.integrate(
+                dt,
+                player_pos=self.ship.pos,
+                player_vel=self.ship.vel,
+                player_angle=self.ship.angle,
+                wells=self.wells,
+                gravity_scale=gravity_scale,
+                drag=drag,
+                well_maw_radius=self.config.well_maw_radius,
+                threat=threat,
+                lane_probe=lane_probe,
+                lane_mods=lane_mods,
+                thrust_mult=thrust_mult,
+                pad_overspeed_cap=pad_overspeed,
+            )
+            shot = ally.try_fire(threat)
+            if shot is not None:
+                self.projectiles.append(shot)
+        self._check_ally_hazards()
+        self._prune_dead_allies()
+
+    def _nearby_asteroids_for_drone(self, pos: Vec2) -> list[Asteroid]:
+        if self.asteroid_spatial.populated:
+            return self.asteroid_spatial.query_circle(pos, DRONE_ASTEROID_QUERY_RADIUS)
+        out: list[Asteroid] = []
+        reach_sq = (DRONE_ASTEROID_QUERY_RADIUS + 48.0) ** 2
+        for asteroid in self.asteroids:
+            if (asteroid.pos - pos).length_sq() <= reach_sq:
+                out.append(asteroid)
+        return out
+
+    def _update_drone_wingman(self, dt: float) -> None:
+        drone = self.drone_wingman
+        if drone is None or not drone.alive:
+            return
+        drone.tick_combat(dt)
+        nearby_asteroids = self._nearby_asteroids_for_drone(drone.pos)
+        threat = drone.pick_threat(
+            self.enemies,
+            self.mega_squid,
+            player_pos=self.ship.pos,
+            asteroids=nearby_asteroids,
+        )
+        drone.integrate(
+            dt,
+            player_pos=self.ship.pos,
+            player_vel=self.ship.vel,
+            player_angle=self.ship.angle,
+            wells=self.wells,
+            gravity_scale=self.config.gravity_scale,
+            drag=self.config.drag,
+            well_maw_radius=self.config.well_maw_radius,
+            threat=threat,
+            asteroids=nearby_asteroids,
+        )
+        shot = drone.try_fire(threat)
+        if shot is not None:
+            self.projectiles.append(shot)
+        self._check_drone_hazards()
+        if not drone.alive:
+            self.drone_wingman = None
+
+    def _projectile_hits_drone(self, projectile: Projectile) -> bool:
+        drone = self.drone_wingman
+        if drone is None or not drone.alive:
+            return False
+        if not drone.body_hit_by_projectile(projectile.pos, projectile.radius):
+            return False
+        self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
+        if drone.apply_shot():
+            self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(drone.pos.x, drone.pos.y), scale=0.75)
+            self.drone_wingman = None
+        return True
+
+    def _check_drone_hazards(self) -> None:
+        if self.status is not GameStatus.RUNNING:
+            return
+        drone = self.drone_wingman
+        if drone is None or not drone.alive:
+            return
+        if self._asteroid_hit_at(drone.pos, drone.radius) is not None:
+            self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(drone.pos.x, drone.pos.y), scale=0.7)
+            if drone.apply_shot():
+                self.drone_wingman = None
+            return
+        for enemy in self.enemies:
+            if not enemy.alive:
+                continue
+            if (enemy.pos - drone.pos).length() > enemy.radius + drone.radius:
+                continue
+            self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(drone.pos.x, drone.pos.y), scale=0.75)
+            drone.alive = False
+            self.drone_wingman = None
+            if enemy.kind is EnemyKind.SQUID:
+                assert isinstance(enemy, SquidEnemy)
+                enemy.alive = False
+                self._prune_dead_enemies()
+            break
+
+    def _projectile_hits_ally(self, projectile: Projectile) -> bool:
+        """Player bolts dissipate on allies — no friendly fire damage."""
+        if projectile.hostile or projectile.from_ally:
+            return False
+        for ally in self.allies:
+            if not ally.alive:
+                continue
+            if not ally.body_hit_by_projectile(projectile.pos, projectile.radius):
+                continue
+            self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
+            return True
+        drone = self.drone_wingman
+        if drone is not None and drone.alive and drone.body_hit_by_projectile(projectile.pos, projectile.radius):
+            self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
+            return True
+        return False
+
+    def _check_ally_hazards(self) -> None:
+        if self.status is not GameStatus.RUNNING:
+            return
+        for ally in self.allies:
+            if not ally.alive:
+                continue
+            for enemy in self.enemies:
+                if not enemy.alive:
+                    continue
+                if (enemy.pos - ally.pos).length() > enemy.radius + ally.radius:
+                    continue
+                self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(ally.pos.x, ally.pos.y), scale=0.85)
+                ally.alive = False
+                if enemy.kind is EnemyKind.SQUID:
+                    assert isinstance(enemy, SquidEnemy)
+                    enemy.alive = False
+                    self._prune_dead_enemies()
+                break
+
+    def _prune_dead_allies(self) -> None:
+        self.allies = [ally for ally in self.allies if ally.alive]
+
     def _prune_dead_enemies(self) -> None:
         self.enemies = [enemy for enemy in self.enemies if enemy.alive]
 
@@ -349,18 +694,28 @@ class GameWorld:
                 continue
             if (beacon.pos - self.ship.pos).length() <= beacon.radius + self.ship.radius + slack:
                 beacon.collected = True
+                drop_count = jewel_count_for_beacon(beacon.pos)
+                self._spawn_jewels_at(beacon.pos, drop_count)
 
-    def _collect_pickups(self) -> None:
-        if self.on_powerup_collected is None:
+    def _update_jewels(self, dt: float) -> None:
+        if not self.jewels:
             return
-        remaining: list[PowerUpPickup] = []
-        handler = self.on_powerup_collected
-        for pickup in self.pickups:
-            if (pickup.pos - self.ship.pos).length() <= pickup.radius + self.ship.radius:
-                handler(pickup.kind)
-            else:
-                remaining.append(pickup)
-        self.pickups = remaining
+        allow_collect = self.on_jewels_collected is not None
+        self.jewels, collected = tick_jewels(
+            self.jewels,
+            self.ship.pos,
+            self.ship.radius,
+            dt,
+            allow_collect=allow_collect,
+        )
+        if collected > 0 and allow_collect:
+            self.on_jewels_collected(collected)
+            fx_scale = 0.55 + min(collected, 6) * 0.1
+            self.explosions.spawn(
+                ExplosionKind.JEWEL_COLLECT,
+                Vec2(self.ship.pos.x, self.ship.pos.y),
+                scale=fx_scale,
+            )
 
     def _squid_is_clinging(self) -> bool:
         for enemy in self.enemies:
@@ -425,7 +780,11 @@ class GameWorld:
         if not self.config.open_bounds and not self._point_in_bounds(self.ship.pos, margin=0):
             self._register_ship_hit(DamageSource.OUT_OF_BOUNDS)
             return
-        if self._asteroid_hit_at(self.ship.pos, self.ship.radius) is not None:
+        asteroid = self._asteroid_hit_at(self.ship.pos, self.ship.radius)
+        if asteroid is not None:
+            if self.consume_rubber_hull_bounce and self.consume_rubber_hull_bounce():
+                resolve_rubber_hull_bounce(self.ship, asteroid)
+                return
             self._register_ship_hit(DamageSource.ASTEROID)
             return
         for well in self.wells:

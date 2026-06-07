@@ -7,7 +7,6 @@ from enum import Enum, auto
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.asteroid_tiers import AsteroidTier
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 
 
 class GameStatus(Enum):
@@ -26,6 +25,7 @@ class Ship:
     boost_energy: float = 1.0
     boost_flash: float = 0.0
     thrust_multiplier: float = 1.0
+    boost_tap_multiplier: float = 1.0
     fire_cooldown_multiplier: float = 1.0
     turn_rate_multiplier: float = 1.0
 
@@ -37,13 +37,7 @@ class Projectile:
     ttl: float = 2.3
     radius: float = 4.0
     hostile: bool = False
-
-
-@dataclass(slots=True)
-class PowerUpPickup:
-    pos: Vec2
-    kind: PowerUpKind
-    radius: float = 11.0
+    from_ally: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,3 +123,6 @@ class WorldConfig:
     chart_margin_frac: float = 0.05
     radiation_enabled: bool = True
     max_asteroids: int = 48
+    exit_requires_boss: bool = False
+    pad_overspeed_cap: float = 1.18
+    pad_flash_seconds: float = 0.42

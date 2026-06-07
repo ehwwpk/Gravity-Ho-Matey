@@ -2,15 +2,31 @@ from __future__ import annotations
 
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.entities import Beacon, FinishGate, GravityWell, Ship, WorldConfig
+from gravity_ho_matey.gameplay.entities import Beacon, FinishGate, GravityWell, Ship
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.asteroid_placements import build_cove_asteroids, build_solar_asteroids
 from gravity_ho_matey.levels.drift_belt_asteroids import build_drift_belt_asteroids
 from gravity_ho_matey.levels.drift_belt_layout import build_drift_layout
+from gravity_ho_matey.gameplay.boost_pad import BoostPad
+from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
 from gravity_ho_matey.levels.drift_enemies import drift_squid_enemies
-from gravity_ho_matey.levels.level_profiles import chart_sector_config, open_sector_config
+from gravity_ho_matey.gameplay.chart_bounds import COVE_CHART_MARGIN_FRAC
+from gravity_ho_matey.levels.level_profiles import chart_sector_config, membrane_strip_config, open_sector_config
+from gravity_ho_matey.levels.membrane_enemies import membrane_road_squids
+from gravity_ho_matey.levels.membrane_escorts import membrane_friendly_fighters
+from gravity_ho_matey.levels.membrane_layout import all_void_wells, build_membrane_layout
+from gravity_ho_matey.levels.membrane_props import build_membrane_props
 from gravity_ho_matey.levels.solar_patrols import solar_patrol_enemies
 from gravity_ho_matey.settings import CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
+
+
+def _spawn_ship_copy(template: Ship) -> Ship:
+    """Layout spawn templates must not alias live ship state (pos/vel mutate in play)."""
+    return Ship(
+        pos=Vec2(template.pos.x, template.pos.y),
+        vel=Vec2(template.vel.x, template.vel.y),
+        angle=template.angle,
+    )
 
 
 def build_cove_run_level() -> GameWorld:
@@ -26,7 +42,11 @@ def build_cove_run_level() -> GameWorld:
         Beacon(Vec2(600, 390)),
         Beacon(Vec2(870, 115)),
     ]
-    config = chart_sector_config(theme="cove", name="Smuggler's Cove")
+    config = chart_sector_config(
+        theme="cove",
+        name="Smuggler's Cove",
+        chart_margin_frac=COVE_CHART_MARGIN_FRAC,
+    )
     return GameWorld(
         config=config,
         ship=Ship(pos=Vec2(80, 70), angle=0.58),
@@ -58,7 +78,8 @@ def build_solar_crossing_level() -> GameWorld:
     ]
     beacons = [
         Beacon(Vec2(915, strip_h * 0.22)),
-        Beacon(Vec2(480, strip_h * 0.52)),
+        # Mid-strip nav point — offset from singularity core (was on the inner rim at x=cx).
+        Beacon(Vec2(530, strip_h * 0.575)),
         Beacon(Vec2(165, strip_h * 0.78)),
     ]
     config = chart_sector_config(
@@ -87,10 +108,38 @@ def build_drift_belt_level() -> GameWorld:
     config = open_sector_config(theme="drift", name="The Drift", arena_size=4800)
     return GameWorld(
         config=config,
-        ship=layout.spawn_ship,
+        ship=_spawn_ship_copy(layout.spawn_ship),
         asteroids=build_drift_belt_asteroids(config),
         wells=list(layout.wells),
         beacons=[],
         finish_gate=layout.finish_gate,
         enemies=drift_squid_enemies(layout),
+    )
+
+
+def build_membrane_run_level() -> GameWorld:
+    """Level 4 — braided boost highways through a gravity membrane; Mega Squid boss."""
+    layout = build_membrane_layout()
+    config = membrane_strip_config(theme="rift", name="The Membrane Run", width=layout.width, height=layout.height)
+    pads = [
+        BoostPad(
+            pos=Vec2(p.pos.x, p.pos.y),
+            tangent=Vec2(p.tangent.x, p.tangent.y),
+            radius=p.radius,
+            kick_speed=p.kick_speed,
+        )
+        for p in layout.boost_pads
+    ]
+    return GameWorld(
+        config=config,
+        ship=_spawn_ship_copy(layout.spawn_ship),
+        asteroids=build_membrane_props(layout, config),
+        wells=all_void_wells(layout),
+        beacons=[],
+        finish_gate=layout.finish_gate,
+        enemies=membrane_road_squids(layout),
+        membrane_layout=layout,
+        boost_pads=pads,
+        mega_squid=MegaSquidBoss(pos=Vec2(layout.boss_anchor.x, layout.boss_anchor.y), anchor=layout.boss_anchor),
+        allies=membrane_friendly_fighters(layout),
     )

@@ -9,7 +9,6 @@ from gravity_ho_matey.render.lighting import (
     LightRig,
     MaterialTones,
     face_normal_outward,
-    material_for,
     normal_dot_key,
     poly_centroid,
     shade_band,

@@ -5,16 +5,14 @@ from collections.abc import Callable
 from gravity_ho_matey.gameplay.chart_bounds import nudge_ship_into_chart
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CHUNKS_PER_LIFE, CampaignState
+from gravity_ho_matey.gameplay.drone_session import deploy_drone_wingman
 from gravity_ho_matey.gameplay.entities import GameStatus
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
 from gravity_ho_matey.gameplay.world import GameWorld
 
 INVULN_SECONDS = 1.0
-LOOT_TOAST_SECONDS = 5.0
-LOOT_PULSE_SECONDS = 1.8
 
-PowerUpHudCallback = Callable[[PowerUpKind, bool], None]
+JewelHudCallback = Callable[[int], None]
 
 
 def capture_level_spawn(world: GameWorld) -> None:
@@ -32,18 +30,24 @@ def wire_world_for_campaign(
     world: GameWorld,
     campaign: CampaignState,
     *,
-    on_powerup_collected_hud: PowerUpHudCallback | None = None,
+    on_jewels_collected_hud: JewelHudCallback | None = None,
 ) -> None:
-    """Apply carried campaign bonuses and route pickup collection back to campaign."""
+    """Apply carried campaign bonuses and route jewel collection back to campaign."""
     apply_powerups_to_ship(world.ship, campaign.powerup_stacks)
 
-    def on_powerup_collected(kind: PowerUpKind) -> None:
-        is_new = campaign.powerup_stacks[kind] == 0
-        campaign.collect_powerup(kind, world.ship)
-        if on_powerup_collected_hud is not None:
-            on_powerup_collected_hud(kind, is_new)
+    def on_jewels_collected(amount: int) -> None:
+        campaign.add_jewels(amount)
+        if on_jewels_collected_hud is not None:
+            on_jewels_collected_hud(amount)
 
-    world.on_powerup_collected = on_powerup_collected
+    world.on_jewels_collected = on_jewels_collected
+    world.consume_rubber_hull_bounce = campaign.try_consume_rubber_hull_bounce
+    deploy_drone_wingman(world, campaign)
+
+
+def chip_damage_recovers_in_place(*, life_lost: bool) -> bool:
+    """True when a chip hit should keep the ship where it was struck."""
+    return not life_lost
 
 
 def recover_ship_in_place(world: GameWorld) -> None:

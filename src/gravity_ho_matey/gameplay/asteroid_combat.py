@@ -13,7 +13,6 @@ from gravity_ho_matey.gameplay.asteroid_mass import (
 )
 from gravity_ho_matey.gameplay.asteroid_motion import spawn_fragment
 from gravity_ho_matey.gameplay.asteroid_tiers import (
-    AsteroidTier,
     MAX_ASTEROIDS,
     can_split,
     fragment_count,

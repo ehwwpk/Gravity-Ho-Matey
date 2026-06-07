@@ -1,0 +1,81 @@
+---
+description: Agent owns DevGov loop, journal, MCP/CLI, and honest +EV/-EV tags every coding pass
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# DevGov agent ownership (locked)
+
+**The coding agent is the DevGov operator.** The human does not run `devgov check` / `devgov run` or append journal entries. The agent must — on **every coding message/pass** that touches repo files.
+
+Companion rule: `.cursor/rules/devgov.mdc` (T0 / session_context steering). This rule adds **ownership**, **recording**, and **+EV weighting**.
+
+## Mandatory loop (every coding pass with file edits)
+
+1. **Before edits:** `devgov check --task "3–10 word honest task"` (MCP `devgov_check` first; CLI if MCP missing/timeouts).
+2. Read **`Artifacts/DevGov/agent/session_context.json`** (disk wins over capped JSON).
+3. Implement the user task; honor T0 boundaries, risk tier, obligations.
+4. **After edits:** `devgov run` (MCP `devgov_run` first; CLI fallback).
+5. Re-read **`session_context.json`**; do not claim done if run/gating failed.
+6. **Before commit:** only commit when primary verification slice is green (or user explicitly overrides).
+7. **Append journal:** `docs/DEVGOV_JOURNAL.md` — dated section, one bullet per DevGov interaction with honest tag + weight.
+
+**Skip DevGov only when:** user explicitly says skip for this pass, or the pass is read-only Q&A with zero file writes.
+
+## MCP vs CLI
+
+| Priority | When |
+|----------|------|
+| MCP | `devgov_check`, `devgov_plan`, `devgov_run`, `devgov_context` when server enabled |
+| CLI | MCP timeout, disconnect, or Adobe-only MCP folder |
+| Disk T0 | Always authoritative over truncated MCP JSON |
+
+After `devgov doctor --setup-cursor`, human reloads Cursor once — not an agent loop step.
+
+## Journal recording (agent duty)
+
+After **each** check / plan / run, append to `docs/DEVGOV_JOURNAL.md`:
+
+```markdown
+## YYYY-MM-DD — short session title
+
+### +EV (medium) · what happened
+One sentence: command, outcome, why it helped.
+
+### neutral · …
+### -EV (light) · …
+```
+
+Include: task string, exit code/outcome, test count if run executed, commit hash if shipped on that diff.
+
+**Never tag +EV when:** agent skipped check/run on that diff, or only ran DevGov after push on a clean tree.
+
+## +EV / -EV weighting (required in journal)
+
+State weight in the tag line: `(light)`, `(medium)`, `(strong)`, or `(critical)`.
+
+| Tag | Weight | Meaning |
+|-----|--------|---------|
+| **+EV critical** | Transformative | DevGov blocked a ship-breaking bug, wrong architecture, or silent regression that would have reached main without it (e.g. import graph failure, wrong pytest scope hiding breakage). |
+| **+EV strong** | Major | Caught real failures before commit, or T0 steered a large multi-boundary diff so verification matched actual risk (hostile tests + run green on 10+ files). |
+| **+EV medium** | Clear win | Scoped check/run saved meaningful time or prevented likely mistake; primary slice green; honest gate on the diff. Default when DevGov clearly helped but wasn't sole savior. |
+| **+EV light** | Minor help | Fast clean check on empty tree, correct no-op run, or small friction removed — still real but not decisive. |
+| **neutral** | — | Correct behavior, expected limits, MCP flake with CLI fallback, exit 12 on clean tree, doc-only limits. |
+| **-EV light** | Minor miss | Check timeout once with successful manual fallback; small process slip recovered same session. |
+| **-EV medium** | Process gap | Shipped a diff without check/run; journal not updated until reminded; wrong task string hid real scope. |
+| **-EV strong / critical** | Serious | Repeated skip of loop; claimed +EV without run proof; ignored HIGH/CRITICAL risk without user ack; pushed broken primary slice. |
+
+Session summary line (optional): one sentence weighing net EV for the session, e.g. *"Net: strong +EV — run caught circular import."*
+
+## Commit discipline
+
+- DevGov **before** commit on the same diff (not post-push clean-tree theater).
+- If user requests "commit all" without DevGov on that pass: ship if asked, but journal **-EV (medium)** — skipped loop on that diff.
+- After push on clean tree: optional `devgov check --task "Post-push clean tree"` for journal only — **not** +EV proof for prior diff.
+
+## This repo
+
+- Config: `devgov.toml`, profile `python`, `emit_activity = true`
+- Journal: `docs/DEVGOV_JOURNAL.md`
+- Human install (occasional): `pip install -e C:\Users\evanh\source\DevGov_clean --upgrade` then `devgov doctor --setup-cursor --repo .`

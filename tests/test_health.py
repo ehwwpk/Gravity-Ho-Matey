@@ -7,7 +7,13 @@ from gravity_ho_matey.gameplay.chart_bounds import CHART_RADIATION_EXPOSURE_LIMI
 from gravity_ho_matey.gameplay.damage import DamageEvent, DamageSource
 from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid
 from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, GravityWell, Ship, WorldConfig
-from gravity_ho_matey.gameplay.session import INVULN_SECONDS, capture_level_spawn, recover_ship_in_place, respawn_ship_at_spawn
+from gravity_ho_matey.gameplay.session import (
+    INVULN_SECONDS,
+    capture_level_spawn,
+    chip_damage_recovers_in_place,
+    recover_ship_in_place,
+    respawn_ship_at_spawn,
+)
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
 
 
@@ -197,6 +203,15 @@ class HealthWorldTests(unittest.TestCase):
         self.assertNotAlmostEqual(world.ship.pos.x, world.spawn_pos.x)
         self.assertEqual(world.ship.vel.length(), 0.0)
 
+    def test_oob_open_bounds_chip_recovers_in_place(self) -> None:
+        self.assertTrue(chip_damage_recovers_in_place(life_lost=False))
+
+    def test_in_chart_asteroid_recovers_in_place(self) -> None:
+        self.assertTrue(chip_damage_recovers_in_place(life_lost=False))
+
+    def test_life_losing_chip_does_not_recover_in_place(self) -> None:
+        self.assertFalse(chip_damage_recovers_in_place(life_lost=True))
+
     def test_invuln_decays_over_time(self) -> None:
         world = tiny_world()
         world.invuln_remaining = INVULN_SECONDS
@@ -215,14 +230,14 @@ class HealthWorldTests(unittest.TestCase):
         world._check_loss()
         self.assertEqual(world.status, GameStatus.SHIP_HIT)
 
-    def test_chip_then_respawn_allows_movement_same_update_cycle(self) -> None:
+    def test_chip_then_recover_allows_movement_same_update_cycle(self) -> None:
         campaign = CampaignState.new()
         world = tiny_world(ship_pos=Vec2(-5, 100))
         world.config = WorldConfig(width=200, height=200, open_bounds=False)
         world._check_loss()
         result = campaign.apply_damage(world.last_damage)  # type: ignore[arg-type]
         self.assertFalse(result.life_lost)
-        respawn_ship_at_spawn(world)
+        recover_ship_in_place(world)
         before = world.ship.pos.x
         world.update(0.05, ControlIntent(thrust=True))
         self.assertNotEqual(world.ship.pos.x, before)
@@ -244,7 +259,7 @@ class HealthIntegrationTests(unittest.TestCase):
             if result.life_lost:
                 lives_spent += 1
                 break
-            respawn_ship_at_spawn(world)
+            recover_ship_in_place(world)
         self.assertEqual(lives_spent, 1)
         self.assertEqual(campaign.lives, MAX_LIVES - 1)
 

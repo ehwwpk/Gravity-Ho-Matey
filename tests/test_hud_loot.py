@@ -1,8 +1,10 @@
 import unittest
 
 from gravity_ho_matey.gameplay.campaign import CampaignState
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
-from gravity_ho_matey.gameplay.session import LOOT_TOAST_SECONDS
+from gravity_ho_matey.gameplay.explosions import ExplosionKind
+from gravity_ho_matey.gameplay.jewel_config import TREASURY_FLASH_SECONDS
+from gravity_ho_matey.gameplay.jewel_pickup import spawn_scattered_jewels
+from gravity_ho_matey.gameplay.session import wire_world_for_campaign
 from gravity_ho_matey.gameplay.world import ControlIntent
 from gravity_ho_matey.levels.level_registry import build_level
 from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
@@ -21,22 +23,34 @@ class _FakeHost:
         pass
 
 
-class LootHudTests(unittest.TestCase):
-    def test_play_scene_sets_loot_toast_on_pickup(self) -> None:
+class JewelHudTests(unittest.TestCase):
+    def test_play_scene_flashes_treasury_on_collect(self) -> None:
         scene = PlayScene("solar", CampaignState.new())
-        scene._on_powerup_collected_hud(PowerUpKind.THRUST_BOOST, True)
-        self.assertEqual(scene.loot_toast_kind, PowerUpKind.THRUST_BOOST)
-        self.assertTrue(scene.loot_toast_is_new)
-        self.assertAlmostEqual(scene.loot_toast_ttl, LOOT_TOAST_SECONDS)
+        scene._on_jewels_collected_hud(3)
+        self.assertAlmostEqual(scene.treasury_flash_ttl, TREASURY_FLASH_SECONDS)
 
-    def test_loot_toast_expires_after_duration(self) -> None:
+    def test_treasury_flash_expires(self) -> None:
         scene = PlayScene("solar", CampaignState.new())
-        scene._on_powerup_collected_hud(PowerUpKind.STABILIZER, True)
-        scene.update(_FakeHost(), LOOT_TOAST_SECONDS + 0.1)
-        self.assertIsNone(scene.loot_toast_kind)
-        self.assertEqual(scene.loot_toast_ttl, 0.0)
+        scene._on_jewels_collected_hud(1)
+        scene.update(_FakeHost(), TREASURY_FLASH_SECONDS + 0.1)
+        self.assertEqual(scene.treasury_flash_ttl, 0.0)
 
-    def test_loot_banner_draw_smoke(self) -> None:
+    def test_playfield_top_ignores_jewel_collect(self) -> None:
+        top = SciFiHudOverlay.playfield_top()
+        self.assertEqual(top, float(SciFiHudOverlay.PANEL_H))
+
+    def test_jewel_collect_spawns_spark_fx(self) -> None:
+        world = build_level("cove")
+        wire_world_for_campaign(world, CampaignState.new())
+        world.jewels = spawn_scattered_jewels(world.ship.pos, 1)
+        for _ in range(40):
+            world.update(0.05, ControlIntent())
+            if not world.jewels:
+                break
+        kinds = {fx.kind for fx in world.explosions.active}
+        self.assertIn(ExplosionKind.JEWEL_COLLECT, kinds)
+
+    def test_treasury_hud_draw_smoke(self) -> None:
         try:
             import tkinter as tk
 
@@ -48,14 +62,12 @@ class LootHudTests(unittest.TestCase):
         overlay = SciFiHudOverlay()
         world = build_level("solar")
         campaign = CampaignState.new()
-        campaign.collect_powerup(PowerUpKind.THRUST_BOOST, world.ship)
+        campaign.jewels = 12
         overlay.draw(
             canvas,
             world,
             campaign,
-            loot_toast_kind=PowerUpKind.THRUST_BOOST,
-            loot_toast_is_new=True,
-            loot_toast_ttl=LOOT_TOAST_SECONDS,
+            treasury_flash_ttl=TREASURY_FLASH_SECONDS,
         )
         root.destroy()
 

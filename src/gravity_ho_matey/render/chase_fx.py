@@ -16,7 +16,8 @@ def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> N
     width = camera.viewport_width
     solar = world.config.level_theme == "solar"
     drift = world.config.level_theme == "drift"
-    deep_space = solar or drift
+    rift = world.config.level_theme == "rift"
+    deep_space = solar or drift or rift
     sky_top = "#020408" if deep_space else "#040810"
     sky_horizon = "#0a1830" if deep_space else "#081420"
     steps = 8
@@ -28,6 +29,21 @@ def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> N
         color = _lerp_color(sky_top, sky_horizon, t)
         canvas.create_rectangle(0, y0, width, y1, fill=color, outline="")
     _draw_parallax_stars(canvas, camera, world, horizon)
+
+
+def draw_rift_chase_floor_wash(canvas: tk.Canvas, camera: ViewCamera) -> None:
+    """Soft horizon haze — keeps chase view readable on the membrane level."""
+    horizon = camera.chase_horizon_y()
+    bottom = camera.viewport_height
+    width = camera.viewport_width
+    steps = 4
+    band = max(1.0, (bottom - horizon) / steps)
+    for i in range(steps):
+        t = i / max(1, steps - 1)
+        y0 = horizon + band * i
+        y1 = horizon + band * (i + 1)
+        color = _lerp_color("#0a1420", "#060a10", t * 0.65)
+        canvas.create_rectangle(0, y0, width, y1, fill=color, outline="")
 
 
 def draw_chase_floor_gradient(canvas: tk.Canvas, camera: ViewCamera) -> None:

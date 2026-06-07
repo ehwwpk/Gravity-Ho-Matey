@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.chart_bounds import chart_oob_distance, ship_in_chart
 from gravity_ho_matey.gameplay.entities import WorldConfig
 from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 
@@ -28,19 +27,12 @@ CHASE_BEACON_VISUAL_BOOST = 1.38
 CHASE_BEACON_SCALE_FLOOR = 0.52
 CHASE_BEACON_CAPTURE_SLACK = 5.0
 
-# Compact arenas (Cove): moderate zoom — readable without crowding the playfield.
-TACTICAL_ZOOM_COMPACT = 1.14
+TACTICAL_CENTER_FOLLOW = 10.0
+TACTICAL_SHIP_EDGE_MARGIN = 24.0
+TACTICAL_ZOOM_BLEND = 3.2
 
-# Pull back tactical scale when drifting off-chart (open-bound sectors).
-TACTICAL_OOB_ZOOM_RELIEF_MAX = 0.10
-TACTICAL_OOB_ZOOM_RELIEF_PER_UNIT = 0.0007
-
-# Soft pan/zoom when crossing chart edges (tactical view).
-TACTICAL_BOUNDS_BLEND_IN = 4.5
-TACTICAL_BOUNDS_BLEND_OUT = 3.2
-TACTICAL_CENTER_FOLLOW = 14.0
-TACTICAL_CENTER_FOLLOW_SOFT = 5.5
-TACTICAL_ZOOM_BLEND = 8.0
+# Fixed chase playfield top — HUD toasts must not shift the ship rig.
+CHASE_PLAY_HUD_TOP = 54.0
 
 
 class CameraMode(Enum):
@@ -79,10 +71,9 @@ class ViewCamera:
     ship_anchor_frac: float = CHASE_SHIP_ANCHOR_FRAC
     mode_flash_ttl: float = 0.0
     bounds_alert_flash_ttl: float = 0.0
-    play_hud_top: float = 0.0
+    play_hud_top: float = CHASE_PLAY_HUD_TOP
     chase_thrust_boost: float = 1.0
     tactical_scale: float = 1.0
-    _bounds_follow_blend: float = 0.0
     _smooth_center: Vec2 = Vec2()
     _last_ship_angle: float = 0.0
     turn_rate: float = 0.0
@@ -94,7 +85,20 @@ class ViewCamera:
         self.mode_flash_ttl = 1.4
         self._chase_heading_ready = False
         self.velocity_lag_y = 0.0
+        if self.mode is CameraMode.CHASE:
+            self.set_play_layout(CHASE_PLAY_HUD_TOP)
         return self.mode
+
+    def snap_tactical_to_ship(self, ship_pos: Vec2, config: WorldConfig) -> None:
+        """Hard-align tactical pan/zoom to the ship — scene enter, respawn, mode switch."""
+        if self.mode is not CameraMode.TACTICAL:
+            return
+        self.viewport_width = config.viewport_width
+        self.viewport_height = config.viewport_height
+        self.tactical_scale = tactical_scale_for(config)
+        target = self._tactical_center_for(ship_pos, config)
+        self._smooth_center = target
+        self.center = target
 
     def flash_bounds_alert(self) -> None:
         self.bounds_alert_flash_ttl = 0.9
@@ -106,6 +110,9 @@ class ViewCamera:
             self.bounds_alert_flash_ttl = max(0.0, self.bounds_alert_flash_ttl - dt)
 
     def set_play_layout(self, hud_top: float) -> None:
+        if self.mode is CameraMode.CHASE:
+            self.play_hud_top = CHASE_PLAY_HUD_TOP
+            return
         self.play_hud_top = hud_top
 
     def chase_anchor(self) -> tuple[float, float]:
@@ -122,40 +129,42 @@ class ViewCamera:
     def update_follow(self, ship_pos: Vec2, config: WorldConfig, dt: float) -> None:
         self.viewport_width = config.viewport_width
         self.viewport_height = config.viewport_height
-        base_scale = tactical_scale_for(config)
-        oob_dist = chart_oob_distance(ship_pos, config) if config.open_bounds else 0.0
-        if oob_dist > 0.0:
-            relief = min(
-                TACTICAL_OOB_ZOOM_RELIEF_MAX,
-                oob_dist * TACTICAL_OOB_ZOOM_RELIEF_PER_UNIT,
-            )
-            target_scale = base_scale * (1.0 - relief)
-        else:
-            target_scale = base_scale
-        zoom_blend = 1.0 - math.exp(-TACTICAL_ZOOM_BLEND * max(dt, 1.0 / 120.0))
+
+        if self.mode is CameraMode.CHASE:
+            # Chase projection is ship-locked; keep tactical pan/zoom frozen while in OG view.
+            return
+
+        step = max(dt, 1.0 / 120.0)
+        target_scale = tactical_scale_for(config)
+        zoom_blend = 1.0 - math.exp(-TACTICAL_ZOOM_BLEND * step)
         self.tactical_scale += (target_scale - self.tactical_scale) * zoom_blend
 
-        in_oob = config.open_bounds and not ship_in_chart(ship_pos, config)
-        target_bounds_blend = 1.0 if in_oob else 0.0
-        bounds_lambda = TACTICAL_BOUNDS_BLEND_IN if target_bounds_blend > self._bounds_follow_blend else TACTICAL_BOUNDS_BLEND_OUT
-        bounds_step = 1.0 - math.exp(-bounds_lambda * max(dt, 1.0 / 120.0))
-        self._bounds_follow_blend += (target_bounds_blend - self._bounds_follow_blend) * bounds_step
-
-        target = self._tactical_center_for(ship_pos, config, bounds_blend=self._bounds_follow_blend)
-        transitioning = (
-            abs(self._bounds_follow_blend - target_bounds_blend) > 0.05
-            or 0.05 < self._bounds_follow_blend < 0.95
-        )
-        follow_lambda = TACTICAL_CENTER_FOLLOW_SOFT if transitioning else TACTICAL_CENTER_FOLLOW
-        blend = 1.0 - math.exp(-follow_lambda * max(dt, 1.0 / 120.0))
-        if self._smooth_center.length_sq() <= 1e-9 and self.center.length_sq() <= 1e-9:
+        target = self._tactical_center_for(ship_pos, config)
+        if self._ship_leaves_playfield(ship_pos, self._smooth_center, config):
             self._smooth_center = target
         else:
-            self._smooth_center = Vec2(
-                self._smooth_center.x + (target.x - self._smooth_center.x) * blend,
-                self._smooth_center.y + (target.y - self._smooth_center.y) * blend,
-            )
+            blend = 1.0 - math.exp(-TACTICAL_CENTER_FOLLOW * step)
+            if self._smooth_center.length_sq() <= 1e-9 and self.center.length_sq() <= 1e-9:
+                self._smooth_center = target
+            else:
+                self._smooth_center = Vec2(
+                    self._smooth_center.x + (target.x - self._smooth_center.x) * blend,
+                    self._smooth_center.y + (target.y - self._smooth_center.y) * blend,
+                )
         self.center = self._smooth_center
+
+    def _ship_leaves_playfield(self, ship_pos: Vec2, center: Vec2, config: WorldConfig) -> bool:
+        scale = max(1e-6, self.tactical_scale)
+        play_h = self._tactical_play_height(config)
+        margin = TACTICAL_SHIP_EDGE_MARGIN
+        sx = (ship_pos.x - center.x) * scale
+        sy = (ship_pos.y - center.y) * scale
+        return (
+            sx < margin
+            or sx > config.viewport_width - margin
+            or sy < margin
+            or sy > play_h - margin
+        )
 
     def update_chase_heading(self, ship_angle: float, dt: float) -> None:
         """Track smoothed turn rate for chase banking / HUD (presentation only)."""
@@ -185,32 +194,24 @@ class ViewCamera:
         blend = 1.0 - math.exp(-14.0 * max(dt, 1.0 / 120.0))
         self.velocity_lag_y = self.velocity_lag_y + (target - self.velocity_lag_y) * blend
 
-    def _tactical_center_for(self, ship_pos: Vec2, config: WorldConfig, *, bounds_blend: float) -> Vec2:
-        vw = config.viewport_width
-        vh = config.viewport_height
-        ww = config.width
-        wh = config.height
+    def _tactical_play_height(self, config: WorldConfig) -> float:
+        return max(1.0, float(config.viewport_height) - self.play_hud_top)
+
+    def _tactical_center_for(self, ship_pos: Vec2, config: WorldConfig) -> Vec2:
+        """Ship-centered tactical follow — open sectors never clamp; closed maps clamp to world rect."""
+        play_h = self._tactical_play_height(config)
         scale = self.tactical_scale
-        vis_w = vw / scale
-        vis_h = vh / scale
+        vis_w = config.viewport_width / scale
+        vis_h = play_h / scale
         cx = ship_pos.x - vis_w * 0.5
         cy = ship_pos.y - vis_h * 0.5
-        free = Vec2(cx, cy)
-
-        if ww <= vis_w and wh <= vis_h:
-            clamped = Vec2()
-        else:
-            max_x = max(0.0, ww - vis_w)
-            max_y = max(0.0, wh - vis_h)
-            clamped = Vec2(_clamp(cx, 0.0, max_x), _clamp(cy, 0.0, max_y))
-
-        if not config.open_bounds or bounds_blend <= 1e-6:
-            return clamped
-
-        blend = _clamp(bounds_blend, 0.0, 1.0)
+        if config.open_bounds:
+            return Vec2(cx, cy)
+        max_x = max(0.0, config.width - vis_w)
+        max_y = max(0.0, config.height - vis_h)
         return Vec2(
-            clamped.x + (free.x - clamped.x) * blend,
-            clamped.y + (free.y - clamped.y) * blend,
+            cx if max_x <= 0.0 else _clamp(cx, 0.0, max_x),
+            cy if max_y <= 0.0 else _clamp(cy, 0.0, max_y),
         )
 
     def world_to_screen(self, world_pos: Vec2, ship_pos: Vec2, ship_angle: float) -> ProjectedPoint:
@@ -282,8 +283,7 @@ class ViewCamera:
 
 
 def tactical_scale_for(config: WorldConfig) -> float:
-    if config.width <= config.viewport_width and config.height <= config.viewport_height:
-        return TACTICAL_ZOOM_COMPACT
+    _ = config
     return 1.0
 
 

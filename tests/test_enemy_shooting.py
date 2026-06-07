@@ -1,13 +1,12 @@
-import math
 import unittest
 
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CHUNKS_PER_LIFE, CampaignState
 from gravity_ho_matey.gameplay.damage import DamageSource
-from gravity_ho_matey.gameplay.enemies import PatrolEnemy
+from gravity_ho_matey.gameplay.enemies import PATROL_AIM_SPREAD_RAD, PATROL_SHOT_SPEED, PatrolEnemy
 from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, Projectile, Ship, WorldConfig
-from gravity_ho_matey.gameplay.session import capture_level_spawn, respawn_ship_at_spawn
+from gravity_ho_matey.gameplay.session import capture_level_spawn, recover_ship_in_place
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
 from gravity_ho_matey.levels.solar_patrols import solar_patrol_enemies
 
@@ -126,8 +125,15 @@ class EnemyShootingTests(unittest.TestCase):
 
     def test_solar_patrols_are_armed(self) -> None:
         enemies = solar_patrol_enemies(1680)
-        self.assertGreaterEqual(len(enemies), 3)
+        self.assertEqual(len(enemies), 2)
         self.assertTrue(all(enemy.can_shoot for enemy in enemies))
+
+    def test_patrol_baseline_is_slower_and_wider(self) -> None:
+        enemy = PatrolEnemy(waypoints=(Vec2(0, 0), Vec2(10, 0)))
+        self.assertAlmostEqual(enemy.shot_speed, PATROL_SHOT_SPEED)
+        self.assertAlmostEqual(enemy.shot_speed, 228.0 * 0.90)
+        self.assertAlmostEqual(enemy.aim_spread_rad, PATROL_AIM_SPREAD_RAD)
+        self.assertAlmostEqual(enemy.aim_spread_rad, 0.055 * 1.10)
 
     def test_hostile_engagement_simulation_scores_hits(self) -> None:
         enemy = PatrolEnemy(
@@ -148,7 +154,7 @@ class EnemyShootingTests(unittest.TestCase):
             if world.status is not GameStatus.RUNNING:
                 world.status = GameStatus.RUNNING
                 world.last_damage = None
-                respawn_ship_at_spawn(world)
+                recover_ship_in_place(world)
             world.update(0.05, ControlIntent())
             if world.last_damage and world.last_damage.source is DamageSource.ENEMY_PROJECTILE:
                 hits += 1
@@ -156,6 +162,44 @@ class EnemyShootingTests(unittest.TestCase):
                 world.last_damage = None
                 world.invuln_remaining = 0.0
         self.assertGreaterEqual(hits, 2)
+
+
+class EnemyProjectilePlayTests(unittest.TestCase):
+    def test_laser_chip_does_not_teleport_to_spawn(self) -> None:
+        from gravity_ho_matey.gameplay.entities import GameStatus
+        from gravity_ho_matey.scenes.play import PlayScene
+
+        class _FakeInput:
+            def to_control_intent(self) -> ControlIntent:
+                return ControlIntent()
+
+        class _FakeHost:
+            input_state = _FakeInput()
+
+            def set_scene(self, _scene: object) -> None:
+                pass
+
+        scene = PlayScene("solar", CampaignState.new())
+        hit_pos = Vec2(620.0, 430.0)
+        scene.world.ship.pos = hit_pos
+        scene.world.ship.vel = Vec2(-90.0, 40.0)
+        scene.world.invuln_remaining = 0.0
+        spawn = Vec2(scene.world.spawn_pos.x, scene.world.spawn_pos.y)
+        scene.world.projectiles.append(
+            Projectile(pos=Vec2(hit_pos.x, hit_pos.y), vel=Vec2(), hostile=True)
+        )
+        scene.world._update_projectiles(0.016)
+        self.assertEqual(scene.world.status, GameStatus.SHIP_HIT)
+
+        scene.update(_FakeHost(), 0.016)
+
+        self.assertEqual(scene.campaign.hull_chunks, CHUNKS_PER_LIFE - 1)
+        self.assertEqual(scene.world.status, GameStatus.RUNNING)
+        self.assertAlmostEqual(scene.world.ship.pos.x, hit_pos.x)
+        self.assertAlmostEqual(scene.world.ship.pos.y, hit_pos.y)
+        self.assertNotAlmostEqual(scene.world.ship.pos.x, spawn.x)
+        self.assertEqual(scene.world.ship.vel.length(), 0.0)
+        self.assertGreater(scene.world.invuln_remaining, 0.0)
 
 
 if __name__ == "__main__":

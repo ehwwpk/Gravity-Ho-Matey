@@ -5,12 +5,12 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import GravityWell, WorldConfig
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
 from gravity_ho_matey.gameplay.gravity_field import GravityField
+from gravity_ho_matey.gameplay.chart_bounds import CHART_SECTOR_MARGIN_FRAC, oob_camera_blend
 from gravity_ho_matey.render.camera import (
     CHASE_BACK,
+    CHASE_PLAY_HUD_TOP,
     CHASE_SCREEN_HEADING,
     CHASE_SHIP_ANCHOR_FRAC,
-    TACTICAL_OOB_ZOOM_RELIEF_MAX,
-    TACTICAL_ZOOM_COMPACT,
     CameraMode,
     ViewCamera,
     chase_focal_for_hfov,
@@ -47,51 +47,99 @@ class GravityFieldHostileTests(unittest.TestCase):
 
 
 class ViewCameraHostileTests(unittest.TestCase):
-    def test_tactical_center_follows_ship_with_compact_zoom(self) -> None:
+    def test_tactical_viewport_sized_world_keeps_unity_scale(self) -> None:
         camera = ViewCamera()
         config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640)
-        camera.update_follow(Vec2(80, 70), config, 0.016)
-        self.assertAlmostEqual(camera.center.x, 0.0)
-        self.assertAlmostEqual(camera.center.y, 0.0)
-        camera.update_follow(Vec2(480, 320), config, 1.0)
-        self.assertGreater(camera.center.x, 0.0)
+        for _ in range(30):
+            camera.update_follow(Vec2(480, 320), config, 0.05)
+        self.assertAlmostEqual(camera.tactical_scale, 1.0, places=2)
+        p = camera.world_to_screen(Vec2(580, 420), Vec2(), 0.0)
+        self.assertAlmostEqual(p.x, 580.0, places=1)
 
-    def test_tactical_center_clamps_on_vertical_strip(self) -> None:
+    def test_tactical_centers_ship_on_solar_strip_end(self) -> None:
         camera = ViewCamera()
         config = WorldConfig(width=960, height=1680, viewport_width=960, viewport_height=640, open_bounds=True)
-        camera.update_follow(Vec2(480, 1500), config, 1.0)
-        self.assertAlmostEqual(camera.center.x, 0.0)
-        self.assertAlmostEqual(camera.center.y, 1040.0, delta=2.0)
+        camera.set_play_layout(54.0)
+        for _ in range(80):
+            camera.update_follow(Vec2(480, 1500), config, 0.05)
+        play_h = 640.0 - 54.0
+        sy = (1500.0 - camera.center.y) * camera.tactical_scale
+        self.assertAlmostEqual(sy, play_h * 0.5, delta=4.0)
+
+    def test_tactical_centers_ship_on_drift_outskirts(self) -> None:
+        from gravity_ho_matey.levels.level_registry import build_level
+
+        world = build_level("drift")
+        camera = ViewCamera()
+        camera.set_play_layout(54.0)
+        ship_pos = Vec2(180, 2400)
+        for _ in range(80):
+            camera.update_follow(ship_pos, world.config, 0.05)
+        sx = (ship_pos.x - camera.center.x) * camera.tactical_scale
+        self.assertAlmostEqual(sx, 480.0, delta=8.0)
 
     def test_tactical_tracks_ship_outside_open_chart(self) -> None:
         camera = ViewCamera()
         config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640, open_bounds=True)
+        camera.set_play_layout(54.0)
         for _ in range(80):
-            camera.update_follow(Vec2(1050, 320), config, 0.05)
+            camera.update_follow(Vec2(1140, 320), config, 0.05)
         vis_w = config.viewport_width / camera.tactical_scale
-        self.assertAlmostEqual(camera.center.x, 1050.0 - vis_w * 0.5, delta=8.0)
-        self.assertGreater(camera._bounds_follow_blend, 0.9)
+        self.assertAlmostEqual(camera.center.x, 1140.0 - vis_w * 0.5, delta=8.0)
 
-    def test_tactical_bounds_transition_does_not_snap(self) -> None:
-        camera = ViewCamera()
+    def test_tactical_keeps_ship_on_screen_in_bounds(self) -> None:
+        camera = ViewCamera(mode=CameraMode.TACTICAL)
         config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640, open_bounds=True)
-        for _ in range(40):
-            camera.update_follow(Vec2(480, 320), config, 0.05)
-        center_in = camera.center.x
-        camera.update_follow(Vec2(1050, 320), config, 0.05)
-        self.assertLess(abs(camera.center.x - center_in), 120.0)
-        self.assertLess(camera._bounds_follow_blend, 0.35)
+        camera.set_play_layout(54.0)
+        camera.tactical_scale = 1.0
+        for _ in range(80):
+            camera.update_follow(Vec2(880, 550), config, 0.05)
+        sx = (880.0 - camera.center.x) * camera.tactical_scale
+        sy = (550.0 - camera.center.y) * camera.tactical_scale
+        play_h = 640.0 - 54.0
+        self.assertGreater(sx, 16.0)
+        self.assertLess(sx, config.viewport_width - 16.0)
+        self.assertGreater(sy, 16.0)
+        self.assertLess(sy, play_h - 16.0)
 
-    def test_tactical_zooms_out_when_off_chart(self) -> None:
-        camera = ViewCamera()
+    def test_oob_camera_blend_ramps_smoothly_past_rim(self) -> None:
+        config = WorldConfig(width=960, height=640, open_bounds=True, chart_margin_frac=0.055)
+        inside = oob_camera_blend(Vec2(480, 320), config)
+        barely = oob_camera_blend(Vec2(-53, 320), config)
+        deep = oob_camera_blend(Vec2(-150, 320), config)
+        self.assertAlmostEqual(inside, 0.0)
+        self.assertGreater(barely, 0.0)
+        self.assertLess(barely, 0.35)
+        self.assertAlmostEqual(deep, 1.0)
+
+    def test_chase_play_layout_ignores_dynamic_hud_banners(self) -> None:
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54 + 26 + 40)
+        self.assertAlmostEqual(camera.play_hud_top, CHASE_PLAY_HUD_TOP)
+        ax1, ay1 = camera.chase_anchor()
+        camera.set_play_layout(54)
+        ax2, ay2 = camera.chase_anchor()
+        self.assertAlmostEqual(ax1, ax2)
+        self.assertAlmostEqual(ay1, ay2)
+
+    def test_chase_update_follow_does_not_pan_tactical_center(self) -> None:
+        camera = ViewCamera(mode=CameraMode.CHASE)
         config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640, open_bounds=True)
-        for _ in range(40):
-            camera.update_follow(Vec2(480, 320), config, 0.05)
-        in_scale = camera.tactical_scale
-        for _ in range(40):
-            camera.update_follow(Vec2(1100, 320), config, 0.05)
-        self.assertLess(camera.tactical_scale, in_scale)
-        self.assertGreaterEqual(camera.tactical_scale, TACTICAL_ZOOM_COMPACT * (1.0 - TACTICAL_OOB_ZOOM_RELIEF_MAX))
+        camera.center = Vec2(100, 50)
+        camera.update_follow(Vec2(1200, 900), config, 0.05)
+        self.assertAlmostEqual(camera.center.x, 100.0)
+        self.assertAlmostEqual(camera.tactical_scale, 1.0)
+
+    def test_tactical_keeps_ship_on_screen_when_oob(self) -> None:
+        camera = ViewCamera(mode=CameraMode.TACTICAL)
+        config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640, open_bounds=True)
+        camera.set_play_layout(54.0)
+        camera.tactical_scale = 1.0
+        for _ in range(80):
+            camera.update_follow(Vec2(1020, 320), config, 0.05)
+        sx = (1020.0 - camera.center.x) * camera.tactical_scale
+        self.assertGreater(sx, 16.0)
+        self.assertLess(sx, config.viewport_width - 16.0)
 
     def test_tactical_world_to_screen_applies_pan_only(self) -> None:
         camera = ViewCamera(mode=CameraMode.TACTICAL)
@@ -102,14 +150,40 @@ class ViewCameraHostileTests(unittest.TestCase):
         self.assertAlmostEqual(p.y, 60.0)
         self.assertTrue(p.visible)
 
-    def test_tactical_zoom_scales_compact_arena(self) -> None:
+    def test_cove_gate_ship_visible_at_unity_scale(self) -> None:
+        from gravity_ho_matey.levels.level_data import build_cove_run_level
+        from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
+
+        world = build_cove_run_level()
         camera = ViewCamera(mode=CameraMode.TACTICAL)
-        config = WorldConfig(width=960, height=640, viewport_width=960, viewport_height=640)
-        for _ in range(30):
-            camera.update_follow(Vec2(480, 320), config, 0.05)
-        self.assertAlmostEqual(camera.tactical_scale, TACTICAL_ZOOM_COMPACT, places=2)
-        p = camera.world_to_screen(Vec2(580, 420), Vec2(), 0.0)
-        self.assertGreater(p.x, 100.0)
+        camera.set_play_layout(SciFiHudOverlay.PANEL_H)
+        world.ship.pos = Vec2(880, 550)
+        camera.snap_tactical_to_ship(world.ship.pos, world.config)
+        self.assertAlmostEqual(camera.tactical_scale, 1.0, places=2)
+        p = camera.world_to_screen(world.ship.pos, world.ship.pos, 0.0)
+        hud = SciFiHudOverlay.PANEL_H
+        self.assertGreater(p.x, 16.0)
+        self.assertLess(p.x, world.config.viewport_width - 16.0)
+        self.assertGreater(p.y + hud, hud + 16.0)
+        self.assertLess(p.y + hud, world.config.viewport_height - 16.0)
+
+    def test_tactical_mode_switch_snaps_ship_into_view(self) -> None:
+        from gravity_ho_matey.levels.level_data import build_cove_run_level
+        from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
+
+        world = build_cove_run_level()
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.tactical_scale = 1.0
+        world.ship.pos = Vec2(880, 550)
+        camera.cycle_mode()
+        camera.set_play_layout(SciFiHudOverlay.PANEL_H)
+        camera.snap_tactical_to_ship(world.ship.pos, world.config)
+        p = camera.world_to_screen(world.ship.pos, world.ship.pos, 0.0)
+        hud = SciFiHudOverlay.PANEL_H
+        self.assertGreater(p.x, 16.0)
+        self.assertLess(p.x, world.config.viewport_width - 16.0)
+        self.assertGreater(p.y + hud, hud + 16.0)
+        self.assertLess(p.y + hud, world.config.viewport_height - 16.0)
 
     def test_chase_locks_ship_to_fixed_anchor(self) -> None:
         camera = ViewCamera(mode=CameraMode.CHASE)

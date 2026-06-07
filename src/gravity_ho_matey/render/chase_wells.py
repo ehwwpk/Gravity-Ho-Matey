@@ -15,11 +15,12 @@ from gravity_ho_matey.render.lighting import (
 )
 
 # Chase: floor rings — segment-stitched (never chord through behind-camera collapse).
-CHASE_RING_FRACS = (1.0, 0.72, 0.44)
-_FLOOR_SEGMENTS = 56
+CHASE_RING_FRACS = (1.0, 0.82, 0.64, 0.46, 0.28)
+CHASE_RING_FRACS_COMPACT = (1.0, 0.72, 0.44)
+_FLOOR_SEGMENTS = 48
 _MAX_SEGMENT_PX = 160.0
-_HORIZON_RING_SLACK = 14.0
-_MIN_RING_SPAN_PX = 12.0
+_HORIZON_RING_SLACK = 22.0
+_MIN_RING_SPAN_PX = 10.0
 _LETHAL_KINDS = frozenset({"black_hole", "planet"})
 
 
@@ -35,16 +36,57 @@ def project_floor_ring(
     """Sample a floor circle; None breaks arcs (behind cam / below horizon)."""
     if world_radius <= 0.5:
         return []
+    margin = max(240.0, world_radius * 0.42)
+    min_ahead = -world_radius * 0.92
     pts: list[tuple[float, float] | None] = []
     for i in range(_FLOOR_SEGMENTS + 1):
         a = (i / _FLOOR_SEGMENTS) * math.tau
         wp = center + Vec2(math.cos(a), math.sin(a)) * world_radius
-        p = camera.world_to_screen(wp, ship_pos, ship_angle)
+        p = camera.world_to_chase_screen(
+            wp,
+            ship_pos,
+            ship_angle,
+            min_ahead=min_ahead,
+            screen_margin=margin,
+        )
         if not p.visible or p.y < horizon - _HORIZON_RING_SLACK:
             pts.append(None)
         else:
             pts.append((p.x, p.y))
     return pts
+
+
+def chase_well_drawable(
+    camera: ViewCamera,
+    well: GravityWell,
+    ship_pos: Vec2,
+    ship_angle: float,
+) -> tuple[bool, Vec2, float]:
+    """True when lateral/back ring arcs should render even if the well center is off-screen."""
+    horizon = camera.chase_horizon_y()
+    outer_pts = project_floor_ring(
+        camera, well.pos, well.radius, ship_pos, ship_angle, horizon=horizon,
+    )
+    if not _ring_drawable(outer_pts, horizon):
+        return False, Vec2(), 0.0
+    visible = [p for p in outer_pts if p is not None]
+    cx = sum(x for x, _ in visible) / len(visible)
+    cy = sum(y for _, y in visible) / len(visible)
+    cp = camera.world_to_chase_screen(
+        well.pos,
+        ship_pos,
+        ship_angle,
+        min_ahead=-well.radius * 0.5,
+        screen_margin=max(240.0, well.radius * 0.35),
+    )
+    depth = max(cp.depth, camera.min_depth)
+    return True, Vec2(cx, cy), depth
+
+
+def _ring_fracs_for(well: GravityWell) -> tuple[float, ...]:
+    if well.kind in _LETHAL_KINDS and well.radius >= 120.0:
+        return CHASE_RING_FRACS
+    return CHASE_RING_FRACS_COMPACT
 
 
 def floor_ring_span(pts: list[tuple[float, float] | None]) -> float:
@@ -86,14 +128,14 @@ def draw_chase_well(
     else:
         label_color = "#caaaff"
 
-    for frac in CHASE_RING_FRACS:
+    for frac in _ring_fracs_for(well):
         pts = project_floor_ring(
             camera, well.pos, well.radius * frac, ship_pos, ship_angle, horizon=horizon,
         )
         if not _ring_drawable(pts, horizon):
             continue
         any_ring = True
-        width = 2 if frac >= 0.72 else 1
+        width = 3 if frac >= 0.82 else (2 if frac >= 0.5 else 1)
         _stroke_ring_lit(canvas, pts, screen_cx, screen_cy, rig, material, width)
 
     if not any_ring:

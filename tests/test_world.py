@@ -3,6 +3,7 @@ import unittest
 from gravity_ho_matey.core.geometry import Rect
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Beacon, FinishGate, GameStatus, Projectile, Ship, WorldConfig
+from gravity_ho_matey.gameplay.jewel_drops import jewel_count_for_beacon
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
 
 
@@ -24,6 +25,16 @@ class WorldTests(unittest.TestCase):
         world.update(0.016, ControlIntent())
         self.assertTrue(world.finish_unlocked)
 
+    def test_beacon_collection_spawns_jewels(self) -> None:
+        beacon_pos = Vec2(20, 20)
+        world = tiny_world()
+        expected = jewel_count_for_beacon(beacon_pos)
+        world.update(0.016, ControlIntent())
+        self.assertTrue(world.beacons[0].collected)
+        self.assertEqual(len(world.jewels), expected)
+        self.assertGreaterEqual(expected, 2)
+        self.assertLessEqual(expected, 5)
+
     def test_chase_capture_slack_collects_from_farther_away(self):
         world = GameWorld(
             config=WorldConfig(width=200, height=200),
@@ -44,6 +55,18 @@ class WorldTests(unittest.TestCase):
         world.ship.pos = Vec2(160, 160)
         world.update(0.016, ControlIntent())
         self.assertEqual(world.status, GameStatus.WON)
+
+    def test_chart_sectors_unlock_with_one_beacon_skipped(self) -> None:
+        from gravity_ho_matey.levels.level_registry import build_level
+
+        for level_id, required in (("cove", 3), ("solar", 2)):
+            world = build_level(level_id)
+            self.assertEqual(world.beacons_required_for_exit, required)
+            for beacon in world.beacons[: required - 1]:
+                beacon.collected = True
+            self.assertFalse(world.finish_unlocked)
+            world.beacons[required - 1].collected = True
+            self.assertTrue(world.finish_unlocked)
 
     def test_fire_projectile_adds_projectile(self):
         world = tiny_world()

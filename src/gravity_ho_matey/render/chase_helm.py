@@ -33,10 +33,12 @@ def slip_angle_rad(vel: Vec2, ship_angle: float) -> float:
     return math.atan2(lat, max(abs(fwd), 10.0))
 
 
-def bank_angle_for_chase(vel: Vec2, ship_angle: float, *, turn_rate: float = 0.0) -> float:
+def bank_angle_for_chase(vel: Vec2, ship_angle: float, *, turn_rate: float = 0.0, on_highway: bool = False) -> float:
     slip = slip_angle_rad(vel, ship_angle)
-    turn_bank = max(-0.38, min(0.38, turn_rate * 0.00055))
-    slip_bank = max(-0.32, min(0.32, slip * 0.72))
+    slip_scale = 0.32 if on_highway else 0.72
+    turn_scale = 0.35 if on_highway else 1.0
+    turn_bank = max(-0.38, min(0.38, turn_rate * 0.00055 * turn_scale))
+    slip_bank = max(-0.32, min(0.32, slip * slip_scale))
     return CHASE_SCREEN_HEADING + turn_bank + slip_bank
 
 
@@ -68,6 +70,7 @@ def draw_xwing_cockpit_hud(
 ) -> None:
     vw = camera.viewport_width
     vh = camera.viewport_height
+    play_top = camera.play_hud_top
     horizon = camera.chase_horizon_y()
     accent = palette.HELM_HUD_ACCENT
     dim = palette.HELM_HUD_DIM
@@ -77,7 +80,7 @@ def draw_xwing_cockpit_hud(
     g_fwd, g_lat, g_total = _ship_frame_accel(world, ship_angle)
 
     _draw_banked_horizon(canvas, horizon, vw, bank, turn_rate=camera.turn_rate, accent=accent, dim=dim)
-    _draw_canopy_frame(canvas, vw, vh, hud_top, accent=accent, dim=dim)
+    _draw_canopy_frame(canvas, vw, vh, play_top, accent=accent, dim=dim)
     _draw_nose_reticle(canvas, anchor_x, anchor_y, accent=accent)
     _draw_speed_instruments(
         canvas,
@@ -108,7 +111,7 @@ def draw_xwing_cockpit_hud(
         ship_pos=ship_pos,
         ship_angle=ship_angle,
         ship_vel=world.ship.vel,
-        hud_top=hud_top,
+        hud_top=play_top,
         elapsed=world.elapsed,
     )
 

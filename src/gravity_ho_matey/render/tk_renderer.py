@@ -44,6 +44,7 @@ class TkRenderer:
             page=page,
             solar_unlocked=is_level_selectable("solar"),
             drift_unlocked=is_level_selectable("drift"),
+            rift_unlocked=is_level_selectable("rift"),
             draw_ship=lambda cx, cy: self._draw_demo_ship(Vec2(cx, cy), angle=0.12, scale=1.55),
             deploy_focus=deploy_focus,
             hover_id=hover_id,
@@ -61,24 +62,21 @@ class TkRenderer:
         gravity_field: GravityField,
         *,
         hud_alert: str = "",
-        loot_toast_kind: PowerUpKind | None = None,
-        loot_toast_is_new: bool = False,
-        loot_toast_ttl: float = 0.0,
         bounds_toast_kind: ChartBoundsToast | None = None,
         bounds_toast_ttl: float = 0.0,
+        treasury_flash_ttl: float = 0.0,
     ) -> None:
         self.clear()
         vw = camera.viewport_width
         vh = camera.viewport_height
-        hud_top = SciFiHudOverlay.PANEL_H
-        if hud_alert:
-            hud_top += SciFiHudOverlay.ALERT_H
-        if bounds_toast_kind is not None and bounds_toast_ttl > 0.0:
-            hud_top += SciFiHudOverlay.CHART_BOUNDS_BANNER_H
-        if loot_toast_kind is not None and loot_toast_ttl > 0.0:
-            hud_top += SciFiHudOverlay.LOOT_BANNER_H
+        hud_top = SciFiHudOverlay.playfield_top(
+            hud_alert=hud_alert,
+            bounds_toast_kind=bounds_toast_kind,
+            bounds_toast_ttl=bounds_toast_ttl,
+        )
 
         if camera.mode is CameraMode.TACTICAL:
+            camera.set_play_layout(hud_top)
             self._tactical.draw(
                 self.canvas,
                 world,
@@ -113,9 +111,7 @@ class TkRenderer:
             hud_alert=hud_alert,
             bounds_toast_kind=bounds_toast_kind,
             bounds_toast_ttl=bounds_toast_ttl,
-            loot_toast_kind=loot_toast_kind,
-            loot_toast_is_new=loot_toast_is_new,
-            loot_toast_ttl=loot_toast_ttl,
+            treasury_flash_ttl=treasury_flash_ttl,
             camera_mode=camera.mode,
             camera_mode_flash=camera.mode_flash_ttl > 0.0,
         )
@@ -139,6 +135,7 @@ class TkRenderer:
         elapsed: float = 0.0,
         hover_id: str | None = None,
         anim: float = 0.0,
+        shop_open: bool = False,
     ) -> None:
         self.clear()
         self._chart.draw(
@@ -150,6 +147,7 @@ class TkRenderer:
             cleared_level_id=cleared_level_id,
             elapsed=elapsed,
             hover_id=hover_id,
+            shop_open=shop_open,
         )
 
     def chart_hit_test(self, x: float, y: float) -> str | None:
@@ -166,7 +164,7 @@ class TkRenderer:
         *,
         hover_id: str | None = None,
     ) -> None:
-        from gravity_ho_matey.levels.level_registry import LEVEL_LABELS, LEVEL_ORDER, next_level_id
+        from gravity_ho_matey.levels.level_registry import LEVEL_LABELS, next_level_id
         from gravity_ho_matey.render import hud_primitives as hp
         from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button
 
@@ -198,7 +196,8 @@ class TkRenderer:
                 show_secondary = True
             else:
                 title = "Campaign Complete"
-                subtitle = f"The Drift cleared in {elapsed:0.1f}s."
+                cleared = LEVEL_LABELS.get(level_id, level_id).split(" — ", 1)[-1]
+                subtitle = f"{cleared} cleared in {elapsed:0.1f}s."
                 primary_id = "action_title"
                 primary_label = "RETURN TO NAV STATION"
                 show_secondary = False
@@ -224,6 +223,19 @@ class TkRenderer:
             anchor="center",
         )
 
+        carry_y = py + 124
+        if campaign.jewels > 0:
+            draw_fitted_text(
+                self.canvas,
+                480,
+                carry_y,
+                f"Treasury: ★ {campaign.jewels}",
+                max_width=pw - 48,
+                color=palette.JEWEL_CORE,
+                font=("Courier New", 11),
+                anchor="center",
+            )
+            carry_y += 18
         if campaign.powerup_stacks:
             perks = "Carried: " + ", ".join(
                 f"{POWERUP_LABELS[kind]}" + (f" ×{count}" if count > 1 else "")
@@ -233,7 +245,7 @@ class TkRenderer:
             draw_fitted_text(
                 self.canvas,
                 480,
-                py + 124,
+                carry_y,
                 perks,
                 max_width=pw - 48,
                 color=dim,

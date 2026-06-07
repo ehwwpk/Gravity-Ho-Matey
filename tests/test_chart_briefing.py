@@ -105,7 +105,42 @@ class ChartBriefingLayoutTests(unittest.TestCase):
         self.assertIn("CHART BRIEF", joined)
         self.assertIn("INITIAL BRIEF", joined)
         self.assertIn("BRIEFING", joined)
+        self.assertIn("OPEN HOLO BAZAAR", joined)
+        self.assertNotIn("PURCHASE", joined)
         self.assertGreater(len(canvas.find_all()), 40)
+        root.destroy()
+
+    def test_shop_popup_overlay_draws_on_demand(self) -> None:
+        root, canvas = _canvas()
+        world = build_cove_run_level()
+        field = GravityField.bake(
+            world.wells,
+            world_width=world.config.width,
+            world_height=world.config.height,
+            cols=24,
+            rows=24,
+            gravity_scale=world.config.gravity_scale,
+        )
+        campaign = CampaignState.new()
+        campaign.jewels = 80
+        overlay = ChartMapOverlay()
+        overlay.draw(
+            canvas,
+            world,
+            field,
+            campaign=campaign,
+            upcoming_level_id="cove",
+            cleared_level_id=None,
+            shop_open=True,
+        )
+        text_items = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
+        joined = " ".join(str(t) for t in text_items if t)
+        self.assertIn("HOLO BAZAAR", joined)
+        self.assertIn("PURCHASE", joined)
+        self.assertIn("Tier 0/6", joined)
+        self.assertIn("DRONE", joined)
+        self.assertIn("CLOSE", joined)
+        self.assertIsNotNone(overlay.hits.hit(678, 152))
         root.destroy()
 
     def test_start_chart_briefing_factory_for_sector_one(self) -> None:

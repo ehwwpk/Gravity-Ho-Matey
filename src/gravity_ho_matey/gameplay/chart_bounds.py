@@ -9,6 +9,13 @@ from gravity_ho_matey.gameplay.entities import WorldConfig
 CHART_RADIATION_EXPOSURE_LIMIT = 5.0
 CHART_BOUNDS_TOAST_SECONDS = 1.6
 CHART_BOUNDS_MARGIN_FRAC = 0.05
+# Levels 1–2 (Cove, Solar): +10% outward breathing room beyond base margin.
+CHART_SECTOR_MARGIN_FRAC = CHART_BOUNDS_MARGIN_FRAC * 1.10
+# Level 1 Cove only — another 5% per side beyond sector margin (OOB pebble ring room).
+COVE_CHART_MARGIN_FRAC = CHART_SECTOR_MARGIN_FRAC + CHART_BOUNDS_MARGIN_FRAC
+
+# Camera: ramp free-follow over this distance past the chart rim (world units).
+OOB_CAMERA_BLEND_FULL_DIST = 90.0
 
 # Cove void ring: ~1.5s cruise beyond the chart rim at typical thrust speed.
 OOB_RING_TRAVEL_SECONDS = 1.5
@@ -77,6 +84,20 @@ def chart_oob_distance(pos: Vec2, config: WorldConfig) -> float:
     elif pos.y > y1:
         dy = pos.y - y1
     return math.hypot(dx, dy)
+
+
+def oob_camera_blend(pos: Vec2, config: WorldConfig) -> float:
+    """0 = clamped chart cam; 1 = free ship-centered follow — smooth past the rim."""
+    if not config.open_bounds:
+        return 0.0
+    dist = chart_oob_distance(pos, config)
+    if dist <= 0.0:
+        return 0.0
+    full = OOB_CAMERA_BLEND_FULL_DIST
+    if dist >= full:
+        return 1.0
+    t = dist / full
+    return t * t * (3.0 - 2.0 * t)
 
 
 def chart_radiation_reason(*, level_theme: str) -> str:

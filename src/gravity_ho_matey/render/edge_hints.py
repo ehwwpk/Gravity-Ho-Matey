@@ -18,8 +18,9 @@ def draw_edge_hints(
 ) -> None:
     vw = camera.viewport_width
     vh = camera.viewport_height
+    play_top = camera.play_hud_top if camera.mode is CameraMode.CHASE else hud_top
     cx = vw * 0.5
-    cy = hud_top + (vh - hud_top) * 0.5
+    cy = play_top + (vh - play_top) * 0.5
     margin = 14.0
     ship = world.ship.pos
     ship_angle = world.ship.angle
@@ -28,18 +29,18 @@ def draw_edge_hints(
     for beacon in world.beacons:
         if beacon.collected:
             continue
-        _maybe_hint(hints, camera, beacon.pos, ship, ship_angle, "◈", palette.BEACON, vw, vh, hud_top)
+        _maybe_hint(hints, camera, beacon.pos, ship, ship_angle, "◈", palette.BEACON, vw, vh, play_top)
 
-    if world.beacons_remaining == 0:
+    if world.finish_unlocked:
         gate = world.finish_gate.rect
         gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         color = palette.GATE_OPEN if world.finish_unlocked else palette.GATE_LOCKED
         tag = "GO" if world.finish_unlocked else "GT"
-        _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, hud_top)
+        _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top)
 
     hints.sort(key=lambda item: item[0])
     for angle, tag, color in hints[:4]:
-        _draw_rim_chevron(canvas, cx, cy, angle, tag, color, vw, vh, hud_top, margin)
+        _draw_rim_chevron(canvas, cx, cy, angle, tag, color, vw, vh, play_top, margin)
 
 
 def _maybe_hint(

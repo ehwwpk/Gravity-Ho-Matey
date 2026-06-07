@@ -16,12 +16,14 @@ _LEVEL_DETAILS: dict[str, str] = {
     "cove": "Beacon run · gravity wells · training chart",
     "solar": "Vertical strip · patrol skiffs · singularity",
     "drift": "Open belts · void squids · north exit",
+    "rift": "Boost braids · void pockets · Brood-Mother",
 }
 
 _LEVEL_LOCK: dict[str, str] = {
     "cove": "",
     "solar": "Clear Cove first",
     "drift": "Clear Solar first",
+    "rift": "Clear Drift first",
 }
 
 
@@ -71,6 +73,7 @@ class TitleScreenOverlay:
         page: TitlePage,
         solar_unlocked: bool,
         drift_unlocked: bool = False,
+        rift_unlocked: bool = False,
         draw_ship: Callable[[float, float], None] | None = None,
         deploy_focus: int = 0,
         hover_id: str | None = None,
@@ -109,7 +112,7 @@ class TitleScreenOverlay:
                 hover_id=hover_id,
             )
 
-        self._draw_footer(canvas, page, solar_unlocked, drift_unlocked, accent, dim, frame, hover_id)
+        self._draw_footer(canvas, page, solar_unlocked, drift_unlocked, rift_unlocked, accent, dim, frame, hover_id)
         self._draw_page_rail(canvas, page, accent, dim, hover_id, elapsed)
 
     def _draw_top_bar(self, canvas: tk.Canvas, page: TitlePage, accent: str, dim: str) -> None:
@@ -324,6 +327,7 @@ class TitleScreenOverlay:
         page: TitlePage,
         solar_unlocked: bool,
         drift_unlocked: bool,
+        rift_unlocked: bool,
         accent: str,
         dim: str,
         frame: str,
@@ -388,6 +392,8 @@ class TitleScreenOverlay:
                 bits.append("Solar open")
             if drift_unlocked:
                 bits.append("Drift open")
+            if rift_unlocked:
+                bits.append("Rift open")
             hint = " · ".join(bits)
         draw_fitted_text(
             canvas,

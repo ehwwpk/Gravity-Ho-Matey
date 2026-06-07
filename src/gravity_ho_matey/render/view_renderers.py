@@ -7,7 +7,6 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
@@ -18,6 +17,7 @@ from gravity_ho_matey.render.edge_hints import draw_edge_hints
 from gravity_ho_matey.render.asteroid_viz import asteroid_in_play_view, draw_tactical_asteroid
 from gravity_ho_matey.render.entity_viz import draw_beacon_marker, draw_gate_portal
 from gravity_ho_matey.render.explosion_fx import draw_explosions
+from gravity_ho_matey.render.health_bar_viz import draw_health_bar, hp_fraction
 from gravity_ho_matey.render.world_draw import (
     WELL_RING_VISUAL_SCALE,
     draw_gravity_heatmap,
@@ -40,15 +40,84 @@ class TacticalViewRenderer:
         vw = camera.viewport_width
         vh = camera.viewport_height
         solar = world.config.level_theme == "solar"
+        rift = world.config.level_theme == "rift"
         ship_pos = world.ship.pos
         rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=camera.mode)
-        bg = palette.SOLAR_BG if solar else palette.BACKGROUND
+        bg = palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.BACKGROUND
         canvas.create_rectangle(0, hud_top, vw, vh, fill=bg, outline="")
-        if solar:
+        if solar or rift:
             self._starfield(canvas, vw, vh, hud_top, dense=True)
         else:
             self._ambient_depth(canvas, vw, vh, hud_top)
-        draw_gravity_heatmap(canvas, field, camera, y_offset=hud_top, alpha_step=4, world=world)
+        if rift and world.membrane_layout is not None:
+            from gravity_ho_matey.render.membrane_viz import (
+                draw_boost_pads_tactical,
+                draw_boss_stable_zone_tactical,
+                draw_membrane_ribbons_tactical,
+                draw_mega_squid_tactical,
+                draw_squid_pods_tactical,
+            )
+
+            draw_boss_stable_zone_tactical(
+                canvas,
+                world.membrane_layout,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=world.ship.angle,
+                hud_top=float(hud_top),
+                elapsed=world.elapsed,
+            )
+            draw_membrane_ribbons_tactical(
+                canvas,
+                world.membrane_layout,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=world.ship.angle,
+                hud_top=float(hud_top),
+                rig=rig,
+                elapsed=world.elapsed,
+            )
+            draw_boost_pads_tactical(
+                canvas,
+                world.boost_pads,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=world.ship.angle,
+                hud_top=float(hud_top),
+                rig=rig,
+                elapsed=world.elapsed,
+            )
+            if world.mega_squid is not None:
+                draw_mega_squid_tactical(
+                    canvas,
+                    world.mega_squid,
+                    camera,
+                    ship_pos=ship_pos,
+                    ship_angle=world.ship.angle,
+                    ship_radius=world.ship.radius,
+                    hud_top=float(hud_top),
+                    rig=rig,
+                    elapsed=world.elapsed,
+                    scrape_flash=world.boss_scrape_flash,
+                )
+            draw_squid_pods_tactical(
+                canvas,
+                world.squid_pods,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=world.ship.angle,
+                hud_top=float(hud_top),
+                elapsed=world.elapsed,
+            )
+        draw_gravity_heatmap(
+            canvas,
+            field,
+            camera,
+            y_offset=hud_top,
+            alpha_step=4,
+            ship_pos=ship_pos,
+            world=world,
+        )
         for asteroid in world.asteroids:
             if not asteroid_in_play_view(
                 asteroid,
@@ -98,13 +167,75 @@ class TacticalViewRenderer:
                 rig=rig,
                 elapsed=world.elapsed,
             )
-        for pickup in world.pickups:
-            self._pickup(canvas, pickup.pos, pickup.kind, camera, ship_pos, hud_top)
+        for jewel in world.jewels:
+            self._jewel(canvas, jewel.pos, camera, ship_pos, hud_top, elapsed=world.elapsed)
         for enemy in world.enemies:
             if enemy.alive:
-                self._draw_tactical_enemy(canvas, enemy, camera, ship_pos, world.ship.radius, hud_top)
+                self._draw_tactical_enemy(
+                    canvas,
+                    enemy,
+                    camera,
+                    ship_pos,
+                    world.ship.radius,
+                    hud_top,
+                    elapsed=world.elapsed,
+                    rig=rig,
+                )
         for projectile in world.projectiles:
             self._projectile(canvas, projectile, camera, ship_pos, hud_top)
+        from gravity_ho_matey.render.ship_viz import draw_friendly_fighter_ship
+
+        ally_scale = 0.78 * camera.tactical_scale / 1.1
+        for ally in world.allies:
+            if not ally.alive:
+                continue
+            ap = camera.world_to_screen(ally.pos, ship_pos, world.ship.angle)
+            draw_friendly_fighter_ship(
+                canvas,
+                Vec2(ap.x, ap.y + hud_top),
+                ally.facing_angle,
+                scale=ally_scale,
+                rig=rig,
+            )
+            ally_hp = hp_fraction(ally)
+            if ally_hp is not None:
+                bar_y = ap.y + hud_top - 18.0 * ally_scale
+                draw_health_bar(
+                    canvas,
+                    ap.x,
+                    bar_y,
+                    14.0 * ally_scale,
+                    ally_hp,
+                    outline="#68e0c0",
+                    fill="#40d0a8",
+                    low_fill=palette.HUD_WARN,
+                )
+        if world.drone_wingman is not None and world.drone_wingman.alive:
+            from gravity_ho_matey.render.drone_viz import draw_drone_wingman_tactical
+
+            drone = world.drone_wingman
+            dp = camera.world_to_screen(drone.pos, ship_pos, world.ship.angle)
+            draw_drone_wingman_tactical(
+                canvas,
+                Vec2(dp.x, dp.y + hud_top),
+                drone.facing_angle,
+                scale=ally_scale * 0.92,
+                drone=drone,
+                rig=rig,
+            )
+            drone_hp = hp_fraction(drone)
+            if drone_hp is not None:
+                bar_y = dp.y + hud_top - 18.0 * ally_scale
+                draw_health_bar(
+                    canvas,
+                    dp.x,
+                    bar_y,
+                    14.0 * ally_scale,
+                    drone_hp,
+                    outline=palette.DRONE_TRIM,
+                    fill=palette.DRONE_CORE,
+                    low_fill=palette.HUD_WARN,
+                )
         ship_screen = camera.world_to_screen(world.ship.pos, ship_pos, world.ship.angle)
         draw_ship(
             canvas,
@@ -126,28 +257,70 @@ class TacticalViewRenderer:
             offset=(0.0, float(hud_top)),
         )
 
-    def _pickup(self, canvas: tk.Canvas, pos: Vec2, kind: PowerUpKind, camera: ViewCamera, ship_pos: Vec2, hud_top: int) -> None:
-        p = camera.world_to_screen(pos, ship_pos, 0.0)
-        color = {
-            PowerUpKind.THRUST_BOOST: palette.PICKUP_THRUST,
-            PowerUpKind.RAPID_FIRE: palette.PICKUP_RAPID,
-            PowerUpKind.STABILIZER: palette.PICKUP_STABILIZER,
-        }.get(kind, palette.BEACON)
-        x, y = p.x, p.y + hud_top
-        canvas.create_polygon(x, y - 12, x + 10, y, x, y + 12, x - 10, y, fill=color, outline="#fff")
+    def _jewel(
+        self,
+        canvas: tk.Canvas,
+        pos: Vec2,
+        camera: ViewCamera,
+        ship_pos: Vec2,
+        hud_top: int,
+        *,
+        elapsed: float = 0.0,
+    ) -> None:
+        from gravity_ho_matey.render.jewel_viz import draw_jewel_world
 
-    def _draw_tactical_enemy(self, canvas, enemy, camera, ship_pos, ship_radius, hud_top) -> None:
+        p = camera.world_to_screen(pos, ship_pos, 0.0)
+        draw_jewel_world(canvas, Vec2(p.x, p.y), hud_top=hud_top, elapsed=elapsed)
+
+    def _draw_tactical_enemy(
+        self, canvas, enemy, camera, ship_pos, ship_radius, hud_top, *, elapsed: float = 0.0, rig: LightRig | None = None
+    ) -> None:
         p = camera.world_to_screen(enemy.pos, ship_pos, 0.0)
         x, y = p.x, p.y + hud_top
         if enemy.kind is EnemyKind.SQUID:
             assert isinstance(enemy, SquidEnemy)
+            from gravity_ho_matey.render.membrane_viz import draw_squid_coil_ring_tactical
+            from gravity_ho_matey.render.squid_viz import draw_squid_body, draw_squid_body_lit
+
             r = enemy.radius
-            coiled = enemy.clinging
+            engaging = enemy.clinging or enemy.coils_ship(ship_pos, ship_radius)
+            wobble = 0.5 + 0.5 * math.sin(elapsed * (7.0 if engaging else 4.0))
+            coil_r = (enemy.tentacle_span() + ship_radius + 8.0) * camera.tactical_scale * (1.0 + wobble * 0.04)
+            draw_squid_coil_ring_tactical(
+                canvas,
+                x,
+                y,
+                coil_r,
+                engaging=engaging,
+                elapsed=elapsed,
+            )
+            touch = ship_radius + 10.0
+            touch_sq = touch * touch
+            tips: list[tuple[float, float]] = []
             for tip in enemy.tentacle_tips():
                 tp = camera.world_to_screen(tip, ship_pos, 0.0)
                 tx, ty = tp.x, tp.y + hud_top
-                canvas.create_line(x, y, tx, ty, fill=palette.SQUID_TENTACLE, width=3 if coiled else 2, smooth=True)
-            canvas.create_oval(x - r, y - r * 0.65, x + r, y + r * 0.55, fill=palette.SQUID_BODY, outline=palette.SQUID_CORE, width=2)
+                tips.append((tx, ty))
+                on_hull = (tip - ship_pos).length_sq() <= touch_sq
+                color = palette.SQUID_TOUCH_TIP if on_hull else palette.SQUID_TENTACLE
+                width = 4 if on_hull else (3 if engaging else 2)
+                canvas.create_line(x, y, tx, ty, fill=color, width=width, smooth=True)
+            if rig is not None:
+                draw_squid_body_lit(canvas, x, y, radius=r, scale=1.0, rig=rig, kind="squid")
+            else:
+                draw_squid_body(canvas, x, y, radius=r, scale=1.0)
+            hp_frac = hp_fraction(enemy)
+            if hp_frac is not None:
+                draw_health_bar(
+                    canvas,
+                    x,
+                    y - r - 10,
+                    r * 1.15,
+                    hp_frac,
+                    outline=palette.SQUID_CORE,
+                    fill="#ff4080",
+                    low_fill=palette.BOSS_SCRAPE_WARN,
+                )
             return
         self._enemy(canvas, enemy.pos, enemy.radius, enemy.facing_angle, camera, ship_pos, hud_top)
 
@@ -219,15 +392,17 @@ class PerspectiveViewRenderer:
             draw_chase_beacon,
             draw_chase_enemy,
             draw_chase_gate,
-            draw_chase_pickup,
+            draw_chase_jewel,
             draw_chase_squid,
         )
+        from gravity_ho_matey.gameplay.boost_lane import LaneState
         from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
         from gravity_ho_matey.render.chase_projectile_fx import draw_chase_projectile
         from gravity_ho_matey.render.chase_fx import (
             draw_chase_floor_gradient,
             draw_chase_sky,
             draw_engine_bloom,
+            draw_speed_streaks,
             draw_speed_vignette,
         )
         from gravity_ho_matey.render.chase_ground import draw_chase_gravity_heatmap
@@ -239,20 +414,67 @@ class PerspectiveViewRenderer:
         vh = camera.viewport_height
         camera.set_play_layout(hud_top)
         solar = world.config.level_theme == "solar"
+        rift = world.config.level_theme == "rift"
         ship_pos = world.ship.pos
         ship_angle = world.ship.angle
         elapsed = world.elapsed
         rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=camera.mode)
-        thrusting = world.ship.boost_flash > 0.0
+        thrusting = world.ship.boost_flash > 0.0 or world.pad_flash > 0.0
         camera.chase_thrust_boost = 1.12 if thrusting else 1.0
 
-        canvas.create_rectangle(0, 0, vw, vh, fill=palette.BACKGROUND, outline="")
+        bg = palette.RIFT_BG if rift else palette.BACKGROUND
+        canvas.create_rectangle(0, 0, vw, vh, fill=bg, outline="")
 
         draw_chase_sky(canvas, camera, world)
 
         draw_chase_floor_gradient(canvas, camera)
+        if rift:
+            from gravity_ho_matey.render.chase_fx import draw_rift_chase_floor_wash
+
+            draw_rift_chase_floor_wash(canvas, camera)
+        if rift and world.membrane_layout is not None:
+            from gravity_ho_matey.render.membrane_viz import draw_boss_stable_zone_chase, draw_membrane_ribbons_chase
+
+            draw_boss_stable_zone_chase(
+                canvas,
+                world.membrane_layout,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=ship_angle,
+                elapsed=elapsed,
+            )
+            draw_membrane_ribbons_chase(
+                canvas,
+                world.membrane_layout,
+                camera,
+                world,
+                ship_pos=ship_pos,
+                ship_angle=ship_angle,
+                elapsed=elapsed,
+                rig=rig,
+            )
+            from gravity_ho_matey.render.membrane_viz import draw_boost_pads_chase, draw_squid_pods_chase
+
+            draw_boost_pads_chase(
+                canvas,
+                world.boost_pads,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=ship_angle,
+                elapsed=elapsed,
+                rig=rig,
+            )
+            draw_squid_pods_chase(
+                canvas,
+                world.squid_pods,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=ship_angle,
+                elapsed=elapsed,
+            )
+        heat_step = 4 if field.rows >= 64 else 2
         draw_chase_gravity_heatmap(
-            canvas, field, camera, ship_pos, ship_angle, step=2, _world=world,
+            canvas, field, camera, ship_pos, ship_angle, step=heat_step, _world=world,
         )
         from gravity_ho_matey.render.chase_chart_bounds import draw_chase_chart_edge_hints
 
@@ -265,11 +487,13 @@ class PerspectiveViewRenderer:
         )
 
         light_layer = LightLayerBuilder(rig, elapsed=elapsed)
+        from gravity_ho_matey.render.chase_wells import chase_well_drawable
+
         for well in world.wells:
-            wp = camera.world_to_screen(well.pos, ship_pos, ship_angle)
-            if wp.visible:
-                wscale = max(0.25, camera.perspective_scale(wp.depth) / camera.focal_length)
-                light_layer.add_well(well, Vec2(wp.x, wp.y), scale=wscale, depth=wp.depth)
+            drawable, anchor, depth = chase_well_drawable(camera, well, ship_pos, ship_angle)
+            if drawable:
+                wscale = max(0.25, camera.perspective_scale(depth) / camera.focal_length)
+                light_layer.add_well(well, anchor, scale=wscale, depth=depth)
         for beacon in world.beacons:
             if beacon.collected:
                 continue
@@ -296,11 +520,13 @@ class PerspectiveViewRenderer:
         )
 
         sprites: list[tuple[float, str, object]] = []
+        from gravity_ho_matey.render.chase_wells import chase_well_drawable
+
         for well in world.wells:
-            p = camera.world_to_screen(well.pos, ship_pos, ship_angle)
-            if p.visible:
-                scale = max(0.25, camera.perspective_scale(p.depth) / camera.focal_length)
-                sprites.append((p.depth, "well", (Vec2(p.x, p.y), well, scale, p.depth)))
+            drawable, anchor, depth = chase_well_drawable(camera, well, ship_pos, ship_angle)
+            if drawable:
+                scale = max(0.25, camera.perspective_scale(depth) / camera.focal_length)
+                sprites.append((depth, "well", (anchor, well, scale, depth)))
         gate = world.finish_gate.rect
         gate_center = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         gp = camera.world_to_screen(gate_center, ship_pos, ship_angle)
@@ -315,16 +541,32 @@ class PerspectiveViewRenderer:
                     camera.perspective_scale(p.depth) / camera.focal_length * CHASE_BEACON_VISUAL_BOOST,
                 )
                 sprites.append((p.depth, "beacon", (Vec2(p.x, p.y), beacon, b_scale)))
-        for pickup in world.pickups:
-            p = camera.world_to_screen(pickup.pos, ship_pos, ship_angle)
+        for jewel in world.jewels:
+            p = camera.world_to_screen(jewel.pos, ship_pos, ship_angle)
             if p.visible:
-                sprites.append((p.depth, "pickup", (Vec2(p.x, p.y), pickup.kind)))
+                sprites.append((p.depth, "jewel", (Vec2(p.x, p.y), world.elapsed)))
         for enemy in world.enemies:
             if enemy.alive:
                 p = camera.world_to_screen(enemy.pos, ship_pos, ship_angle)
                 if p.visible:
                     scale = max(0.35, camera.perspective_scale(p.depth) / camera.focal_length)
                     sprites.append((p.depth, "enemy", (Vec2(p.x, p.y), enemy, scale)))
+        for ally in world.allies:
+            if ally.alive:
+                p = camera.world_to_screen(ally.pos, ship_pos, ship_angle)
+                if p.visible:
+                    scale = max(0.30, camera.perspective_scale(p.depth) / camera.focal_length * 0.78)
+                    sprites.append((p.depth, "ally", (Vec2(p.x, p.y), ally, scale)))
+        if world.drone_wingman is not None and world.drone_wingman.alive:
+            p = camera.world_to_screen(world.drone_wingman.pos, ship_pos, ship_angle)
+            if p.visible:
+                scale = max(0.32, camera.perspective_scale(p.depth) / camera.focal_length * 0.82)
+                sprites.append((p.depth, "drone", (Vec2(p.x, p.y), world.drone_wingman, scale)))
+        if world.mega_squid is not None and world.mega_squid.alive:
+            p = camera.world_to_screen(world.mega_squid.pos, ship_pos, ship_angle)
+            if p.visible:
+                scale = max(0.45, camera.perspective_scale(p.depth) / camera.focal_length)
+                sprites.append((p.depth, "boss", (Vec2(p.x, p.y), world.mega_squid, scale)))
         for projectile in world.projectiles:
             p = camera.world_to_screen(projectile.pos, ship_pos, ship_angle)
             if p.visible:
@@ -367,9 +609,72 @@ class PerspectiveViewRenderer:
                     depth_scale=b_scale,
                     rig=rig,
                 )
-            elif kind == "pickup":
-                pos, kind_enum = payload
-                draw_chase_pickup(canvas, pos, kind_enum)
+            elif kind == "jewel":
+                pos, elapsed_j = payload
+                draw_chase_jewel(canvas, pos, elapsed=elapsed_j)
+            elif kind == "boss":
+                from gravity_ho_matey.render.membrane_viz import draw_mega_squid_chase
+
+                pos, boss, scale = payload
+                draw_mega_squid_chase(
+                    canvas,
+                    boss,
+                    camera,
+                    ship_pos=ship_pos,
+                    ship_angle=ship_angle,
+                    ship_radius=world.ship.radius,
+                    elapsed=elapsed,
+                    scrape_flash=world.boss_scrape_flash,
+                    rig=rig,
+                )
+            elif kind == "ally":
+                from gravity_ho_matey.render.ship_viz import draw_friendly_fighter_ship
+
+                pos, ally, scale = payload
+                draw_friendly_fighter_ship(
+                    canvas,
+                    pos,
+                    ally.facing_angle,
+                    scale=scale * CHASE_SHIP_SCALE,
+                    rig=rig,
+                )
+                ally_hp = hp_fraction(ally)
+                if ally_hp is not None:
+                    r = min(ally.radius * scale * CHASE_SHIP_SCALE, 22.0)
+                    draw_health_bar(
+                        canvas,
+                        pos.x,
+                        pos.y - r - 8,
+                        r * 1.3,
+                        ally_hp,
+                        outline="#68e0c0",
+                        fill="#40d0a8",
+                        low_fill=palette.HUD_WARN,
+                    )
+            elif kind == "drone":
+                from gravity_ho_matey.render.drone_viz import draw_drone_wingman_chase
+
+                pos, drone, scale = payload
+                draw_drone_wingman_chase(
+                    canvas,
+                    pos,
+                    drone.facing_angle,
+                    scale=scale * CHASE_SHIP_SCALE,
+                    drone=drone,
+                )
+                drone_hp = hp_fraction(drone)
+                if drone_hp is not None:
+                    r = min(drone.radius * scale * CHASE_SHIP_SCALE, 22.0)
+                    draw_health_bar(
+                        canvas,
+                        pos.x,
+                        pos.y - r - 8,
+                        r * 1.3,
+                        drone_hp,
+                        outline=palette.DRONE_TRIM,
+                        fill=palette.DRONE_CORE,
+                        low_fill=palette.HUD_WARN,
+                    )
             elif kind == "enemy":
                 pos, enemy, scale = payload
                 if enemy.kind is EnemyKind.SQUID and isinstance(enemy, SquidEnemy):
@@ -385,11 +690,25 @@ class PerspectiveViewRenderer:
                         tentacle_reach=enemy.tentacle_reach,
                         facing=enemy.facing_angle,
                         scale=scale,
-                        coiled=enemy.clinging,
+                        coiled=enemy.clinging or enemy.coils_ship(ship_pos, world.ship.radius),
                         elapsed=elapsed,
                         ship_world=ship_pos,
                         tip_screen=tuple(tip_screen) if tip_screen else None,
+                        rig=rig,
                     )
+                    squid_hp = hp_fraction(enemy)
+                    if squid_hp is not None:
+                        r = min(enemy.radius * scale, 32.0)
+                        draw_health_bar(
+                            canvas,
+                            pos.x,
+                            pos.y - r - 10,
+                            r * 1.2,
+                            squid_hp,
+                            outline="#c058ff",
+                            fill="#ff4080",
+                            low_fill=palette.BOSS_SCRAPE_WARN,
+                        )
                 else:
                     draw_chase_enemy(canvas, pos, radius=enemy.radius, facing=enemy.facing_angle, scale=scale)
             elif kind == "projectile":
@@ -404,9 +723,29 @@ class PerspectiveViewRenderer:
                 )
 
         anchor_x, anchor_y = camera.chase_anchor()
+        on_highway = (
+            rift
+            and world.lane_probe is not None
+            and world.lane_probe.state is LaneState.ON_RIBBON
+        )
+        if rift and (on_highway or world.pad_flash > 0.0 or thrusting):
+            draw_speed_streaks(
+                canvas,
+                camera,
+                world,
+                anchor_x=anchor_x,
+                anchor_y=anchor_y,
+                ship_pos=ship_pos,
+                ship_angle=ship_angle,
+            )
         draw_speed_vignette(canvas, camera, world.ship.vel.length())
         draw_engine_bloom(canvas, anchor_x, anchor_y, boost_energy=world.ship.boost_energy, thrusting=thrusting)
-        display_angle = bank_angle_for_chase(world.ship.vel, ship_angle, turn_rate=camera.turn_rate)
+        display_angle = bank_angle_for_chase(
+            world.ship.vel,
+            ship_angle,
+            turn_rate=camera.turn_rate,
+            on_highway=on_highway,
+        )
         draw_ship(
             canvas,
             Vec2(anchor_x, anchor_y),

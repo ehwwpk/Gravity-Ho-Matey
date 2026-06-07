@@ -5,22 +5,22 @@ from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.progress import record_level_cleared
 from gravity_ho_matey.gameplay.session import (
-    LOOT_TOAST_SECONDS,
     capture_level_spawn,
+    chip_damage_recovers_in_place,
     ensure_active_life_hull,
     recover_ship_in_place,
-    respawn_ship_at_spawn,
     wire_world_for_campaign,
 )
+from gravity_ho_matey.gameplay.jewel_config import TREASURY_FLASH_SECONDS
 from gravity_ho_matey.gameplay.damage import DamageSource
 from gravity_ho_matey.gameplay.chart_bounds import (
     CHART_BOUNDS_TOAST_SECONDS,
     ChartBoundsToast,
     ship_in_chart,
 )
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.levels.level_registry import build_level, next_level_id
 from gravity_ho_matey.render.camera import CHASE_BEACON_CAPTURE_SLACK, CameraMode, ViewCamera
+from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
 from gravity_ho_matey.scenes.base import Scene, SceneHost
 
 
@@ -45,12 +45,12 @@ class PlayScene(Scene):
         self.bounds_toast_kind: ChartBoundsToast | None = None
         self.bounds_toast_ttl = 0.0
         self._ship_was_in_chart: bool | None = None
-        self.loot_toast_kind: PowerUpKind | None = None
-        self.loot_toast_is_new = False
-        self.loot_toast_ttl = 0.0
-        wire_world_for_campaign(self.world, campaign, on_powerup_collected_hud=self._on_powerup_collected_hud)
+        self.treasury_flash_ttl = 0.0
+        wire_world_for_campaign(self.world, campaign, on_jewels_collected_hud=self._on_jewels_collected_hud)
         self.world.refresh_threat_snapshots()
         self._sync_chart_bounds_state(suppress_toast=True)
+        self.camera.set_play_layout(SciFiHudOverlay.PANEL_H)
+        self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
 
     def _sync_chart_bounds_state(self, *, suppress_toast: bool) -> None:
         if not self.world.config.open_bounds:
@@ -69,18 +69,29 @@ class PlayScene(Scene):
         self.bounds_toast_ttl = CHART_BOUNDS_TOAST_SECONDS
         self.camera.flash_bounds_alert()
 
-    def _on_powerup_collected_hud(self, kind: PowerUpKind, is_new: bool) -> None:
-        self.loot_toast_kind = kind
-        self.loot_toast_is_new = is_new
-        self.loot_toast_ttl = LOOT_TOAST_SECONDS
+    def _on_jewels_collected_hud(self, amount: int) -> None:
+        _ = amount
+        self.treasury_flash_ttl = TREASURY_FLASH_SECONDS
+
+    def _playfield_hud_top(self) -> float:
+        return SciFiHudOverlay.playfield_top(
+            hud_alert=self.hud_alert if self.hud_alert_ttl > 0.0 else "",
+            bounds_toast_kind=self.bounds_toast_kind,
+            bounds_toast_ttl=self.bounds_toast_ttl,
+        )
+
+    def _update_camera(self, dt: float) -> None:
+        self.camera.set_play_layout(self._playfield_hud_top())
+        self.camera.update_follow(self.world.ship.pos, self.world.config, dt)
+        self.camera.update_chase_heading(self.world.ship.angle, dt)
+        self.camera.update_chase_velocity(
+            self.world.ship.vel, self.world.ship.angle, self.world.config, dt
+        )
 
     def update(self, host: SceneHost, dt: float) -> None:
         from gravity_ho_matey.scenes.end import EndScene
 
         self.camera.tick(dt)
-        self.camera.update_follow(self.world.ship.pos, self.world.config, dt)
-        self.camera.update_chase_heading(self.world.ship.angle, dt)
-        self.camera.update_chase_velocity(self.world.ship.vel, self.world.ship.angle, self.world.config, dt)
 
         if self.hud_alert_ttl > 0.0:
             self.hud_alert_ttl = max(0.0, self.hud_alert_ttl - dt)
@@ -88,10 +99,8 @@ class PlayScene(Scene):
             self.bounds_toast_ttl = max(0.0, self.bounds_toast_ttl - dt)
             if self.bounds_toast_ttl <= 0.0:
                 self.bounds_toast_kind = None
-        if self.loot_toast_ttl > 0.0:
-            self.loot_toast_ttl = max(0.0, self.loot_toast_ttl - dt)
-            if self.loot_toast_ttl <= 0.0:
-                self.loot_toast_kind = None
+        if self.treasury_flash_ttl > 0.0:
+            self.treasury_flash_ttl = max(0.0, self.treasury_flash_ttl - dt)
 
         capture_slack = CHASE_BEACON_CAPTURE_SLACK if self.camera.mode is CameraMode.CHASE else 0.0
         self.world.update(
@@ -99,6 +108,9 @@ class PlayScene(Scene):
             host.input_state.to_control_intent(),
             beacon_capture_slack=capture_slack,
         )
+        from gravity_ho_matey.gameplay.drone_session import sync_drone_wingman_to_campaign
+
+        sync_drone_wingman_to_campaign(self.world, self.campaign)
         self._sync_chart_bounds_state(suppress_toast=False)
 
         if self.world.status is GameStatus.WON:
@@ -145,7 +157,7 @@ class PlayScene(Scene):
                 )
                 return
 
-            if damage.source in (DamageSource.CHART_RADIATION, DamageSource.SQUID_CLING):
+            if chip_damage_recovers_in_place(life_lost=result.life_lost):
                 recover_ship_in_place(self.world)
                 self._sync_chart_bounds_state(suppress_toast=True)
                 if damage.source is DamageSource.CHART_RADIATION:
@@ -153,19 +165,19 @@ class PlayScene(Scene):
                         f"RADIATION BURN — {result.hull_chunks} CHUNK"
                         f"{'S' if result.hull_chunks != 1 else ''} LEFT"
                     )
-                else:
+                elif damage.source is DamageSource.SQUID_CLING:
                     self.hud_alert = (
                         f"SQUID CLING — {result.hull_chunks} CHUNK"
                         f"{'S' if result.hull_chunks != 1 else ''} LEFT"
                     )
-            else:
-                respawn_ship_at_spawn(self.world)
-                self._sync_chart_bounds_state(suppress_toast=True)
-                self.hud_alert = (
-                    f"HULL STRUCK — {result.hull_chunks} CHUNK"
-                    f"{'S' if result.hull_chunks != 1 else ''} LEFT"
-                )
-            self.hud_alert_ttl = 0.55
+                else:
+                    self.hud_alert = (
+                        f"HULL STRUCK — {result.hull_chunks} CHUNK"
+                        f"{'S' if result.hull_chunks != 1 else ''} LEFT"
+                    )
+                self.hud_alert_ttl = 0.55
+
+        self._update_camera(dt)
 
     def draw(self, host: SceneHost) -> None:
         host.renderer.draw_world(
@@ -176,9 +188,7 @@ class PlayScene(Scene):
             hud_alert=self.hud_alert if self.hud_alert_ttl > 0.0 else "",
             bounds_toast_kind=self.bounds_toast_kind,
             bounds_toast_ttl=self.bounds_toast_ttl,
-            loot_toast_kind=self.loot_toast_kind,
-            loot_toast_is_new=self.loot_toast_is_new,
-            loot_toast_ttl=self.loot_toast_ttl,
+            treasury_flash_ttl=self.treasury_flash_ttl,
         )
 
     def on_key_press(self, host: SceneHost, keysym: str) -> None:
@@ -187,6 +197,9 @@ class PlayScene(Scene):
         key = keysym.lower()
         if key == "v":
             self.camera.cycle_mode()
+            if self.camera.mode is CameraMode.TACTICAL:
+                self.camera.set_play_layout(self._playfield_hud_top())
+                self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
         elif key == "r":
             host.set_scene(start_play(self.level_id, self.campaign))
         elif key == "escape":

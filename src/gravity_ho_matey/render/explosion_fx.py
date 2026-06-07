@@ -37,8 +37,12 @@ def _screen_pos(
     return Vec2(world_pos.x + offset[0], world_pos.y + offset[1])
 
 
-def _particle_fill(particle: ExplosionParticle) -> str:
+def _particle_fill(particle: ExplosionParticle, *, kind: ExplosionKind | None = None) -> str:
     t = max(0.0, particle.life / particle.max_life)
+    if kind is ExplosionKind.JEWEL_COLLECT:
+        if particle.particle_type == "gem":
+            return palette.JEWEL_HIGHLIGHT if t > 0.45 else palette.JEWEL_CORE
+        return palette.JEWEL_EDGE if t > 0.35 else palette.JEWEL_GLOW
     if particle.particle_type == "spark":
         return "#fff8dc" if t > 0.45 else "#ffd27a"
     if particle.particle_type == "ember":
@@ -65,6 +69,8 @@ def _ring_color(kind: ExplosionKind, life_ratio: float) -> str:
         return "#c8b8a0" if life_ratio > 0.35 else "#8a7060"
     if kind is ExplosionKind.ASTEROID_BREAKUP:
         return "#ffd080" if life_ratio > 0.35 else "#c86830"
+    if kind is ExplosionKind.JEWEL_COLLECT:
+        return palette.JEWEL_GLOW if life_ratio > 0.35 else palette.JEWEL_EDGE
     return "#ffffff" if life_ratio > 0.45 else "#ff4a3a"
 
 
@@ -81,13 +87,15 @@ def _draw_single(
     if explosion.flash_age < explosion.flash_life:
         flash_t = 1.0 - explosion.flash_age / explosion.flash_life
         flash_r = 6.0 + flash_t * (explosion.ring_max * 0.35)
+        flash_fill = palette.JEWEL_HIGHLIGHT if explosion.kind is ExplosionKind.JEWEL_COLLECT else "#fff8e8"
+        flash_outline = palette.JEWEL_GLOW if explosion.kind is ExplosionKind.JEWEL_COLLECT else "#fff2c8"
         canvas.create_oval(
             pos.x - flash_r,
             pos.y - flash_r,
             pos.x + flash_r,
             pos.y + flash_r,
-            fill="#fff8e8" if flash_t > 0.35 else "",
-            outline="#fff2c8" if flash_t <= 0.35 else "",
+            fill=flash_fill if flash_t > 0.35 else "",
+            outline=flash_outline if flash_t <= 0.35 else "",
             width=1,
         )
 
@@ -108,10 +116,20 @@ def _draw_single(
             )
 
     for particle in explosion.particles:
-        fill = _particle_fill(particle)
+        fill = _particle_fill(particle, kind=explosion.kind)
         p = _screen_pos(particle.pos, offset=offset, center=center, project=project)
         size = particle.size
-        canvas.create_oval(p.x - size, p.y - size, p.x + size, p.y + size, fill=fill, outline="")
+        if explosion.kind is ExplosionKind.JEWEL_COLLECT and particle.particle_type == "gem":
+            _draw_jewel_spark(canvas, p.x, p.y, size, fill)
+        else:
+            canvas.create_oval(p.x - size, p.y - size, p.x + size, p.y + size, fill=fill, outline="")
         if particle.particle_type == "spark" and particle.life / particle.max_life > 0.35:
             tail = p - particle.vel.normalized() * (size * 2.8)
             canvas.create_line(tail.x, tail.y, p.x, p.y, fill=fill, width=1)
+
+
+def _draw_jewel_spark(canvas: tk.Canvas, x: float, y: float, size: float, fill: str) -> None:
+    arm = size * 1.6
+    canvas.create_line(x - arm, y, x + arm, y, fill=fill, width=1)
+    canvas.create_line(x, y - arm, x, y + arm, fill=fill, width=1)
+    canvas.create_oval(x - size, y - size, x + size, y + size, fill=fill, outline="")

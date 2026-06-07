@@ -1,4 +1,3 @@
-import math
 import unittest
 
 from gravity_ho_matey.core.vector import Vec2

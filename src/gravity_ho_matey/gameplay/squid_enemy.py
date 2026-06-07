@@ -7,7 +7,6 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.entities import GravityWell, Projectile
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
-from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 
 SQUID_HITS_MAX = 3
 SQUID_TENTACLE_COUNT = 8
@@ -22,7 +21,6 @@ class SquidEnemy:
     orbit_sign: float = 1.0
     radius: float = 18.0
     tentacle_reach: float = 88.0
-    drop_kind: PowerUpKind = PowerUpKind.STABILIZER
     vel: Vec2 = field(default_factory=Vec2)
     facing_angle: float = 0.0
     alive: bool = True

@@ -11,6 +11,7 @@ from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks, powerup_hud_tag
 from gravity_ho_matey.gameplay.world import GameWorld
+from gravity_ho_matey.render.holo_shop_overlay import HoloShopOverlay
 from gravity_ho_matey.levels.level_registry import LEVEL_LABELS
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
@@ -22,7 +23,8 @@ from gravity_ho_matey.render.world_draw import gravity_field_color
 # Layout aligned with SciFiHudOverlay command deck (960×640).
 _HEADER_H = 54
 _CLEARED_H = 34
-_FOOTER_H = 48
+_FOOTER_H = 82
+_SHOP_CTA_H = 38
 _MARGIN = 12
 _SIDE_W = 164
 _MAP_GAP = 10
@@ -51,6 +53,7 @@ class ChartMapOverlay:
 
     def __init__(self) -> None:
         self.hits = MenuHitMap()
+        self._shop = HoloShopOverlay()
 
     def draw(
         self,
@@ -63,23 +66,26 @@ class ChartMapOverlay:
         cleared_level_id: str | None = None,
         elapsed: float = 0.0,
         hover_id: str | None = None,
+        shop_open: bool = False,
     ) -> None:
         self.hits.clear()
         vw = world.config.viewport_width
         vh = world.config.viewport_height
         solar = world.config.level_theme == "solar"
         drift = world.config.level_theme == "drift"
-        accent = palette.HUD_ACCENT_SOLAR if solar else palette.HUD_ACCENT
+        rift = world.config.level_theme == "rift"
+        accent = palette.HUD_ACCENT_SOLAR if solar else palette.RIFT_HUD_ACCENT if rift else palette.HUD_ACCENT
         dim = palette.HUD_DIM
         frame = palette.HUD_FRAME
         bg = palette.HUD_BG
 
-        canvas.create_rectangle(0, 0, vw, vh, fill=palette.SOLAR_BG if solar else palette.BACKGROUND, outline="")
-        self._starfield(canvas, vw, vh, dense=solar or drift)
+        canvas.create_rectangle(0, 0, vw, vh, fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.BACKGROUND, outline="")
+        self._starfield(canvas, vw, vh, dense=solar or drift or rift)
         self._draw_command_bar(canvas, world, campaign, cleared_level_id, accent, dim, frame, bg)
         self._draw_status_banner(canvas, vw, cleared_level_id, upcoming_level_id, elapsed, accent, dim)
         body_top = _HEADER_H + _CLEARED_H + 8
-        body_bottom = vh - _FOOTER_H - 8
+        footer_top = vh - _FOOTER_H - 8
+        body_bottom = footer_top - _SHOP_CTA_H - 6
         body_h = body_bottom - body_top
         map_x = _MARGIN + _SIDE_W + _MAP_GAP
         map_w = vw - 2 * _MARGIN - 2 * _SIDE_W - 2 * _MAP_GAP
@@ -99,8 +105,41 @@ class ChartMapOverlay:
             frame,
         )
         self._draw_holo_map(canvas, world, field, map_x, body_top, map_w, body_h, accent, dim, frame, elapsed)
-        self._draw_side_intel(canvas, vw - _MARGIN - _SIDE_W, body_top, _SIDE_W, body_h, world, upcoming_level_id, accent, dim, frame)
-        self._draw_footer(canvas, vw, vh, accent, dim, frame, bg, hover_id)
+        self._draw_side_intel(
+            canvas,
+            vw - _MARGIN - _SIDE_W,
+            body_top,
+            _SIDE_W,
+            body_h,
+            world,
+            upcoming_level_id,
+            accent,
+            dim,
+            frame,
+        )
+        self._draw_shop_cta(
+            canvas,
+            vw,
+            footer_top - _SHOP_CTA_H - 4,
+            _SHOP_CTA_H,
+            campaign,
+            accent,
+            dim,
+            frame,
+            hover_id,
+            elapsed,
+        )
+        self._draw_footer(canvas, vw, vh, footer_top, accent, dim, frame, bg, hover_id)
+        if shop_open:
+            self._shop.draw(
+                canvas,
+                vw=vw,
+                vh=vh,
+                campaign=campaign,
+                hits=self.hits,
+                hover_id=hover_id,
+                elapsed=elapsed,
+            )
 
     def _draw_command_bar(
         self,
@@ -152,11 +191,27 @@ class ChartMapOverlay:
         hp.draw_panel(canvas, 594, 6, 118, 42, frame=frame, accent=accent)
         hp.draw_panel_title(canvas, 602, 12, "CHART MODE", color=dim)
         chart_mode = "HOLO PREVIEW" if cleared_level_id else "INITIAL BRIEF"
-        canvas.create_text(602, 30, anchor="w", text=chart_mode, fill=accent, font=("Courier New", 11, "bold"))
+        draw_fitted_text(
+            canvas,
+            602,
+            30,
+            chart_mode,
+            max_width=104,
+            color=accent,
+            font=("Courier New", 10, "bold"),
+        )
 
         cargo_x = width - 156
         hp.draw_panel(canvas, cargo_x, 6, 148, 42, frame=frame, accent=accent)
-        hp.draw_panel_title(canvas, cargo_x + 8, 12, "CARGO MANIFEST", color=dim)
+        hp.draw_panel_title(canvas, cargo_x + 8, 12, "TREASURY", color=dim)
+        canvas.create_text(
+            cargo_x + 140,
+            12,
+            anchor="e",
+            text=f"★ {campaign.jewels}",
+            fill=palette.JEWEL_CORE,
+            font=self.FONT,
+        )
         self._draw_cargo(canvas, cargo_x + 8, 24, campaign.powerup_stacks, accent, dim)
 
     def _draw_status_banner(
@@ -195,10 +250,66 @@ class ChartMapOverlay:
         canvas.create_text(
             width // 2,
             y + 26,
-            text="Click Launch · Enter · Esc returns to nav station",
+            text="Launch when ready · Esc returns to nav station",
             fill=dim,
             font=self.FONT_SMALL,
         )
+
+    @staticmethod
+    def _draw_kv_line(
+        canvas: tk.Canvas,
+        x: float,
+        y: float,
+        width: float,
+        label: str,
+        value: str,
+        *,
+        accent: str,
+        dim: str,
+        value_color: str | None = None,
+        row_h: float = 30.0,
+    ) -> float:
+        """Label + clipped value row; returns next y."""
+        inner = max(8.0, width - 20.0)
+        hp.draw_panel_title(canvas, x + 10, y, label, color=dim)
+        draw_fitted_text(
+            canvas,
+            x + 10,
+            y + 12,
+            value,
+            max_width=inner,
+            color=value_color or accent,
+            font=ChartMapOverlay.FONT,
+        )
+        return y + row_h
+
+    @staticmethod
+    def _draw_body_lines(
+        canvas: tk.Canvas,
+        x: float,
+        y: float,
+        width: float,
+        lines: tuple[str, ...],
+        *,
+        accent: str,
+        line_h: float = 16.0,
+    ) -> float:
+        inner = max(8.0, width - 20.0)
+        ry = y
+        for line in lines:
+            if not line:
+                continue
+            draw_fitted_text(
+                canvas,
+                x + 10,
+                ry,
+                line,
+                max_width=inner,
+                color=accent,
+                font=ChartMapOverlay.FONT,
+            )
+            ry += line_h
+        return ry
 
     def _draw_side_mission(
         self,
@@ -219,7 +330,18 @@ class ChartMapOverlay:
         hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
         if cleared_level_id is None:
             hp.draw_panel_title(canvas, x + 10, y + 10, "BRIEFING", color=dim)
-            if upcoming_level_id == "drift":
+            if upcoming_level_id == "rift":
+                rows = [
+                    ("OBJECTIVE", "Race boost braids north"),
+                    ("", "Kill Brood-Mother"),
+                    ("", "Portal opens on kill"),
+                    ("ALLIES", "2 wing escorts"),
+                    ("", "Cover fire · not ace pilots"),
+                    ("HAZARDS", "Void pockets off-lane"),
+                    ("", "Turbo pads · road squids"),
+                    ("STATUS", "Ready to launch"),
+                ]
+            elif upcoming_level_id == "drift":
                 rows = [
                     ("OBJECTIVE", "Reach north exit gate"),
                     ("", "No beacons — gate open"),
@@ -249,35 +371,86 @@ class ChartMapOverlay:
             for label, value in rows:
                 if label:
                     hp.draw_panel_title(canvas, x + 10, ry, label, color=dim)
-                    ry += 12
-                canvas.create_text(x + 10, ry, anchor="w", text=value, fill=accent, font=self.FONT)
-                ry += 20 if label else 16
+                    ry += 13
+                if value:
+                    draw_fitted_text(
+                        canvas,
+                        x + 10,
+                        ry,
+                        value,
+                        max_width=w - 20,
+                        color=accent,
+                        font=self.FONT,
+                    )
+                    ry += 18 if label else 15
             return
 
         hp.draw_panel_title(canvas, x + 10, y + 10, "MISSION LOG", color=dim)
         cleared = LEVEL_LABELS.get(cleared_level_id, cleared_level_id)
-        rows = [
-            ("LAST SECTOR", cleared),
-            ("CLEAR TIME", f"{elapsed:05.1f}s"),
-            ("LIVES", str(campaign.lives)),
-            ("HULL", f"{campaign.hull_chunks}/{CHUNKS_PER_LIFE}"),
-        ]
+        short_cleared = cleared.split(" — ", 1)[-1] if " — " in cleared else cleared
         ry = y + 28
-        for label, value in rows:
-            hp.draw_panel_title(canvas, x + 10, ry, label, color=dim)
-            canvas.create_text(x + 10, ry + 12, anchor="w", text=value, fill=accent, font=self.FONT)
-            ry += 32
+        ry = self._draw_kv_line(canvas, x, ry, w, "LAST SECTOR", short_cleared, accent=accent, dim=dim)
+        ry = self._draw_kv_line(canvas, x, ry, w, "CLEAR TIME", f"{elapsed:05.1f}s", accent=accent, dim=dim)
+        ry = self._draw_kv_line(canvas, x, ry, w, "LIVES", str(campaign.lives), accent=accent, dim=dim)
+        ry = self._draw_kv_line(canvas, x, ry, w, "HULL", f"{campaign.hull_chunks}/{CHUNKS_PER_LIFE}", accent=accent, dim=dim)
+        ry = self._draw_kv_line(
+            canvas,
+            x,
+            ry,
+            w,
+            "TREASURY",
+            f"★ {campaign.jewels}",
+            accent=accent,
+            dim=dim,
+            value_color=palette.JEWEL_CORE,
+        )
+        if campaign.rubber_hull_charges > 0:
+            ry = self._draw_kv_line(
+                canvas,
+                x,
+                ry,
+                w,
+                "RUBBER HULL",
+                f"{campaign.rubber_hull_charges} bounces left",
+                accent=accent,
+                dim=dim,
+                value_color=palette.PICKUP_RUBBER,
+            )
+        if campaign.drone_wingman_pending:
+            ry = self._draw_kv_line(
+                canvas,
+                x,
+                ry,
+                w,
+                "GUARDIAN DRONE",
+                "Deploys next sector",
+                accent=accent,
+                dim=dim,
+                value_color=palette.DRONE_CORE,
+            )
+        elif campaign.drone_wingman_hp > 0:
+            ry = self._draw_kv_line(
+                canvas,
+                x,
+                ry,
+                w,
+                "GUARDIAN DRONE",
+                f"{campaign.drone_wingman_hp}/5 HP escort",
+                accent=accent,
+                dim=dim,
+                value_color=palette.DRONE_CORE,
+            )
         if campaign.powerup_stacks:
-            hp.draw_panel_title(canvas, x + 10, ry + 4, "FITTINGS", color=dim)
-            chip_y = ry + 18
+            hp.draw_panel_title(canvas, x + 10, ry + 2, "FITTINGS", color=dim)
+            chip_y = ry + 16
             for kind in sorted(campaign.powerup_stacks.keys(), key=lambda k: k.name):
                 count = campaign.powerup_stacks[kind]
                 if count <= 0:
                     continue
                 color = self._powerup_color(kind)
                 tag = powerup_hud_tag(kind, count)
-                chip_w = min(w - 24, 140)
-                canvas.create_rectangle(x + 10, chip_y, x + 10 + chip_w, chip_y + 12, fill=color, outline=dim)
+                chip_w = w - 20
+                canvas.create_rectangle(x + 10, chip_y, x + 10 + chip_w, chip_y + 14, fill=color, outline=dim)
                 draw_fitted_text(
                     canvas,
                     x + 14,
@@ -288,6 +461,48 @@ class ChartMapOverlay:
                     font=self.FONT_SMALL,
                 )
                 chip_y += 16
+
+    def _draw_shop_cta(
+        self,
+        canvas: tk.Canvas,
+        vw: int,
+        y: float,
+        h: float,
+        campaign: CampaignState,
+        accent: str,
+        dim: str,
+        frame: str,
+        hover_id: str | None,
+        elapsed: float,
+    ) -> None:
+        x = _MARGIN
+        w = vw - 2 * _MARGIN
+        pulse = 0.72 + 0.28 * math.sin(elapsed * 3.2)
+        border = palette.JEWEL_CORE if hover_id == "shop_open" else accent
+        fill = "#122838" if hover_id == "shop_open" else "#0e2030"
+        canvas.create_rectangle(x, y, x + w, y + h, fill=fill, outline=border, width=2 if pulse > 0.88 else 1)
+        canvas.create_line(x + 6, y + 2, x + 36, y + 2, fill=palette.JEWEL_CORE if pulse > 0.8 else accent)
+        canvas.create_line(x + w - 36, y + h - 2, x + w - 6, y + h - 2, fill=palette.JEWEL_CORE if pulse > 0.8 else accent)
+        self.hits.add("shop_open", x, y, w, h)
+        label = f"◈  OPEN HOLO BAZAAR  ·  ★ {campaign.jewels} TREASURY  ·  CLICK TO TRADE FITTINGS  ◈"
+        draw_fitted_text(
+            canvas,
+            x + w / 2,
+            y + h / 2 - 1,
+            label,
+            max_width=w - 24,
+            color=palette.JEWEL_CORE if hover_id == "shop_open" else accent,
+            font=("Courier New", 11, "bold"),
+            anchor="center",
+        )
+        canvas.create_text(
+            x + w - 12,
+            y + h / 2,
+            anchor="e",
+            text="▶",
+            fill=border,
+            font=hp.FONT_BODY_BOLD,
+        )
 
     def _draw_side_intel(
         self,
@@ -309,43 +524,54 @@ class ChartMapOverlay:
         hostiles = sum(1 for e in world.enemies if e.alive)
         squids = sum(1 for e in world.enemies if e.alive and e.kind is EnemyKind.SQUID)
         hostile_label = "SQUIDS" if squids and squids == hostiles else "HOSTILES"
-        rows = [
+        ry = y + 28
+        for label, value in (
             ("CHART ID", upcoming_level_id.upper()),
             ("THEME", cfg.level_theme.upper()),
-            ("EXTENT", f"{cfg.width} × {cfg.height}"),
+            ("EXTENT", f"{cfg.width}×{cfg.height}"),
             ("BEACONS", str(len(world.beacons)) if world.beacons else "NONE"),
             ("WELLS", str(len(world.wells))),
             (hostile_label, str(hostiles) if hostiles else "—"),
             ("ASTEROIDS", str(len(world.asteroids))),
             ("BOUNDS", "OPEN" if cfg.open_bounds else "BOUNDED"),
-        ]
-        ry = y + 28
-        for label, value in rows:
-            hp.draw_panel_title(canvas, x + 10, ry, label, color=dim)
-            canvas.create_text(x + 10, ry + 12, anchor="w", text=value, fill=accent, font=self.FONT)
-            ry += 30
-        hp.draw_panel_title(canvas, x + 10, ry + 6, "LEGEND", color=dim)
-        legend_y = ry + 22
-        for glyph, text, color in (
+        ):
+            ry = self._draw_kv_line(canvas, x, ry, w, label, value, accent=accent, dim=dim, row_h=28.0)
+        hp.draw_panel_title(canvas, x + 10, ry + 4, "LEGEND", color=dim)
+        legend_y = ry + 20
+        legend_items = (
             ("◆", "Beacon", palette.BEACON),
-            ("◎", "Gravity well", palette.WELL),
+            ("◎", "Well", palette.WELL),
             ("●", "Singularity", palette.BLACK_HOLE_RING),
-            ("▣", "Exit gate", palette.GATE_LOCKED),
+            ("▣", "Gate", palette.GATE_LOCKED),
             ("▲", "Spawn", palette.SHIP),
             ("×", "Patrol", palette.ENEMY),
-            ("◉", "Void squid", palette.SQUID_CORE),
+            ("◉", "Squid", palette.SQUID_CORE),
             ("⬡", "Asteroid", palette.ASTEROID_EDGE),
-        ):
-            canvas.create_text(x + 14, legend_y, anchor="w", text=glyph, fill=color, font=self.FONT)
-            canvas.create_text(x + 30, legend_y, anchor="w", text=text, fill=dim, font=self.FONT_SMALL)
-            legend_y += 16
+        )
+        col_w = (w - 24) * 0.5
+        for index, (glyph, text, color) in enumerate(legend_items):
+            col = index % 2
+            row = index // 2
+            lx = x + 10 + col * col_w
+            ly = legend_y + row * 15
+            canvas.create_text(lx + 4, ly, anchor="w", text=glyph, fill=color, font=self.FONT)
+            draw_fitted_text(
+                canvas,
+                lx + 20,
+                ly,
+                text,
+                max_width=col_w - 24,
+                color=dim,
+                font=self.FONT_SMALL,
+            )
         if strip:
-            canvas.create_text(
+            draw_fitted_text(
+                canvas,
                 x + 10,
-                y + h - 22,
-                anchor="w",
-                text="Vertical strip — holo shows spawn window",
-                fill=dim,
+                y + h - 18,
+                "Vertical strip — spawn window on holo",
+                max_width=w - 20,
+                color=dim,
                 font=self.FONT_SMALL,
             )
 
@@ -382,6 +608,15 @@ class ChartMapOverlay:
         transform = self._map_transform(world, inner_x, inner_y, inner_w, inner_h)
         self._draw_map_field(canvas, field, transform)
         self._draw_map_entities(canvas, world, transform, dim, elapsed)
+        if world.membrane_layout is not None:
+            from gravity_ho_matey.render.membrane_viz import draw_membrane_holo_ribbons
+
+            def to_screen(pos):
+                sx = transform.origin_x + pos.x * transform.scale
+                sy = transform.origin_y - pos.y * transform.scale
+                return sx, sy
+
+            draw_membrane_holo_ribbons(canvas, world.membrane_layout, to_screen=to_screen, accent=accent)
         if transform.strip_window:
             self._draw_strip_window_chrome(canvas, world, transform, accent, dim)
         hp.draw_scanlines(canvas, inner_x, inner_y, inner_w, inner_h)
@@ -609,20 +844,20 @@ class ChartMapOverlay:
         canvas: tk.Canvas,
         vw: int,
         vh: int,
+        y: float,
         accent: str,
         dim: str,
         frame: str,
         bg: str,
         hover_id: str | None,
     ) -> None:
-        y = vh - _FOOTER_H
         hp.draw_panel(canvas, _MARGIN, y, vw - 2 * _MARGIN, _FOOTER_H - 4, frame=frame, accent=accent, fill=bg)
 
         launch_x = vw // 2 - 170
         launch_w = 160.0
         back_x = vw // 2 + 10
         back_w = 160.0
-        btn_y = y + 8
+        btn_y = y + 10
         btn_h = 32.0
         self.hits.add("launch", launch_x, btn_y, launch_w, btn_h)
         self.hits.add("back_title", back_x, btn_y, back_w, btn_h)
@@ -653,8 +888,8 @@ class ChartMapOverlay:
         )
         canvas.create_text(
             vw // 2,
-            y + _FOOTER_H - 12,
-            text="Enter launch · Esc back · V toggles camera in flight",
+            y + _FOOTER_H - 10,
+            text="Enter launch · Esc nav station · Bazaar opens trade overlay",
             fill=dim,
             font=self.FONT_SMALL,
         )
@@ -664,7 +899,8 @@ class ChartMapOverlay:
         return {
             PowerUpKind.THRUST_BOOST: palette.PICKUP_THRUST,
             PowerUpKind.RAPID_FIRE: palette.PICKUP_RAPID,
-            PowerUpKind.STABILIZER: palette.PICKUP_STABILIZER,
+            PowerUpKind.BOOST_TAP: palette.PICKUP_BOOST,
+            PowerUpKind.RUBBER_HULL: palette.PICKUP_RUBBER,
         }.get(kind, palette.HUD_LOOT_NEW)
 
     @staticmethod
@@ -697,7 +933,7 @@ class ChartMapOverlay:
                 return
             color = ChartMapOverlay._powerup_color(kind)
             tag = powerup_hud_tag(kind, count)
-            chip_w = 128
+            chip_w = min(120, 148 - 16)
             canvas.create_rectangle(x, chip_y, x + chip_w, chip_y + 14, fill=color, outline=accent, width=1)
             draw_fitted_text(
                 canvas,

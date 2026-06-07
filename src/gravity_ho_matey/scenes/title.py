@@ -76,6 +76,8 @@ class TitleScene(Scene):
             self._launch_level(host, "solar")
         elif key == "3":
             self._launch_level(host, "drift")
+        elif key == "4":
+            self._launch_level(host, "rift")
 
     def _launch_focused(self, host: SceneHost) -> None:
         level_id = LEVEL_ORDER[self.deploy_focus]

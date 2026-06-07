@@ -91,6 +91,7 @@ def draw_chase_squid(
     elapsed: float,
     ship_world: Vec2 | None = None,
     tip_screen: tuple[tuple[float, float], ...] | None = None,
+    rig: LightRig | None = None,
 ) -> None:
     r = min(radius * scale, 32.0)
     reach_world = tentacle_reach * scale
@@ -144,8 +145,24 @@ def draw_chase_squid(
                 width=3 if coiled else 2,
                 smooth=True,
             )
-    canvas.create_oval(pos.x - r, pos.y - r * 0.65, pos.x + r, pos.y + r * 0.55, fill=palette.SQUID_BODY, outline=palette.SQUID_CORE, width=2)
-    canvas.create_oval(pos.x - r * 0.35, pos.y - r * 0.25, pos.x + r * 0.35, pos.y + r * 0.2, fill=palette.SQUID_CORE, outline="")
+    from gravity_ho_matey.render.squid_viz import draw_squid_body, draw_squid_body_lit
+
+    if rig is not None:
+        draw_squid_body_lit(canvas, pos.x, pos.y, radius=radius, scale=scale, rig=rig, kind="squid")
+    else:
+        r = min(radius * scale, 32.0)
+        draw_squid_body(canvas, pos.x, pos.y, radius=radius, scale=scale)
+        if coiled and ship_world is not None:
+            canvas.create_oval(
+                pos.x - r * 0.15,
+                pos.y - r * 0.12,
+                pos.x + r * 0.15,
+                pos.y + r * 0.1,
+                fill=palette.SQUID_TENTACLE,
+                outline="",
+            )
+        return
+    r = min(radius * scale, 32.0)
     if coiled and ship_world is not None:
         canvas.create_oval(
             pos.x - r * 0.15,
@@ -157,11 +174,20 @@ def draw_chase_squid(
         )
 
 
+def draw_chase_jewel(canvas: tk.Canvas, pos: Vec2, *, elapsed: float = 0.0) -> None:
+    from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
+    from gravity_ho_matey.render.jewel_viz import draw_jewel_orb
+
+    draw_ground_fog_glow(canvas, pos.x, pos.y + 4, 12, (palette.JEWEL_GLOW, palette.JEWEL_CORE), pulse=elapsed * 4.0)
+    draw_jewel_orb(canvas, pos.x, pos.y, elapsed=elapsed, depth_scale=1.0)
+
+
 def draw_chase_pickup(canvas: tk.Canvas, pos: Vec2, kind: PowerUpKind) -> None:
     color = {
         PowerUpKind.THRUST_BOOST: palette.PICKUP_THRUST,
         PowerUpKind.RAPID_FIRE: palette.PICKUP_RAPID,
-        PowerUpKind.STABILIZER: palette.PICKUP_STABILIZER,
+        PowerUpKind.BOOST_TAP: palette.PICKUP_BOOST,
+        PowerUpKind.RUBBER_HULL: palette.PICKUP_RUBBER,
     }.get(kind, palette.BEACON)
     draw_ground_fog_glow(canvas, pos.x, pos.y + 4, 10, (color, color), pulse=0.0)
     canvas.create_polygon(pos.x, pos.y - 8, pos.x + 7, pos.y, pos.x, pos.y + 8, pos.x - 7, pos.y, fill=color, outline="#fff")

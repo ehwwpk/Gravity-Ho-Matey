@@ -6,7 +6,7 @@ from gravity_ho_matey.gameplay.asteroid_combat import (
     apply_friendly_projectile_hit,
     apply_projectile_hit,
 )
-from gravity_ho_matey.gameplay.asteroid_mass import compute_mass, polygon_area, scale_local_verts
+from gravity_ho_matey.gameplay.asteroid_mass import polygon_area, scale_local_verts
 from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid
 from gravity_ho_matey.gameplay.asteroid_tiers import (
     MAX_ASTEROIDS,
@@ -20,7 +20,7 @@ from gravity_ho_matey.gameplay.asteroid_tiers import (
 from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, Projectile, Ship, WorldConfig
 from gravity_ho_matey.gameplay.explosions import ExplosionKind
 from gravity_ho_matey.gameplay.threat_snapshot import build_asteroid_threat_snapshots
-from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
+from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.levels.level_registry import build_level
 
 

@@ -21,10 +21,16 @@ def draw_gravity_heatmap(
     *,
     y_offset: float = 0.0,
     alpha_step: int = 2,
+    ship_pos: Vec2 | None = None,
     world: GameWorld | None = None,
     check_asteroids: bool = False,
 ) -> None:
     _ = world, check_asteroids
+    if camera.mode is not CameraMode.TACTICAL:
+        return
+
+    anchor = ship_pos if ship_pos is not None else camera.center
+    step_world = field.cell_size * alpha_step
 
     for row in range(0, field.rows, alpha_step):
         for col in range(0, field.cols, alpha_step):
@@ -36,16 +42,19 @@ def draw_gravity_heatmap(
                 continue
             wx = field.origin.x + col * field.cell_size
             wy = field.origin.y + row * field.cell_size
-            projected = camera.world_to_screen(Vec2(wx, wy), Vec2(), 0.0)
-            if camera.mode is not CameraMode.TACTICAL:
-                continue
-            sx = projected.x
-            sy = projected.y + y_offset
-            size = field.cell_size * alpha_step
-            if sx + size < 0 or sy + size < y_offset or sx > camera.viewport_width or sy > camera.viewport_height:
+            p0 = camera.world_to_screen(Vec2(wx, wy), anchor, 0.0)
+            p1 = camera.world_to_screen(Vec2(wx + step_world, wy + step_world), anchor, 0.0)
+            sx = min(p0.x, p1.x)
+            sy = min(p0.y, p1.y) + y_offset
+            ex = max(p0.x, p1.x)
+            ey = max(p0.y, p1.y) + y_offset
+            if ex < 0 or ey < y_offset or sx > camera.viewport_width or sy > camera.viewport_height:
                 continue
             tone = gravity_field_color(norm)
-            canvas.create_rectangle(sx, sy, sx + size, sy + size, fill=tone, outline="")
+            cx = (sx + ex) * 0.5
+            cy = (sy + ey) * 0.5
+            radius = max(2.0, min(ex - sx, ey - sy) * 0.48)
+            canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill=tone, outline="")
 
 
 def draw_gravity_floor_grid(

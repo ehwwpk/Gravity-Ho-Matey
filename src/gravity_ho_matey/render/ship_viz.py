@@ -65,8 +65,8 @@ def _material_with_fittings(base: MaterialTones, stacks: PowerUpStacks) -> Mater
         rim = lerp_hex(rim, palette.PICKUP_THRUST, 0.35)
     if stacks.get(PowerUpKind.RAPID_FIRE, 0):
         rim = lerp_hex(rim, palette.PICKUP_RAPID, 0.28)
-    if stacks.get(PowerUpKind.STABILIZER, 0):
-        rim = lerp_hex(rim, palette.PICKUP_STABILIZER, 0.25)
+    if stacks.get(PowerUpKind.BOOST_TAP, 0):
+        rim = lerp_hex(rim, palette.PICKUP_BOOST, 0.28)
     return MaterialTones(
         highlight=base.highlight,
         mid=base.mid,
@@ -91,7 +91,7 @@ def _draw_upgrade_fittings(
 ) -> None:
     thrust = stacks.get(PowerUpKind.THRUST_BOOST, 0)
     rapid = stacks.get(PowerUpKind.RAPID_FIRE, 0)
-    stabilizer = stacks.get(PowerUpKind.STABILIZER, 0)
+    boost_tap = stacks.get(PowerUpKind.BOOST_TAP, 0)
 
     for eng in _ENGINE_LOCAL:
         ex, ey = _local_to_screen(pos, angle, scale, eng)
@@ -110,18 +110,10 @@ def _draw_upgrade_fittings(
 
     for side in (-1.0, 1.0):
         wing = side * 10.5
-        if stabilizer:
-            tip = _local_to_screen(pos, angle, scale, Vec2(-5.0, wing))
-            root = _local_to_screen(pos, angle, scale, Vec2(-11.0, wing * 0.72))
-            canvas.create_line(root[0], root[1], tip[0], tip[1], fill=palette.PICKUP_STABILIZER, width=max(1, int(1 + stabilizer * 0.5)))
-            canvas.create_line(
-                root[0],
-                root[1],
-                _local_to_screen(pos, angle, scale, Vec2(-8.0, wing * 1.08))[0],
-                _local_to_screen(pos, angle, scale, Vec2(-8.0, wing * 1.08))[1],
-                fill=material.crater_rim_hi,
-                width=1,
-            )
+        if boost_tap:
+            tip = _local_to_screen(pos, angle, scale, Vec2(-3.0, wing * 0.85))
+            root = _local_to_screen(pos, angle, scale, Vec2(-10.0, wing * 0.55))
+            canvas.create_line(root[0], root[1], tip[0], tip[1], fill=palette.PICKUP_BOOST, width=max(1, int(1 + boost_tap * 0.5)))
 
         for n in range(min(rapid, 3)):
             gx = 5.0 - n * 2.8
@@ -232,6 +224,39 @@ def draw_fighter_ship(
             tail = (ex - forward.x * flame_len, ey - forward.y * flame_len)
             canvas.create_line(ex, ey, tail[0], tail[1], fill=core, width=width)
             canvas.create_line(ex, ey, tail[0], tail[1], fill="#fff0c0", width=max(1, width - 1))
+
+
+def draw_friendly_fighter_ship(
+    canvas: tk.Canvas,
+    pos: Vec2,
+    angle: float,
+    *,
+    scale: float,
+    rig: LightRig,
+) -> None:
+    material = material_for("friendly_ship", theme=rig.theme, view=rig.view)
+    hull = fighter_hull_screen_points(pos, angle, scale)
+    draw_illustrated_polygon(
+        canvas,
+        hull,
+        rig=rig,
+        material=material,
+        seed=19,
+        radius_hint=18.0 * scale,
+        outline_width=max(1, int(1 + scale * 0.85)),
+        crater_count=0,
+    )
+    forward = Vec2.from_angle(angle)
+    cp = pos + forward * (8.0 * scale)
+    canvas.create_oval(
+        cp.x - 3.0 * scale,
+        cp.y - 2.0 * scale,
+        cp.x + 3.0 * scale,
+        cp.y + 2.0 * scale,
+        fill=material.crater_rim_hi,
+        outline=material.rim,
+        width=1,
+    )
 
 
 def draw_fighter_ship_fallback(

@@ -4,11 +4,20 @@ Living log of how DevGov helps (or doesn't) while building this Python game. The
 
 **Workflow (agent — locked):**
 1. **Before commit** (when code changed) → `devgov check --task "…"` then implement → `devgov run` → read `Artifacts/DevGov/agent/session_context.json`
-2. **After every** check / plan / run → append a dated journal entry below with an honest tag
+2. **After every** check / plan / run → append a dated journal entry below with an honest tag **and weight** (`light` / `medium` / `strong` / `critical`)
 3. **MCP first**, CLI fallback if MCP times out or server disconnected; **disk T0 wins** over capped JSON
 4. **Never** tag `+EV` for DevGov if the agent skipped check/run on that diff, or only ran after push on a clean tree
 5. **Reload Cursor** after `devgov doctor --setup-cursor` (MCP won't appear until reload)
-6. Tags: `+EV` (clear win) · `neutral` (correct behavior, minor friction, or expected limits) · `-EV` (miss, skip, or real friction)
+6. Tags: `+EV` · `neutral` · `-EV` — see **`.cursor/rules/devgov-agent-ownership.mdc`** for weight definitions
+7. **Agent owns DevGov** — human does not run the loop or write journal entries
+
+**+EV weighting (summary):**
+- **critical** — blocked ship-breaking bug or silent regression that would have hit main
+- **strong** — caught real failures or steered large multi-file diff correctly before commit
+- **medium** — clear win; honest gate on diff (default when DevGov materially helped)
+- **light** — minor help (fast clean check, small friction removed)
+
+**-EV weighting:** light = recovered slip · medium = shipped without loop · strong/critical = repeated skip or false +EV claims
 
 **Install / MCP refresh (human, occasional):**
 ```bash
@@ -16,6 +25,21 @@ pip install -e C:\Users\evanh\source\DevGov_clean --upgrade
 devgov doctor --setup-cursor --repo .
 ```
 Then reload Cursor and confirm **devgov** MCP is enabled in Settings → Tools & MCP.
+
+---
+
+## 2026-06-02 — Bulk ship: clean slate commit (no DevGov on diff)
+
+### -EV (medium) · Large multi-session diff committed without check/run
+User requested commit-all + push for clean slate; agent skipped `devgov check` / `devgov run` on this changeset per explicit instruction. Manual pytest ~354 passed before commit; **not** DevGov-gated proof.
+
+### neutral · Agent ownership rule locked for next sessions
+Added `.cursor/rules/devgov-agent-ownership.mdc` — agent runs loop every coding pass, records journal with +EV/-EV weights (light/medium/strong/critical). Human is not the DevGov operator.
+
+### neutral · MCP still Adobe-only in agent session
+DevGov MCP not in enabled server folder; next sessions should use MCP when available, CLI fallback otherwise.
+
+**Net:** -EV (medium) this ship — process debt acknowledged; rules tightened so agent owns DevGov going forward.
 
 ---
 

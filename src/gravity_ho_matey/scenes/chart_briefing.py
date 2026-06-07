@@ -4,8 +4,19 @@ from dataclasses import dataclass
 
 from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.gameplay.gravity_field import GravityField
+from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.levels.level_registry import build_level
 from gravity_ho_matey.scenes.base import Scene, SceneHost
+
+
+def _kind_from_shop_hit(hit: str) -> PowerUpKind | None:
+    if not hit.startswith("shop_"):
+        return None
+    suffix = hit.removeprefix("shop_").upper()
+    try:
+        return PowerUpKind[suffix]
+    except KeyError:
+        return None
 
 
 @dataclass(slots=True)
@@ -28,6 +39,7 @@ class ChartBriefingScene(Scene):
             gravity_scale=self._preview.config.gravity_scale,
         )
         self.hover_id: str | None = None
+        self.shop_open: bool = False
         self._anim = 0.0
 
     def update(self, host: SceneHost, dt: float) -> None:
@@ -44,6 +56,7 @@ class ChartBriefingScene(Scene):
             elapsed=self.elapsed,
             hover_id=self.hover_id,
             anim=self._anim,
+            shop_open=self.shop_open,
         )
 
     def on_pointer_motion(self, host: SceneHost, x: float, y: float) -> None:
@@ -53,6 +66,18 @@ class ChartBriefingScene(Scene):
         if button != 1:
             return
         hit = host.renderer.chart_hit_test(x, y)
+        if hit == "shop_close":
+            self.shop_open = False
+            return
+        if hit == "shop_open":
+            self.shop_open = True
+            return
+        if self.shop_open:
+            if hit and hit.startswith("shop_"):
+                kind = _kind_from_shop_hit(hit)
+                if kind is not None:
+                    self.campaign.try_purchase(kind)
+            return
         if hit == "launch":
             self._launch(host)
         elif hit == "back_title":
@@ -61,9 +86,17 @@ class ChartBriefingScene(Scene):
     def on_key_press(self, host: SceneHost, keysym: str) -> None:
         key = keysym.lower()
         if key == "return":
+            if self.shop_open:
+                self.shop_open = False
+                return
             self._launch(host)
         elif key == "escape":
+            if self.shop_open:
+                self.shop_open = False
+                return
             self._back(host)
+        elif key == "b":
+            self.shop_open = not self.shop_open
 
     def _launch(self, host: SceneHost) -> None:
         from gravity_ho_matey.scenes.game_flow import start_play

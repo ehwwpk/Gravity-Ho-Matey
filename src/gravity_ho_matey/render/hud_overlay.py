@@ -12,7 +12,7 @@ from gravity_ho_matey.gameplay.chart_bounds import (
     ship_in_chart,
 )
 from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks, powerup_hud_tag
-from gravity_ho_matey.gameplay.session import LOOT_PULSE_SECONDS, LOOT_TOAST_SECONDS
+from gravity_ho_matey.gameplay.jewel_config import TREASURY_FLASH_SECONDS
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.camera import CameraMode
 from gravity_ho_matey.render import hud_primitives as hp
@@ -24,11 +24,25 @@ class SciFiHudOverlay:
 
     PANEL_H = 54
     ALERT_H = 22
-    LOOT_BANNER_H = 40
     CHART_BOUNDS_BANNER_H = 26
     FONT = ("Courier New", 10, "bold")
     FONT_SMALL = ("Courier New", 8)
     FONT_TITLE = ("Courier New", 9, "bold")
+
+    @staticmethod
+    def playfield_top(
+        *,
+        hud_alert: str = "",
+        bounds_toast_kind: ChartBoundsToast | None = None,
+        bounds_toast_ttl: float = 0.0,
+    ) -> float:
+        """Top inset for the playfield — must match camera layout and tactical draw offset."""
+        top = float(SciFiHudOverlay.PANEL_H)
+        if hud_alert:
+            top += SciFiHudOverlay.ALERT_H
+        if bounds_toast_kind is not None and bounds_toast_ttl > 0.0:
+            top += SciFiHudOverlay.CHART_BOUNDS_BANNER_H
+        return top
 
     def draw(
         self,
@@ -37,21 +51,26 @@ class SciFiHudOverlay:
         campaign: CampaignState,
         *,
         hud_alert: str = "",
-        loot_toast_kind: PowerUpKind | None = None,
-        loot_toast_is_new: bool = False,
-        loot_toast_ttl: float = 0.0,
         bounds_toast_kind: ChartBoundsToast | None = None,
         bounds_toast_ttl: float = 0.0,
+        treasury_flash_ttl: float = 0.0,
         camera_mode: CameraMode | None = None,
         camera_mode_flash: bool = False,
     ) -> None:
         width = world.config.viewport_width
         solar = world.config.level_theme == "solar"
-        accent = palette.HUD_ACCENT_SOLAR if solar else palette.HUD_ACCENT
+        rift = world.config.level_theme == "rift"
+        accent = (
+            palette.HUD_ACCENT_SOLAR
+            if solar
+            else palette.RIFT_HUD_ACCENT
+            if rift
+            else palette.HUD_ACCENT
+        )
         dim = palette.HUD_DIM
         frame = palette.HUD_FRAME
         bg = palette.HUD_BG
-        cargo_highlight = loot_toast_kind if loot_toast_ttl > 0.0 else None
+        cargo_highlight: PowerUpKind | None = None
 
         canvas.create_rectangle(0, 0, width, self.PANEL_H, fill=bg, outline="")
         canvas.create_line(0, self.PANEL_H, width, self.PANEL_H, fill=accent, width=1)
@@ -82,15 +101,33 @@ class SciFiHudOverlay:
                 font=("Courier New", 14, "bold"),
             )
         else:
-            self._label(canvas, 344, 12, "EXIT VECTOR", dim)
-            canvas.create_text(
-                344,
-                30,
-                anchor="w",
-                text="NORTH GATE",
-                fill=palette.GATE_OPEN if world.finish_unlocked else palette.GATE_LOCKED,
-                font=("Courier New", 11, "bold"),
-            )
+            if rift:
+                self._label(canvas, 344, 12, "BROOD-MOTHER", dim)
+                if world.boss_cleared:
+                    boss_txt, boss_color = "PORTAL OPEN", palette.GATE_OPEN
+                elif world.mega_squid is not None and world.mega_squid.alive:
+                    hp = world.mega_squid.hits_remaining
+                    boss_txt, boss_color = f"BOSS {hp:02d} HP", palette.HUD_WARN
+                else:
+                    boss_txt, boss_color = "SEALED", palette.GATE_LOCKED
+                canvas.create_text(
+                    344,
+                    30,
+                    anchor="w",
+                    text=boss_txt,
+                    fill=boss_color,
+                    font=("Courier New", 11, "bold"),
+                )
+            else:
+                self._label(canvas, 344, 12, "EXIT VECTOR", dim)
+                canvas.create_text(
+                    344,
+                    30,
+                    anchor="w",
+                    text="NORTH GATE",
+                    fill=palette.GATE_OPEN if world.finish_unlocked else palette.GATE_LOCKED,
+                    font=("Courier New", 11, "bold"),
+                )
 
         self._panel(canvas, 470, 6, 118, 42, frame, accent)
         self._label(canvas, 478, 12, "CHRONO", dim)
@@ -110,12 +147,125 @@ class SciFiHudOverlay:
         canvas.create_text(602, 30, anchor="w", text=f"{boost_pct:3d}%", fill=boost_color, font=("Courier New", 14, "bold"))
         self._boost_bar(canvas, 602, 38, 100, 6, world.ship.boost_energy, accent, dim)
 
+        if rift and world.lane_probe is not None:
+            from gravity_ho_matey.gameplay.boost_lane import LaneState
+            from gravity_ho_matey.levels.membrane_layout import is_in_boss_stable_zone
+
+            in_stable = (
+                world.membrane_layout is not None
+                and is_in_boss_stable_zone(world.ship.pos, world.membrane_layout)
+            )
+            lane = world.lane_probe.state
+            if lane is LaneState.ON_RIBBON:
+                lane_txt, lane_color = "HIGHWAY", palette.RIFT_RIBBON_CORE
+            elif lane is LaneState.RUNOFF:
+                lane_txt, lane_color = "NEAR ROAD", palette.HUD_WARN
+            else:
+                lane_txt, lane_color = "OPEN SPACE", palette.HUD_DIM
+            self._badge(canvas, 720, 14, anchor="nw", text=f"LANE {lane_txt}", fill=lane_color, font=self.FONT_SMALL)
+            if in_stable:
+                self._badge(
+                    canvas,
+                    720,
+                    34,
+                    anchor="nw",
+                    text="BOSS ARENA",
+                    fill=palette.RIFT_STABLE_RING,
+                    font=self.FONT_SMALL,
+                )
+
+        if world.squid_cling_timer > 0.0:
+            from gravity_ho_matey.gameplay.squid_enemy import SQUID_CLING_DAMAGE_INTERVAL
+
+            frac = min(1.0, world.squid_cling_timer / SQUID_CLING_DAMAGE_INTERVAL)
+            self._badge(
+                canvas,
+                720,
+                54 if rift else 34,
+                anchor="nw",
+                text=f"CLING {int(frac * 100):3d}%",
+                fill=palette.SQUID_TOUCH_TIP,
+                font=self.FONT_SMALL,
+            )
+
+        if rift and world.allies:
+            alive_wings = sum(1 for ally in world.allies if ally.alive)
+            wing_y = 54
+            if world.squid_cling_timer > 0.0:
+                wing_y = 74
+            self._badge(
+                canvas,
+                720,
+                wing_y,
+                anchor="nw",
+                text=f"WING {alive_wings}/{len(world.allies)}",
+                fill=palette.FRIENDLY_SHIP if alive_wings else palette.HUD_DIM,
+                font=self.FONT_SMALL,
+            )
+
+        if campaign.rubber_hull_charges > 0:
+            rubber_y = 34
+            if world.squid_cling_timer > 0.0:
+                rubber_y = 54
+            elif rift and world.allies:
+                rubber_y = 74
+            self._badge(
+                canvas,
+                720,
+                rubber_y,
+                anchor="nw",
+                text=f"RUBBER {campaign.rubber_hull_charges:02d}",
+                fill=palette.PICKUP_RUBBER,
+                font=self.FONT_SMALL,
+            )
+
+        if world.drone_wingman is not None and world.drone_wingman.alive:
+            drone = world.drone_wingman
+            drone_y = 34
+            if world.squid_cling_timer > 0.0:
+                drone_y = 54
+            elif rift and world.allies:
+                drone_y = 74
+            if campaign.rubber_hull_charges > 0:
+                drone_y += 20
+            drone_txt = f"DRONE {drone.hits_remaining:02d}/5"
+            drone_color = palette.DRONE_CORE
+            if drone.is_overheated:
+                drone_txt = "DRONE COOLING"
+                drone_color = palette.HUD_WARN
+            elif drone.heat > 0.55:
+                drone_txt = f"DRONE {drone.hits_remaining:02d}/5 · HOT"
+                drone_color = palette.DRONE_HEAT
+            self._badge(
+                canvas,
+                720,
+                drone_y,
+                anchor="nw",
+                text=drone_txt,
+                fill=drone_color,
+                font=self.FONT_SMALL,
+            )
+
         cargo_x = width - 156
         cargo_frame = self._powerup_color(cargo_highlight) if cargo_highlight else accent
-        if cargo_highlight:
-            canvas.create_rectangle(cargo_x - 2, 4, cargo_x + 150, 50, outline=cargo_frame, width=2)
+        treasury_pulse = treasury_flash_ttl > 0.0
+        if cargo_highlight or treasury_pulse:
+            pulse_frame = palette.JEWEL_EDGE if treasury_pulse else cargo_frame
+            canvas.create_rectangle(cargo_x - 2, 4, cargo_x + 150, 50, outline=pulse_frame, width=2)
         self._panel(canvas, cargo_x, 6, 148, 42, frame, cargo_frame if cargo_highlight else accent)
-        self._label(canvas, cargo_x + 8, 12, "CARGO MANIFEST", dim)
+        self._label(canvas, cargo_x + 8, 12, "TREASURY", dim)
+        jewel_color = palette.JEWEL_CORE
+        if treasury_pulse:
+            pulse_t = treasury_flash_ttl / TREASURY_FLASH_SECONDS
+            jewel_color = palette.JEWEL_HIGHLIGHT if pulse_t > 0.45 else palette.JEWEL_EDGE
+        canvas.create_text(
+            cargo_x + 140,
+            12,
+            anchor="e",
+            text=f"★ {campaign.jewels}",
+            fill=jewel_color,
+            font=("Courier New", 10, "bold"),
+        )
         self._draw_cargo(
             canvas,
             cargo_x + 8,
@@ -160,16 +310,6 @@ class SciFiHudOverlay:
             )
             banner_y += self.CHART_BOUNDS_BANNER_H
 
-        if loot_toast_kind is not None and loot_toast_ttl > 0.0:
-            self._draw_loot_acquired_banner(
-                canvas,
-                width,
-                banner_y,
-                loot_toast_kind,
-                loot_toast_is_new,
-                loot_toast_ttl,
-            )
-
     def draw_playfield_chrome(
         self,
         canvas: tk.Canvas,
@@ -184,7 +324,14 @@ class SciFiHudOverlay:
         width = world.config.viewport_width
         height = world.config.viewport_height
         solar = world.config.level_theme == "solar"
-        accent = palette.HUD_ACCENT_SOLAR if solar else palette.HUD_ACCENT
+        rift = world.config.level_theme == "rift"
+        accent = (
+            palette.HUD_ACCENT_SOLAR
+            if solar
+            else palette.RIFT_HUD_ACCENT
+            if rift
+            else palette.HUD_ACCENT
+        )
         dim = palette.HUD_DIM
         y = hud_top + 8
         level_tag = world.config.level_name.upper()
@@ -333,45 +480,9 @@ class SciFiHudOverlay:
         return {
             PowerUpKind.THRUST_BOOST: palette.PICKUP_THRUST,
             PowerUpKind.RAPID_FIRE: palette.PICKUP_RAPID,
-            PowerUpKind.STABILIZER: palette.PICKUP_STABILIZER,
+            PowerUpKind.BOOST_TAP: palette.PICKUP_BOOST,
+            PowerUpKind.RUBBER_HULL: palette.PICKUP_RUBBER,
         }.get(kind, palette.HUD_LOOT_NEW)
-
-    def _draw_loot_acquired_banner(
-        self,
-        canvas: tk.Canvas,
-        width: int,
-        y: float,
-        kind: PowerUpKind,
-        is_new: bool,
-        ttl: float,
-    ) -> None:
-        color = self._powerup_color(kind)
-        elapsed = LOOT_TOAST_SECONDS - ttl
-        pulse = is_new and elapsed < LOOT_PULSE_SECONDS and int(elapsed * 2.5) % 2 == 0
-        border = palette.HUD_LOOT_NEW if pulse else color
-        label = POWERUP_LABELS[kind].upper()
-        tag = POWERUP_HUD_TAGS[kind]
-        headline = "◈ LOOT ACQUIRED ◈" if is_new else "◈ SUPPLY SECURED ◈"
-        subline = f"{tag} — {label}" if is_new else f"{label} — ALREADY FITTED"
-
-        canvas.create_rectangle(0, y, width, y + self.LOOT_BANNER_H, fill=palette.HUD_LOOT_BG, outline="")
-        canvas.create_rectangle(2, y + 2, width - 2, y + self.LOOT_BANNER_H - 2, outline=border, width=2)
-        canvas.create_line(12, y + 6, 48, y + 6, fill=color)
-        canvas.create_line(width - 48, y + self.LOOT_BANNER_H - 6, width - 12, y + self.LOOT_BANNER_H - 6, fill=color)
-        canvas.create_text(
-            width // 2,
-            y + 13,
-            text=headline,
-            fill=palette.HUD_LOOT_NEW if is_new else color,
-            font=("Courier New", 11, "bold"),
-        )
-        canvas.create_text(
-            width // 2,
-            y + 29,
-            text=subline,
-            fill=color,
-            font=("Courier New", 13, "bold"),
-        )
 
     def _scanline(self, canvas: tk.Canvas, width: int) -> None:
         hp.draw_scanlines(canvas, 0, 0, width, self.PANEL_H)

@@ -1,4 +1,3 @@
-import math
 import unittest
 
 from gravity_ho_matey.core.geometry import Rect
@@ -7,7 +6,7 @@ from gravity_ho_matey.gameplay.damage import DamageSource
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.entities import FinishGate, GameStatus, Ship, WorldConfig
 from gravity_ho_matey.gameplay.session import capture_level_spawn
-from gravity_ho_matey.gameplay.squid_enemy import SQUID_CLING_DAMAGE_INTERVAL, SQUID_HITS_MAX, SquidEnemy
+from gravity_ho_matey.gameplay.squid_enemy import SQUID_HITS_MAX, SquidEnemy
 from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
 from gravity_ho_matey.levels.drift_belt_layout import (
     CENTER,
@@ -22,7 +21,7 @@ from gravity_ho_matey.levels.level_registry import build_level, next_level_id
 class DriftLevelTests(unittest.TestCase):
     def test_registry_includes_drift_after_solar(self) -> None:
         self.assertEqual(next_level_id("solar"), "drift")
-        self.assertIsNone(next_level_id("drift"))
+        self.assertEqual(next_level_id("drift"), "rift")
 
     def test_drift_layout_has_seven_rings_and_north_exit(self) -> None:
         self.assertEqual(len(RING_SPECS), 7)
@@ -48,9 +47,26 @@ class DriftLevelTests(unittest.TestCase):
         self.assertEqual(len(world.asteroids), expected_rocks)
         self.assertEqual(len(world.wells), 4)
         self.assertTrue(all(w.kind == "black_hole" for w in world.wells))
-        self.assertEqual(len(world.enemies), 7)
+        self.assertEqual(len(world.enemies), 12)
         self.assertEqual(len(build_drift_layout().squid_angles_deg), 7)
+        self.assertEqual(len(build_drift_layout().ring_lurker_specs), 5)
         self.assertTrue(all(e.kind is EnemyKind.SQUID for e in world.enemies))
+
+    def test_drift_ring_lurkers_hide_on_belts_past_ring_two(self) -> None:
+        layout = build_drift_layout()
+        world = build_level("drift")
+        lurker_radii = {RING_SPECS[ring_index][0] for ring_index, _ in layout.ring_lurker_specs}
+        self.assertEqual(len(lurker_radii), 5)
+        for enemy in world.enemies:
+            if enemy.kind is not EnemyKind.SQUID:
+                continue
+            dist = (enemy.pos - layout.center).length()
+            if abs(dist - layout.squid_ring_radius) <= 4.0:
+                continue
+            self.assertTrue(
+                any(abs(dist - radius) < 1.0 for radius in lurker_radii),
+                msg=f"enemy at radius {dist} not on a lurker belt",
+            )
 
     def test_nearby_rocks_have_collision_meshes(self) -> None:
         world = build_level("drift")

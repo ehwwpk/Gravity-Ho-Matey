@@ -7,7 +7,7 @@ from gravity_ho_matey.gameplay.entities import GravityWell
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.levels.level_data import build_cove_run_level
 from gravity_ho_matey.render import palette
-from gravity_ho_matey.render.camera import CameraMode, TACTICAL_ZOOM_COMPACT, ViewCamera, tactical_scale_for
+from gravity_ho_matey.render.camera import CameraMode, ViewCamera, tactical_scale_for
 from gravity_ho_matey.render.chase_fx import draw_fog_glow, draw_speed_streaks
 from gravity_ho_matey.render.world_draw import gravity_field_color
 from gravity_ho_matey.render.asteroid_viz import collect_chase_asteroid_sprites
@@ -139,9 +139,9 @@ class FieldVizTests(unittest.TestCase):
         far = gravity_emphasis(500.0)
         self.assertGreater(near, far)
 
-    def test_cove_uses_compact_tactical_zoom(self) -> None:
+    def test_cove_uses_unity_tactical_scale(self) -> None:
         world = build_cove_run_level()
-        self.assertAlmostEqual(tactical_scale_for(world.config), TACTICAL_ZOOM_COMPACT)
+        self.assertAlmostEqual(tactical_scale_for(world.config), 1.0)
 
 
 class ChaseHudLayoutTests(unittest.TestCase):
