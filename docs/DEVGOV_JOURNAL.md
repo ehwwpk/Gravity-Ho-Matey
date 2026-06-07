@@ -33,6 +33,9 @@ DevGov MCP not in enabled server folder — used CLI per journal fallback. `alwa
 ### neutral · `devgov run` exit 12 — sub:tests slice skips (expected)
 Primary python slice green; generic `sub:tests` has disqualifying skips (no Phase-1 mapping). Same pattern as prior sessions — not a gameplay failure.
 
+### +EV · Shipped `e2bfb03` with DevGov on the diff
+Committed and pushed to `origin/main`; post-push `devgov check --task "Post-push clean tree prep for Level 4"` → LOW, clean worktree, ready for next feature work.
+
 ---
 
 ### +EV · Pre-edit `devgov check` scoped the large multi-file change
