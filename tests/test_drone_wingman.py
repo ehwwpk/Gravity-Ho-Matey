@@ -110,8 +110,9 @@ class DroneCombatTests(unittest.TestCase):
         world.drone_wingman = DroneWingman.spawn_behind_player(world.ship)
         from gravity_ho_matey.gameplay.entities import Projectile
 
-        for _ in range(DRONE_WINGMAN_HITS_MAX):
+        for i in range(DRONE_WINGMAN_HITS_MAX):
             assert world.drone_wingman is not None
+            world.drone_wingman.hit_invuln = 0.0
             bolt = Projectile(
                 pos=Vec2(world.drone_wingman.pos.x, world.drone_wingman.pos.y),
                 vel=Vec2(),
@@ -130,6 +131,57 @@ class DroneCombatTests(unittest.TestCase):
         for _ in range(40):
             world.update(0.05, ControlIntent())
         self.assertGreater(len(world.projectiles), before)
+
+    def test_squid_contact_chips_not_instant_kill(self) -> None:
+        from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
+
+        world = _empty_world()
+        world.drone_wingman = DroneWingman.spawn_behind_player(world.ship)
+        squid = SquidEnemy(pos=Vec2(world.drone_wingman.pos.x + 20, world.drone_wingman.pos.y))
+        world.enemies.append(squid)
+        world._check_drone_hazards()
+        assert world.drone_wingman is not None
+        self.assertTrue(world.drone_wingman.alive)
+        self.assertEqual(world.drone_wingman.hits_remaining, DRONE_WINGMAN_HITS_MAX - 1)
+        self.assertTrue(squid.alive)
+
+    def test_pick_threat_prioritizes_nearby_squid_over_distant_patrol(self) -> None:
+        from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
+
+        drone = DroneWingman.spawn_behind_player(Ship(pos=Vec2(400, 300)))
+        squid = SquidEnemy(pos=Vec2(520, 300))
+        patrol = PatrolEnemy(waypoints=(Vec2(700, 300), Vec2(720, 320)), pos=Vec2(680, 300))
+        threat = drone.pick_threat([patrol, squid], None, player_pos=Vec2(400, 300))
+        self.assertIsNotNone(threat)
+        assert threat is not None
+        self.assertTrue(threat.is_squid)
+
+    def test_drone_dodges_incoming_hostile_bolt(self) -> None:
+        from gravity_ho_matey.gameplay.entities import Projectile
+
+        drone = DroneWingman.spawn_behind_player(Ship(pos=Vec2(400, 300)))
+        bolt = Projectile(
+            pos=Vec2(520, 300),
+            vel=Vec2(-280, 0),
+            ttl=2.0,
+            hostile=True,
+        )
+        start_y = drone.pos.y
+        for _ in range(18):
+            drone.integrate(
+                0.05,
+                player_pos=Vec2(400, 300),
+                player_vel=Vec2(),
+                player_angle=0.0,
+                wells=[],
+                gravity_scale=1.0,
+                drag=0.98,
+                well_maw_radius=10.0,
+                threat=None,
+                hostile_projectiles=[bolt],
+            )
+            bolt.pos = bolt.pos + bolt.vel * 0.05
+        self.assertGreater(abs(drone.pos.y - start_y), 8.0)
 
 
 class DroneAsteroidTests(unittest.TestCase):

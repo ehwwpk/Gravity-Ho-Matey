@@ -39,6 +39,8 @@ class ThreatTarget:
     radius: float
     is_boss: bool = False
     is_asteroid: bool = False
+    is_squid: bool = False
+    danger_radius: float = 0.0
 
 
 @dataclass(slots=True)
@@ -113,7 +115,15 @@ class FriendlyFighter:
             if score >= best_score:
                 continue
             vel = getattr(enemy, "vel", Vec2())
-            best = ThreatTarget(pos=Vec2(enemy.pos.x, enemy.pos.y), vel=vel, radius=enemy.radius)
+            is_squid = kind is EnemyKind.SQUID
+            danger = getattr(enemy, "tentacle_span", lambda: enemy.radius)() if is_squid else enemy.radius
+            best = ThreatTarget(
+                pos=Vec2(enemy.pos.x, enemy.pos.y),
+                vel=vel,
+                radius=enemy.radius,
+                is_squid=is_squid,
+                danger_radius=danger,
+            )
             best_score = score
         return best
 

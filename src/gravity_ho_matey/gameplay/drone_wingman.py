@@ -15,15 +15,25 @@ from gravity_ho_matey.gameplay.drone_config import (
     DRONE_CATCH_UP_RADIUS,
     DRONE_CATCH_UP_SPEED,
     DRONE_ENGAGE_RANGE,
+    DRONE_ENEMY_AVOID_RADIUS,
+    DRONE_ENEMY_AVOID_THRUST,
     DRONE_FIRE_INTERVAL,
     DRONE_FORMATION_LATERAL,
     DRONE_FORMATION_TRAIL,
     DRONE_HEAT_DECAY,
     DRONE_HEAT_PER_SHOT,
     DRONE_HITS_MAX,
+    DRONE_HIT_INVULN,
+    DRONE_KITE_RANGE,
     DRONE_MAX_SPEED,
     DRONE_MIN_RANGE,
     DRONE_OVERHEAT_COOLDOWN,
+    DRONE_PROJECTILE_DODGE_RADIUS,
+    DRONE_PROJECTILE_DODGE_THRUST,
+    DRONE_SQUID_ENGAGE_RANGE,
+    DRONE_SQUID_FIRE_INTERVAL,
+    DRONE_SQUID_KITE_RANGE,
+    DRONE_SQUID_PANIC_RADIUS,
     DRONE_THRUST,
     DRONE_TURN_RATE,
 )
@@ -33,10 +43,14 @@ from gravity_ho_matey.gameplay.entities import Asteroid, GravityWell, Projectile
 from gravity_ho_matey.gameplay.friendly_fighter import ThreatTarget, _angle_delta
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
 from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
+from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
 
 _ASTEROID_SELF_BIAS = 140.0
 _ASTEROID_PLAYER_BIAS = 48.0
 _ASTEROID_IMMINENT_BIAS = 95.0
+_SQUID_TARGET_BIAS = 120.0
+_SQUID_IMMINENT_BIAS = 180.0
+_ENEMY_IMMINENT_BIAS = 70.0
 
 
 @dataclass(slots=True)
@@ -54,7 +68,8 @@ class DroneWingman:
     fire_cooldown: float = 0.0
     heat: float = 0.0
     overheat_timer: float = 0.0
-    shot_speed: float = 248.0
+    hit_invuln: float = 0.0
+    shot_speed: float = 262.0
     engage_range: float = DRONE_ENGAGE_RANGE
 
     @classmethod
@@ -119,15 +134,40 @@ class DroneWingman:
                 continue
             to_player = (enemy.pos - player_pos).length()
             to_drone = (enemy.pos - self.pos).length()
+            kind = getattr(enemy, "kind", None)
+            if kind is EnemyKind.SQUID:
+                assert isinstance(enemy, SquidEnemy)
+                danger = enemy.tentacle_span()
+                gap = to_drone - danger - self.radius
+                engage = DRONE_SQUID_ENGAGE_RANGE
+                if gap > engage and to_player > engage:
+                    continue
+                bias = _SQUID_IMMINENT_BIAS if gap < DRONE_SQUID_PANIC_RADIUS else _SQUID_TARGET_BIAS
+                score = gap * 0.78 + to_player * 0.22 - bias
+                if score >= best_score:
+                    continue
+                best = ThreatTarget(
+                    pos=Vec2(enemy.pos.x, enemy.pos.y),
+                    vel=Vec2(enemy.vel.x, enemy.vel.y),
+                    radius=enemy.radius,
+                    is_squid=True,
+                    danger_radius=danger,
+                )
+                best_score = score
+                continue
             if to_player > self.engage_range and to_drone > self.engage_range:
                 continue
-            kind = getattr(enemy, "kind", None)
-            bias = 36.0 if kind is EnemyKind.SQUID else 0.0
-            score = to_player * 0.72 + to_drone * 0.28 - bias
+            bias = _ENEMY_IMMINENT_BIAS if to_drone < DRONE_ENEMY_AVOID_RADIUS * 0.55 else 0.0
+            score = to_player * 0.62 + to_drone * 0.38 - bias
             if score >= best_score:
                 continue
             vel = getattr(enemy, "vel", Vec2())
-            best = ThreatTarget(pos=Vec2(enemy.pos.x, enemy.pos.y), vel=vel, radius=enemy.radius)
+            best = ThreatTarget(
+                pos=Vec2(enemy.pos.x, enemy.pos.y),
+                vel=vel,
+                radius=enemy.radius,
+                danger_radius=enemy.radius + 24.0,
+            )
             best_score = score
         return best
 
@@ -179,40 +219,46 @@ class DroneWingman:
         well_maw_radius: float,
         threat: ThreatTarget | None,
         asteroids: list[Asteroid] | None = None,
+        enemies: list | None = None,
+        hostile_projectiles: list[Projectile] | None = None,
     ) -> None:
         if not self.alive:
             return
 
-        avoid_accel, dodge_urgency = self._asteroid_avoidance(asteroids or ())
+        avoid_rock, rock_urgency = self._asteroid_avoidance(asteroids or ())
+        avoid_enemy, enemy_urgency = self._enemy_avoidance(enemies or ())
+        dodge_bolt, bolt_urgency = self._projectile_dodge(hostile_projectiles or ())
+
+        avoid_accel = avoid_rock + avoid_enemy + dodge_bolt
+        dodge_urgency = max(rock_urgency, enemy_urgency, bolt_urgency)
+
         form_target = self.formation_target(player_pos, player_angle)
         to_form = form_target - self.pos
         form_dist = to_form.length()
+        form_dir = to_form.normalized() if form_dist > 1e-6 else Vec2.from_angle(player_angle)
 
-        form_weight = max(0.22, 1.0 - dodge_urgency * 0.82)
+        form_weight = max(0.12, 1.0 - dodge_urgency * 0.88)
         if threat is not None and threat.is_asteroid and dodge_urgency > 0.35:
-            form_weight *= 0.45
+            form_weight *= 0.35
 
-        if threat is not None and not threat.is_asteroid:
-            threat_dist = (threat.pos - self.pos).length()
-            if threat_dist <= self.engage_range * 0.95:
-                cover = player_pos - Vec2.from_angle(player_angle) * 28.0
-                move_goal = (
-                    form_target * (0.55 * form_weight)
-                    + cover * 0.25
-                    + threat.pos * 0.20
-                )
-                to_move = move_goal - self.pos
-                desired_heading = math.atan2(to_move.y, to_move.x) if to_move.length_sq() > 1.0 else self.angle
-            else:
-                desired_heading = math.atan2(to_form.y, to_form.x) if form_dist > 1e-6 else self.angle
-                to_move = to_form
-        elif dodge_urgency > 0.12 and avoid_accel.length_sq() > 1.0:
+        if dodge_urgency > 0.18 and avoid_accel.length_sq() > 1.0:
             dodge_dir = avoid_accel.normalized()
-            blend = min(0.92, 0.35 + dodge_urgency * 0.65)
-            form_dir = to_form.normalized() if form_dist > 1e-6 else dodge_dir
+            blend = min(0.96, 0.42 + dodge_urgency * 0.58)
             move_dir = form_dir * (1.0 - blend) + dodge_dir * blend
-            to_move = move_dir * max(48.0, form_dist)
+            to_move = move_dir * max(64.0, form_dist)
             desired_heading = math.atan2(move_dir.y, move_dir.x)
+        elif threat is not None and not threat.is_asteroid:
+            to_move, desired_heading = self._combat_move(
+                threat,
+                form_target,
+                form_dir,
+                form_dist,
+                form_weight,
+                player_pos,
+                player_angle,
+                dodge_urgency,
+                avoid_accel,
+            )
         else:
             desired_heading = math.atan2(to_form.y, to_form.x) if form_dist > 1e-6 else player_angle
             to_move = to_form
@@ -225,8 +271,12 @@ class DroneWingman:
             self.angle -= max_turn
         else:
             self.angle = desired_heading
-        if threat is None or dodge_urgency < 0.55:
+        if threat is None or dodge_urgency < 0.42:
             self.facing_angle = self.angle
+        elif threat is not None and not threat.is_asteroid:
+            to_target = threat.pos - self.pos
+            if to_target.length_sq() > 64.0:
+                self.facing_angle = math.atan2(to_target.y, to_target.x)
 
         accel = gravity_acceleration_at(self.pos, wells) * gravity_scale
         accel += hazard_escape_acceleration_at(
@@ -238,18 +288,60 @@ class DroneWingman:
         accel += avoid_accel
 
         speed_cap = DRONE_CATCH_UP_SPEED if form_dist > DRONE_CATCH_UP_RADIUS else DRONE_MAX_SPEED
-        if dodge_urgency > 0.45:
-            speed_cap = max(speed_cap, DRONE_CATCH_UP_SPEED * (0.92 + dodge_urgency * 0.18))
-        catch_thrust = 1.34 if form_dist > DRONE_CATCH_UP_RADIUS else 1.08
-        if dodge_urgency > 0.25:
-            catch_thrust = max(catch_thrust, 1.22 + dodge_urgency * 0.35)
+        if dodge_urgency > 0.35:
+            speed_cap = max(speed_cap, DRONE_CATCH_UP_SPEED * (0.95 + dodge_urgency * 0.22))
+        catch_thrust = 1.38 if form_dist > DRONE_CATCH_UP_RADIUS else 1.12
+        if dodge_urgency > 0.2:
+            catch_thrust = max(catch_thrust, 1.28 + dodge_urgency * 0.42)
         if to_move.length_sq() > 36.0:
-            player_match = min(1.18, 0.42 + player_vel.length() / max(1.0, speed_cap))
+            player_match = min(1.22, 0.48 + player_vel.length() / max(1.0, speed_cap))
             accel += Vec2.from_angle(self.angle) * (DRONE_THRUST * catch_thrust * player_match)
 
         self.vel = (self.vel + accel * dt) * drag
         self.vel = self.vel.clamped_length(speed_cap)
         self.pos = self.pos + self.vel * dt
+
+    def _combat_move(
+        self,
+        threat: ThreatTarget,
+        form_target: Vec2,
+        form_dir: Vec2,
+        form_dist: float,
+        form_weight: float,
+        player_pos: Vec2,
+        player_angle: float,
+        dodge_urgency: float,
+        avoid_accel: Vec2,
+    ) -> tuple[Vec2, float]:
+        to_threat = threat.pos - self.pos
+        dist = to_threat.length()
+        radial = to_threat.normalized() if dist > 1e-6 else Vec2.from_angle(self.angle)
+        tangent = radial.rotated(math.pi / 2.0)
+        ideal = DRONE_SQUID_KITE_RANGE if threat.is_squid else DRONE_KITE_RANGE
+        danger = threat.danger_radius if threat.danger_radius > 0.0 else threat.radius + 20.0
+        gap = dist - danger - self.radius
+
+        if gap < DRONE_SQUID_PANIC_RADIUS * 0.65 or dodge_urgency > 0.55:
+            flee = -radial
+            if avoid_accel.length_sq() > 1.0:
+                flee = (flee * 0.55 + avoid_accel.normalized() * 0.45).normalized()
+            move_dir = flee * 0.82 + form_dir * (0.18 * form_weight)
+        elif dist < ideal * 0.82:
+            move_dir = (-radial * 0.72 + tangent * 0.18 + form_dir * (0.10 * form_weight)).normalized()
+        elif dist > ideal * 1.25:
+            move_dir = (radial * 0.38 + form_dir * (0.42 * form_weight)).normalized()
+        else:
+            strafe_sign = 1.0 if (self.pos - player_pos).dot(tangent) >= 0.0 else -1.0
+            move_dir = (
+                tangent * (0.52 * strafe_sign)
+                + form_dir * (0.28 * form_weight)
+                - radial * 0.12
+            ).normalized()
+
+        move_dist = max(72.0, min(form_dist, ideal * 0.55))
+        to_move = move_dir * move_dist
+        desired_heading = math.atan2(move_dir.y, move_dir.x)
+        return to_move, desired_heading
 
     def _asteroid_avoidance(self, asteroids: list[Asteroid]) -> tuple[Vec2, float]:
         push = Vec2()
@@ -274,7 +366,69 @@ class DroneWingman:
             urgency = max(urgency, strength)
         return push, urgency
 
+    def _enemy_avoidance(self, enemies: list) -> tuple[Vec2, float]:
+        push = Vec2()
+        urgency = 0.0
+        for enemy in enemies:
+            if not enemy.alive:
+                continue
+            offset = self.pos - enemy.pos
+            dist = offset.length()
+            if dist < 1e-6:
+                continue
+            if getattr(enemy, "kind", None) is EnemyKind.SQUID and isinstance(enemy, SquidEnemy):
+                reach = enemy.tentacle_span() + self.radius + 16.0
+                panic = DRONE_SQUID_PANIC_RADIUS
+            else:
+                reach = enemy.radius + self.radius + 28.0
+                panic = DRONE_ENEMY_AVOID_RADIUS * 0.42
+            gap = dist - reach
+            if gap > DRONE_ENEMY_AVOID_RADIUS:
+                continue
+            t = 1.0 - max(0.0, gap / DRONE_ENEMY_AVOID_RADIUS)
+            strength = t * t * (3.0 - 2.0 * t)
+            closing = _closing_speed(self.pos, self.vel, enemy.pos, getattr(enemy, "vel", Vec2()))
+            if closing > 0.0:
+                strength *= 1.0 + min(2.8, closing / 55.0)
+            if gap < panic:
+                strength = min(1.0, strength + 0.62)
+            push += offset.normalized() * (DRONE_ENEMY_AVOID_THRUST * strength)
+            urgency = max(urgency, strength)
+        return push, urgency
+
+    def _projectile_dodge(self, projectiles: list[Projectile]) -> tuple[Vec2, float]:
+        push = Vec2()
+        urgency = 0.0
+        for bolt in projectiles:
+            if not bolt.hostile:
+                continue
+            offset = self.pos - bolt.pos
+            dist = offset.length()
+            if dist < 1e-6:
+                continue
+            combined = bolt.radius + self.radius + 6.0
+            gap = dist - combined
+            if gap > DRONE_PROJECTILE_DODGE_RADIUS:
+                continue
+            if bolt.vel.length_sq() < 1.0:
+                continue
+            bolt_dir = bolt.vel.normalized()
+            toward = offset.normalized() * -1.0
+            if toward.dot(bolt_dir) < 0.12:
+                continue
+            t = 1.0 - max(0.0, gap / DRONE_PROJECTILE_DODGE_RADIUS)
+            strength = t * t * (3.0 - 2.0 * t)
+            lateral = bolt_dir.rotated(math.pi / 2.0)
+            if lateral.dot(offset) < 0.0:
+                lateral = lateral * -1.0
+            dodge = (offset.normalized() * 0.55 + lateral * 0.45).normalized()
+            push += dodge * (DRONE_PROJECTILE_DODGE_THRUST * strength)
+            urgency = max(urgency, strength)
+        return push, urgency
+
     def tick_combat(self, dt: float) -> None:
+        if self.hit_invuln > 0.0:
+            self.hit_invuln = max(0.0, self.hit_invuln - dt)
         if self.fire_cooldown > 0.0:
             self.fire_cooldown = max(0.0, self.fire_cooldown - dt)
         if self.overheat_timer > 0.0:
@@ -294,11 +448,27 @@ class DroneWingman:
             return None
         dist = (threat.pos - self.pos).length()
         min_range = DRONE_ASTEROID_MIN_FIRE_RANGE if threat.is_asteroid else DRONE_MIN_RANGE
-        max_range = self.engage_range if not threat.is_asteroid else DRONE_ASTEROID_ENGAGE_RANGE
+        if threat.is_squid:
+            max_range = DRONE_SQUID_ENGAGE_RANGE
+        elif threat.is_asteroid:
+            max_range = DRONE_ASTEROID_ENGAGE_RANGE
+        else:
+            max_range = self.engage_range
         if dist < min_range or dist > max_range:
             return None
 
-        lead_factor = 0.85 if threat.is_asteroid else 0.72
+        if threat.is_asteroid:
+            lead_factor = 0.88
+            spread = 0.016
+            interval = DRONE_FIRE_INTERVAL
+        elif threat.is_squid:
+            lead_factor = 0.94
+            spread = 0.012
+            interval = DRONE_SQUID_FIRE_INTERVAL
+        else:
+            lead_factor = 0.78
+            spread = 0.022
+            interval = DRONE_FIRE_INTERVAL
         aim_dir = lead_aim_direction(
             self.pos,
             threat.pos,
@@ -309,9 +479,8 @@ class DroneWingman:
         if aim_dir is None:
             return None
 
-        spread = (random.random() * 2.0 - 1.0) * (0.018 if threat.is_asteroid else 0.028)
-        aim_dir = aim_dir.rotated(spread)
-        self.fire_cooldown = DRONE_FIRE_INTERVAL
+        aim_dir = aim_dir.rotated((random.random() * 2.0 - 1.0) * spread)
+        self.fire_cooldown = interval
         self.heat = min(1.0, self.heat + DRONE_HEAT_PER_SHOT)
         if self.heat >= 1.0:
             self.overheat_timer = DRONE_OVERHEAT_COOLDOWN
@@ -328,6 +497,9 @@ class DroneWingman:
         )
 
     def apply_shot(self) -> bool:
+        if self.hit_invuln > 0.0:
+            return False
+        self.hit_invuln = DRONE_HIT_INVULN
         self.hits_remaining = max(0, self.hits_remaining - 1)
         if self.hits_remaining <= 0:
             self.alive = False

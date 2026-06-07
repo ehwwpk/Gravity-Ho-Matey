@@ -600,6 +600,8 @@ class GameWorld:
             well_maw_radius=self.config.well_maw_radius,
             threat=threat,
             asteroids=nearby_asteroids,
+            enemies=self.enemies,
+            hostile_projectiles=[p for p in self.projectiles if p.hostile],
         )
         shot = drone.try_fire(threat)
         if shot is not None:
@@ -624,7 +626,7 @@ class GameWorld:
         if self.status is not GameStatus.RUNNING:
             return
         drone = self.drone_wingman
-        if drone is None or not drone.alive:
+        if drone is None or not drone.alive or drone.hit_invuln > 0.0:
             return
         if self._asteroid_hit_at(drone.pos, drone.radius) is not None:
             self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(drone.pos.x, drone.pos.y), scale=0.7)
@@ -634,16 +636,18 @@ class GameWorld:
         for enemy in self.enemies:
             if not enemy.alive:
                 continue
-            if (enemy.pos - drone.pos).length() > enemy.radius + drone.radius:
-                continue
-            self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(drone.pos.x, drone.pos.y), scale=0.75)
-            drone.alive = False
-            self.drone_wingman = None
             if enemy.kind is EnemyKind.SQUID:
                 assert isinstance(enemy, SquidEnemy)
-                enemy.alive = False
-                self._prune_dead_enemies()
-            break
+                gap = (enemy.pos - drone.pos).length() - enemy.tentacle_span() - drone.radius
+                if gap > 6.0:
+                    continue
+            elif (enemy.pos - drone.pos).length() > enemy.radius + drone.radius + 4.0:
+                continue
+            self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(drone.pos.x, drone.pos.y), scale=0.65)
+            if drone.apply_shot():
+                self.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(drone.pos.x, drone.pos.y), scale=0.75)
+                self.drone_wingman = None
+            return
 
     def _projectile_hits_ally(self, projectile: Projectile) -> bool:
         """Player bolts dissipate on allies — no friendly fire damage."""

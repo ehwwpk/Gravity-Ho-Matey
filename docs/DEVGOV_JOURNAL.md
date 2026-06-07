@@ -64,6 +64,24 @@ Same pattern as prior sessions — not a gameplay failure.
 
 ---
 
+## 2026-06-02 — Drone wingman dodge-first combat AI
+
+### +EV (strong) · Pre-edit check + primary run gated drone AI diff
+`devgov check` → implement → `devgov run` → primary **ruff + compileall + pytest** green (361 tests). Exit 12 only on generic `sub:tests` skips (neutral).
+
+### +EV (medium) · Root cause: squid ram was instant drone death
+`_check_drone_hazards` set `alive=False` on any enemy body touch; squid contact also killed the squid. Now tentacle-span contact chips 1 HP (5 total) with brief invuln — same as bolts/rocks.
+
+### +EV (medium) · Dodge-first escort behavior
+Enemy/tentacle avoidance, hostile bolt lateral dodge, kite/strafe combat (never closes into threat), heavy squid target bias, faster/tighter squid shots (0.22s, 262 spd), higher thrust/turn/speed caps.
+
+### neutral · `sub:tests` slice skips
+Expected Phase-1 mapping gap — not a gameplay failure.
+
+**Net:** strong +EV — user-reported squid death traced to one-shot hazard rule; AI pass adds layered dodge.
+
+---
+
 ## 2026-06-07 — Drift density, titan wells, squid aggro
 
 ### +EV · Full loop on a focused tuning diff
