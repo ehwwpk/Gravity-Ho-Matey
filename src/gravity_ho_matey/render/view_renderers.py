@@ -272,6 +272,15 @@ class TacticalViewRenderer:
             rig=rig,
             powerup_stacks=powerup_stacks,
         )
+        from gravity_ho_matey.render.chase_helm import draw_tactical_flight_instruments
+
+        draw_tactical_flight_instruments(
+            canvas,
+            world,
+            viewport_width=vw,
+            viewport_height=vh,
+            ship_angle=world.ship.angle,
+        )
         draw_edge_hints(canvas, world, camera, hud_top=hud_top)
         draw_explosions(
             canvas,

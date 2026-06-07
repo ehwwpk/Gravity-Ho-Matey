@@ -31,13 +31,34 @@ class ChaseHelmTests(unittest.TestCase):
         self.assertNotAlmostEqual(idle, turning, places=3)
 
     def test_g_frame_splits_forward_and_lateral(self) -> None:
-        from gravity_ho_matey.render.chase_helm import _ship_frame_accel
+        from gravity_ho_matey.render.chase_helm import ship_frame_gravity
 
         world = build_cove_run_level()
         world.ship.pos = Vec2(480, 320)
-        g_fwd, g_lat, total = _ship_frame_accel(world, -math.pi / 2)
+        g_fwd, g_lat, total = ship_frame_gravity(world, -math.pi / 2)
         self.assertGreater(total, 0.0)
         self.assertNotAlmostEqual(g_fwd, g_lat, places=0)
+
+    def test_tactical_flight_instruments_draw_without_error(self) -> None:
+        try:
+            import tkinter as tk
+        except tk.TclError:
+            self.skipTest("Tk unavailable")
+        from gravity_ho_matey.render.chase_helm import draw_tactical_flight_instruments
+
+        world = build_cove_run_level()
+        world.ship.vel = Vec2(40, -90)
+        root = tk.Tk()
+        root.withdraw()
+        canvas = tk.Canvas(root, width=960, height=640)
+        draw_tactical_flight_instruments(
+            canvas,
+            world,
+            viewport_width=960,
+            viewport_height=640,
+            ship_angle=world.ship.angle,
+        )
+        root.destroy()
 
     def test_predict_path_curves_under_gravity(self) -> None:
         world = build_cove_run_level()

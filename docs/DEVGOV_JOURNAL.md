@@ -133,6 +133,16 @@ Pre-edit `check` useful for boundary list (HIGH, 30+ files). `run` primary slice
 
 ---
 
+## 2026-06-07 — Tactical compact flight instruments
+
+### +EV (medium) · Velocity + gravity on tactical view
+Shared `ship_frame_gravity` + `draw_tactical_flight_instruments` in `chase_helm.py`; tactical gets compact velocity/slip (bottom-left) and mini G summary (bottom-right). Chase cockpit unchanged. EP section added under *Camera modes and flight instruments*.
+
+### neutral · DevGov
+Pre-edit check on clean tree (LOW); post-edit manual pytest **386 passed**; `devgov run` after edits.
+
+---
+
 ### +EV · Full loop on a focused tuning diff
 `devgov check --task "Drift outer ring density titan wells squids"` on clean tree → implement → `devgov run` → primary slice **ruff + compileall + pytest** all passed (265 tests). Honest gate before/after edits.
 

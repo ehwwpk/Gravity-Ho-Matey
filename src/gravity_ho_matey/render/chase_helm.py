@@ -46,7 +46,7 @@ def _hud_bank_rad(slip: float, turn_rate: float) -> float:
     return max(-0.42, min(0.42, slip * 0.6 + turn_rate * 0.0005))
 
 
-def _ship_frame_accel(world: GameWorld, ship_angle: float) -> tuple[float, float, float]:
+def ship_frame_gravity(world: GameWorld, ship_angle: float) -> tuple[float, float, float]:
     """Forward, lateral, total gravity in ship frame."""
     accel = gravity_acceleration_at(world.ship.pos, world.wells) * world.config.gravity_scale
     forward = Vec2.from_angle(ship_angle)
@@ -55,6 +55,58 @@ def _ship_frame_accel(world: GameWorld, ship_angle: float) -> tuple[float, float
     g_lat = accel.dot(right)
     return g_fwd, g_lat, accel.length()
 
+
+def _ship_frame_accel(world: GameWorld, ship_angle: float) -> tuple[float, float, float]:
+    return ship_frame_gravity(world, ship_angle)
+
+
+def _playfield_accent(level_theme: str) -> tuple[str, str]:
+    if level_theme == "solar":
+        return palette.HUD_ACCENT_SOLAR, palette.HUD_DIM
+    if level_theme == "rift":
+        return palette.RIFT_HUD_ACCENT, palette.HUD_DIM
+    if level_theme == "siege":
+        return palette.SIEGE_HUD_ACCENT, palette.HUD_DIM
+    return palette.HUD_ACCENT, palette.HUD_DIM
+
+
+def draw_tactical_flight_instruments(
+    canvas: tk.Canvas,
+    world: GameWorld,
+    *,
+    viewport_width: int,
+    viewport_height: int,
+    ship_angle: float,
+) -> None:
+    """Compact velocity + gravity summary for tactical mode — shared math with chase helm."""
+    accent, dim = _playfield_accent(world.config.level_theme)
+    vel = world.ship.vel
+    slip = slip_angle_rad(vel, ship_angle) if vel.length_sq() >= 16.0 else 0.0
+    g_fwd, g_lat, g_total = ship_frame_gravity(world, ship_angle)
+    play_bottom = float(viewport_height) - 8.0
+
+    _draw_speed_instruments(
+        canvas,
+        12.0,
+        play_bottom - 78.0,
+        vel.length(),
+        world.config.max_ship_speed,
+        slip=slip,
+        thrusting=world.ship.boost_flash > 0.0,
+        accent=accent,
+        dim=dim,
+        compact=True,
+    )
+    _draw_gravity_compact_summary(
+        canvas,
+        viewport_width - 12.0,
+        play_bottom - 12.0,
+        g_fwd,
+        g_lat,
+        g_total,
+        accent=accent,
+        dim=dim,
+    )
 
 def draw_xwing_cockpit_hud(
     canvas: tk.Canvas,
@@ -77,7 +129,7 @@ def draw_xwing_cockpit_hud(
     vel = world.ship.vel
     slip = slip_angle_rad(vel, ship_angle) if vel.length_sq() >= 16.0 else 0.0
     bank = _hud_bank_rad(slip, camera.turn_rate)
-    g_fwd, g_lat, g_total = _ship_frame_accel(world, ship_angle)
+    g_fwd, g_lat, g_total = ship_frame_gravity(world, ship_angle)
 
     _draw_banked_horizon(canvas, horizon, vw, bank, turn_rate=camera.turn_rate, accent=accent, dim=dim)
     _draw_canopy_frame(canvas, vw, vh, play_top, accent=accent, dim=dim)
@@ -185,36 +237,91 @@ def _draw_speed_instruments(
     thrusting: bool,
     accent: str,
     dim: str,
+    compact: bool = False,
 ) -> None:
-    bar_w = 148.0
-    bar_h = 14.0
+    bar_w = 108.0 if compact else 148.0
+    bar_h = 10.0 if compact else 14.0
+    speed_font = ("Courier", 11, "bold") if compact else ("Courier", 14, "bold")
+    label_font = ("Courier", 8, "bold") if compact else ("Courier", 9, "bold")
     norm = min(1.0, speed / max(1.0, max_speed))
 
-    canvas.create_text(x, y, text="VELOCITY", anchor="sw", fill=dim, font=("Courier", 9, "bold"))
-    canvas.create_text(x + bar_w, y, text=f"{int(speed)}", anchor="se", fill=accent, font=("Courier", 14, "bold"))
-    by = y + 10
-    canvas.create_rectangle(x, by, x + bar_w, by + bar_h, outline=accent, width=2)
+    canvas.create_text(x, y, text="VELOCITY", anchor="sw", fill=dim, font=label_font)
+    canvas.create_text(x + bar_w, y, text=f"{int(speed)}", anchor="se", fill=accent, font=speed_font)
+    by = y + (8 if compact else 10)
+    canvas.create_rectangle(x, by, x + bar_w, by + bar_h, outline=accent, width=2 if not compact else 1)
     for tick in (0.25, 0.5, 0.75):
         tx = x + bar_w * tick
         canvas.create_line(tx, by, tx, by + bar_h, fill=dim, width=1)
     fill_color = palette.HELM_THREAT_LETHAL if norm > 0.88 else palette.HELM_THREAT_HEAVY if norm > 0.68 else accent
     canvas.create_rectangle(x + 2, by + 2, x + 2 + (bar_w - 4) * norm, by + bar_h - 2, fill=fill_color, outline="")
 
-    slip_y = by + bar_h + 14
-    canvas.create_text(x, slip_y, text="SLIP", anchor="sw", fill=dim, font=("Courier", 8))
+    slip_y = by + bar_h + (10 if compact else 14)
+    canvas.create_text(x, slip_y, text="SLIP", anchor="sw", fill=dim, font=("Courier", 7 if compact else 8))
     slip_norm = max(-1.0, min(1.0, slip / 0.65))
     slip_cx = x + bar_w * 0.5
-    canvas.create_line(x + 8, slip_y + 12, x + bar_w - 8, slip_y + 12, fill=dim, width=1)
-    canvas.create_line(slip_cx, slip_y + 6, slip_cx, slip_y + 18, fill=dim, width=1)
+    slip_h = 10 if compact else 12
+    canvas.create_line(x + 8, slip_y + slip_h, x + bar_w - 8, slip_y + slip_h, fill=dim, width=1)
+    canvas.create_line(slip_cx, slip_y + (4 if compact else 6), slip_cx, slip_y + slip_h + 6, fill=dim, width=1)
     slip_x = slip_cx + slip_norm * (bar_w * 0.42)
     slip_color = palette.HELM_THREAT_HEAVY if abs(slip) > _SLIP_WARN else accent
-    canvas.create_oval(slip_x - 6, slip_y + 6, slip_x + 6, slip_y + 18, fill=slip_color, outline="#dff", width=1)
+    dot_r = 5 if compact else 6
+    canvas.create_oval(
+        slip_x - dot_r,
+        slip_y + (4 if compact else 6),
+        slip_x + dot_r,
+        slip_y + slip_h + 6,
+        fill=slip_color,
+        outline="#dff",
+        width=1,
+    )
 
-    if thrusting:
+    if thrusting and not compact:
         boost_y = slip_y + 26
         canvas.create_text(x, boost_y, text="BOOST", anchor="sw", fill=palette.HELM_THREAT_HEAVY, font=("Courier", 8, "bold"))
         canvas.create_rectangle(x, boost_y + 8, x + bar_w * 0.55, boost_y + 16, fill=palette.HELM_THREAT_HEAVY, outline="")
+    elif thrusting:
+        canvas.create_text(x + bar_w, slip_y + slip_h + 2, text="BOOST", anchor="ne", fill=palette.HELM_THREAT_HEAVY, font=("Courier", 7, "bold"))
 
+
+def _draw_gravity_compact_summary(
+    canvas: tk.Canvas,
+    anchor_x: float,
+    anchor_y: float,
+    g_fwd: float,
+    g_lat: float,
+    g_total: float,
+    *,
+    accent: str,
+    dim: str,
+) -> None:
+    """Tactical-only gravity summary — complements heatmap without full chase G-ball."""
+    radius = 28.0
+    cx = anchor_x - radius - 8.0
+    cy = anchor_y - radius - 22.0
+    g_fwd_n = max(-1.0, min(1.0, g_fwd / _G_REF))
+    g_lat_n = max(-1.0, min(1.0, g_lat / _G_REF))
+    warn = palette.HELM_THREAT_HEAVY
+    danger = palette.HELM_THREAT_LETHAL
+    ring_color = danger if g_total > _G_REF * 1.4 else warn if g_total > _G_REF * 0.75 else accent
+
+    canvas.create_text(anchor_x, cy - radius - 6, text="GRAV", anchor="ne", fill=dim, font=("Courier", 8, "bold"))
+    canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, outline=ring_color, width=2)
+    canvas.create_oval(cx - radius + 3, cy - radius + 3, cx + radius - 3, cy + radius - 3, outline=dim, width=1)
+    canvas.create_line(cx - radius + 4, cy, cx + radius - 4, cy, fill=dim, width=1)
+    canvas.create_line(cx, cy - radius + 4, cx, cy + radius - 4, fill=dim, width=1)
+    dot_x = cx + g_lat_n * (radius - 8.0)
+    dot_y = cy - g_fwd_n * (radius - 8.0)
+    dot_color = danger if g_total > _G_REF * 1.4 else warn if g_total > _G_REF * 0.65 else accent
+    canvas.create_oval(dot_x - 5, dot_y - 5, dot_x + 5, dot_y + 5, fill=dot_color, outline="#eef", width=1)
+    canvas.create_text(anchor_x, cy + radius + 6, text=f"{g_total:.0f} G", anchor="ne", fill=ring_color, font=("Courier", 10, "bold"))
+    canvas.create_text(
+        anchor_x,
+        cy + radius + 20,
+        text=f"F{g_fwd:+.0f}  R{g_lat:+.0f}",
+        anchor="ne",
+        fill=accent,
+        font=("Courier", 8),
+    )
 
 def _draw_g_force_instruments(
     canvas: tk.Canvas,
