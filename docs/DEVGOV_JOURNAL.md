@@ -31,7 +31,7 @@ Then reload Cursor and confirm **devgov** MCP is enabled in Settings → Tools &
 ## 2026-06-02 — Bulk ship: clean slate commit (no DevGov on diff)
 
 ### -EV (medium) · Large multi-session diff committed without check/run
-User requested commit-all + push for clean slate; agent skipped `devgov check` / `devgov run` on this changeset per explicit instruction. Manual pytest ~354 passed before commit; **not** DevGov-gated proof.
+User requested commit-all + push for clean slate; agent skipped `devgov check` / `devgov run` on this changeset per explicit instruction. Manual pytest ~354 passed before commit; **not** DevGov-gated proof. Shipped **`0b14c2c`**.
 
 ### neutral · Agent ownership rule locked for next sessions
 Added `.cursor/rules/devgov-agent-ownership.mdc` — agent runs loop every coding pass, records journal with +EV/-EV weights (light/medium/strong/critical). Human is not the DevGov operator.
