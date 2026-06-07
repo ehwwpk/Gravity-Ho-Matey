@@ -19,8 +19,8 @@ RING_SPECS: tuple[tuple[float, int, tuple[str, ...]], ...] = (
     (440.0, 14, ("pebble", "rock", "rock")),
     (660.0, 16, ("rock", "rock", "pebble", "rock")),
     (880.0, 16, ("rock", "rock", "boulder", "pebble")),
-    (1100.0, 14, ("rock", "boulder", "rock", "pebble")),
-    (1320.0, 12, ("boulder", "rock", "rock", "pebble")),
+    (1100.0, 22, ("rock", "boulder", "rock", "pebble")),
+    (1320.0, 20, ("boulder", "rock", "rock", "pebble")),
     (1980.0, 22, ("pebble", "rock", "rock", "rock", "boulder", "rock")),
 )
 
@@ -28,7 +28,7 @@ FINAL_RING_RADIUS = RING_SPECS[-1][0]
 FINISH_ORBIT_RADIUS = FINAL_RING_RADIUS + FINISH_PAST_FINAL
 
 # Far-off titans — massive gravity footprint, small lethal maw (Drift mega wells).
-TITAN_WELL_RADIUS_SCALE = 5.0
+TITAN_WELL_RADIUS_SCALE = 6.25  # +25% gravity footprint vs original 5.0× base radii
 TITAN_WELLS: tuple[GravityWell, ...] = (
     GravityWell(
         Vec2(CENTER.x - 920.0, CENTER.y - 780.0),
@@ -66,7 +66,7 @@ TITAN_WELLS: tuple[GravityWell, ...] = (
 
 # Squid nest — just inside the final dense belt (prowling angles in degrees).
 SQUID_RING_RADIUS = FINAL_RING_RADIUS - 60.0
-SQUID_ANGLES_DEG: tuple[float, ...] = (35.0, 95.0, 155.0, 215.0, 275.0)
+SQUID_ANGLES_DEG: tuple[float, ...] = (35.0, 65.0, 95.0, 155.0, 215.0, 245.0, 275.0)
 
 
 @dataclass(frozen=True, slots=True)

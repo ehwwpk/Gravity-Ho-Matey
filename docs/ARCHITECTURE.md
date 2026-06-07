@@ -115,6 +115,10 @@ Presentation is split from simulation:
 
 `V` cycles tactical ↔ chase cam without changing physics or `ControlIntent`.
 
+## Agent workflow (DevGov)
+
+Every coding session that touches the repo should run the DevGov loop — **check before edits**, **run after edits**, then read `Artifacts/DevGov/agent/session_context.json` (MCP `devgov_*` tools when connected, CLI fallback). Honest usage notes go in `docs/DEVGOV_JOURNAL.md`. Do not claim DevGov gated a change if check/run were skipped on that diff.
+
 ## Tests
 
 Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, registry alignment, drifting asteroid shape/motion/collision/render paths, and destructible asteroid combat (tiers, breakup, threat snapshot refresh).

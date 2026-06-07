@@ -19,7 +19,21 @@ Then reload Cursor and confirm **devgov** MCP is enabled in Settings → Tools &
 
 ---
 
-## 2026-06-06 — Drifting procedural asteroids (v1 end-to-end)
+## 2026-06-07 — Drift density, titan wells, squid aggro
+
+### +EV · Full loop on a focused tuning diff
+`devgov check --task "Drift outer ring density titan wells squids"` on clean tree → implement → `devgov run` → primary slice **ruff + compileall + pytest** all passed (265 tests). Honest gate before/after edits.
+
+### +EV · T0 steered a small multi-boundary change without over-planning
+Changed layout, squid AI, tests, ARCHITECTURE, and devgov rule; T0 listed python + docs boundaries; primary pytest covered gameplay; doc_lint floor passed on ARCHITECTURE edit.
+
+### neutral · MCP still Adobe-only in this session
+DevGov MCP not in enabled server folder — used CLI per journal fallback. `alwaysApply: true` set on `.cursor/rules/devgov.mdc` so the loop is always-on for agents.
+
+### neutral · `devgov run` exit 12 — sub:tests slice skips (expected)
+Primary python slice green; generic `sub:tests` has disqualifying skips (no Phase-1 mapping). Same pattern as prior sessions — not a gameplay failure.
+
+---
 
 ### +EV · Pre-edit `devgov check` scoped the large multi-file change
 Task string for asteroid replacement; LOW on clean tree before edits, then primary slice **ruff + compileall + pytest** green after implementation (157 tests).

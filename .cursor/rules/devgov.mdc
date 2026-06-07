@@ -2,7 +2,7 @@
 description: DevGov — read session_context after init/check/plan/run; steer before opening other JSON
 globs:
   - "**/*"
-alwaysApply: false
+alwaysApply: true
 ---
 
 Tuning: For small repos you may set `alwaysApply: true`. For large monorepos, keep `alwaysApply: false` and use globs (e.g. `src/**`).

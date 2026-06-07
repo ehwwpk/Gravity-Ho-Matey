@@ -48,7 +48,8 @@ class DriftLevelTests(unittest.TestCase):
         self.assertEqual(len(world.asteroids), expected_rocks)
         self.assertEqual(len(world.wells), 4)
         self.assertTrue(all(w.kind == "black_hole" for w in world.wells))
-        self.assertEqual(len(world.enemies), 5)
+        self.assertEqual(len(world.enemies), 7)
+        self.assertEqual(len(build_drift_layout().squid_angles_deg), 7)
         self.assertTrue(all(e.kind is EnemyKind.SQUID for e in world.enemies))
 
     def test_nearby_rocks_have_collision_meshes(self) -> None:

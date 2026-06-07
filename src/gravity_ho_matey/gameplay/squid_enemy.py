@@ -30,7 +30,8 @@ class SquidEnemy:
     hits_remaining: int = SQUID_HITS_MAX
     approach_thrust: float = 480.0
     max_speed: float = 208.0
-    engage_range: float = 920.0
+    detect_range: float = 1380.0
+    engage_range: float = 1200.0
     orbit_radius: float = 62.0
     orbit_speed: float = 168.0
     wrap_spring: float = 4.6
@@ -175,8 +176,11 @@ class SquidEnemy:
             return
 
         if dist > self.engage_range:
-            drift = Vec2(math.cos(self.facing_angle), math.sin(self.facing_angle)) * 34.0
-            accel += drift * 0.28
+            if dist <= self.detect_range:
+                accel += radial * (self.approach_thrust * 0.24)
+            else:
+                drift = Vec2(math.cos(self.facing_angle), math.sin(self.facing_angle)) * 34.0
+                accel += drift * 0.28
         elif dist > self.orbit_radius + 28.0:
             accel += radial * (self.approach_thrust * (1.2 if dist > self.engage_range * 0.5 else 1.0))
         else:
