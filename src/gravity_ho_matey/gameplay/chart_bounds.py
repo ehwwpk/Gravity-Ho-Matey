@@ -15,10 +15,8 @@ _CHART_SECTOR_BASE_FRAC = CHART_BOUNDS_MARGIN_FRAC * 1.10
 # Stacked: sector base +10%, then +12.5%, then +10% playtest follow-up ≈ +37% total vs first L1/L2 margins.
 CHART_RIM_EXPAND_L12 = 1.2375
 CHART_SECTOR_MARGIN_FRAC = _CHART_SECTOR_BASE_FRAC * CHART_RIM_EXPAND_L12
-# Level 1 Cove play chart — sector base + another 5% per side, then L12 expand.
+# Level 1 Cove — sector base + another 5% per side, then L12 expand (void hazards follow same margin).
 COVE_CHART_MARGIN_FRAC = (_CHART_SECTOR_BASE_FRAC + CHART_BOUNDS_MARGIN_FRAC) * CHART_RIM_EXPAND_L12
-# Cove void ring / rim hazards — placement frozen at pre-expand rim (objects unchanged).
-COVE_OOB_PLACEMENT_MARGIN_FRAC = _CHART_SECTOR_BASE_FRAC + CHART_BOUNDS_MARGIN_FRAC
 
 # Camera: ramp free-follow over this distance past the chart rim (world units).
 OOB_CAMERA_BLEND_FULL_DIST = 90.0
@@ -59,7 +57,7 @@ def chart_limits_for_margin_frac(
     config: WorldConfig,
     margin_frac: float,
 ) -> tuple[float, float, float, float]:
-    """Chart rect for an explicit margin — used when hazard placement stays on an older rim."""
+    """Chart rect for an explicit margin — tests and historical margin comparisons."""
     mx = config.width * margin_frac
     my = config.height * margin_frac
     return (-mx, -my, config.width + mx, config.height + my)

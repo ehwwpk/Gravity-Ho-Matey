@@ -80,6 +80,44 @@ class BroodSurfaceVizTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_brood_fauna_tactical_draws_drift_ribbon_without_error(self) -> None:
+        try:
+            import tkinter as tk
+        except tk.TclError:
+            self.skipTest("Tk unavailable")
+        from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
+        from gravity_ho_matey.levels.brood_moon_layout import SURFACE_FLOOR_Y, SURFACE_WRAP_WIDTH
+        from gravity_ho_matey.levels.level_registry import build_level
+        from gravity_ho_matey.render.brood_fauna_viz import draw_brood_fauna_tactical
+        from gravity_ho_matey.render.camera import CameraMode, ViewCamera
+        from gravity_ho_matey.render.lighting import LightRig
+
+        world = build_level("brood_moon")
+        bm = world.brood_moon
+        assert bm is not None
+        bm.phase = BroodPhase.SURFACE
+        # Near drift_ribbon anchor (frac 0.252) so _draw_drift_ribbon runs.
+        world.ship.pos = Vec2(SURFACE_WRAP_WIDTH * 0.252, SURFACE_FLOOR_Y - 140.0)
+        camera = ViewCamera(mode=CameraMode.TACTICAL)
+        camera.snap_tactical_to_ship(world.ship.pos, world.config)
+        rig = LightRig.for_play(theme="brood_moon", camera_mode=CameraMode.TACTICAL)
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            canvas = tk.Canvas(root, width=960, height=640)
+            draw_brood_fauna_tactical(
+                canvas,
+                camera,
+                world,
+                hud_top=54.0,
+                ship_pos=world.ship.pos,
+                ship_angle=world.ship.angle,
+                rig=rig,
+            )
+            self.assertGreater(len(canvas.find_all()), 0)
+        finally:
+            root.destroy()
+
 
 class BroodHazardVisibilityTests(unittest.TestCase):
     def test_orbital_debris_outside_exclusion_band(self) -> None:

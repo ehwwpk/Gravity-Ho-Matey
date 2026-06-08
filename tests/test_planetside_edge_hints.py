@@ -79,6 +79,41 @@ class PlanetsideEdgeHintTests(unittest.TestCase):
         )
         self.assertEqual(hints, [])
 
+    def test_boss_rim_hint_when_spawned_off_screen(self) -> None:
+        from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
+        from gravity_ho_matey.levels.brood_moon_surface import boss_anchor
+        from gravity_ho_matey.render.edge_hints import draw_edge_hints
+
+        world = build_level("brood_moon")
+        apply_surface_layout(world)
+        bm = world.brood_moon
+        assert bm is not None
+        bm.boss_spawned = True
+        anchor = boss_anchor()
+        world.mega_squid = MegaSquidBoss(pos=anchor, anchor=anchor)
+        world.ship.pos = Vec2(400.0, 1200.0)
+
+        camera = ViewCamera(
+            mode=CameraMode.TACTICAL,
+            viewport_width=960,
+            viewport_height=640,
+            tactical_scale=0.42,
+        )
+        camera.center = world.ship.pos
+
+        try:
+            import tkinter as tk
+
+            root = tk.Tk()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"Tk unavailable: {exc}") from exc
+        root.withdraw()
+        canvas = tk.Canvas(root, width=960, height=640)
+        draw_edge_hints(canvas, world, camera, hud_top=48.0)
+        text_items = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
+        self.assertIn("BOSS", text_items)
+        root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

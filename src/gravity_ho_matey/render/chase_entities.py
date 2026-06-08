@@ -10,8 +10,9 @@ from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.beacon_viz import beacon_seed_from_pos, draw_beacon_play
 from gravity_ho_matey.render.camera import CHASE_BEACON_SCALE_FLOOR, CHASE_BEACON_VISUAL_BOOST
 from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
-from gravity_ho_matey.render.entity_viz import draw_gate_glyph
+from gravity_ho_matey.render.entity_viz import gate_label
 from gravity_ho_matey.render.enemy_viz import draw_patrol_enemy_chase
+from gravity_ho_matey.render.gate_viz import draw_gate_portal_play
 from gravity_ho_matey.render.lighting import LightRig
 from gravity_ho_matey.render.squid_viz import draw_squid_enemy_chase
 
@@ -54,9 +55,14 @@ def draw_chase_gate(
     gate_size: float,
     depth_scale: float = 1.0,
     elapsed: float = 0.0,
+    rig: LightRig | None = None,
 ) -> None:
+    from gravity_ho_matey.render.camera import CameraMode
+
     scale = max(0.55, min(1.35, depth_scale))
-    draw_gate_glyph(
+    theme = "solar" if solar else "cove"
+    play_rig = rig or LightRig.for_play(theme=theme, camera_mode=CameraMode.CHASE)
+    draw_gate_portal_play(
         canvas,
         pos.x,
         pos.y,
@@ -64,7 +70,9 @@ def draw_chase_gate(
         unlocked=unlocked,
         solar=solar,
         scale=scale,
+        rig=play_rig,
         elapsed=elapsed,
+        label=gate_label(unlocked=unlocked, solar=solar),
     )
 
 

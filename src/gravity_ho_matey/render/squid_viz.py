@@ -162,9 +162,11 @@ def draw_boss_tentacle_crown(
     engaging: bool,
     elapsed: float,
     tentacle_count: int = 10,
+    phase: int = 1,
 ) -> None:
     """Brood-mother crown tentacles — arcs toward prey, not a hazard oval."""
-    reach = radius * scale * (3.2 if engaging else 2.4)
+    phase_boost = 1.0 + (phase - 1) * 0.12
+    reach = radius * scale * (3.2 if engaging else 2.4) * phase_boost
     to_prey = math.atan2(prey_y - sy, prey_x - sx)
     body = (sx, sy)
     for i in range(tentacle_count):

@@ -1,8 +1,8 @@
 from gravity_ho_matey.gameplay.chart_bounds import (
+    CHART_BOUNDS_MARGIN_FRAC,
     CHART_RIM_EXPAND_L12,
     CHART_SECTOR_MARGIN_FRAC,
     COVE_CHART_MARGIN_FRAC,
-    COVE_OOB_PLACEMENT_MARGIN_FRAC,
 )
 from gravity_ho_matey.levels.level_registry import LEVEL_BUILDERS, build_level
 
@@ -60,17 +60,10 @@ def test_cove_is_light_intro_asteroid_field() -> None:
 
 
 def test_cove_chart_rim_mediums_sit_just_outside_chart() -> None:
-    from dataclasses import replace
-
     from gravity_ho_matey.gameplay.asteroid_tiers import AsteroidTier
-    from gravity_ho_matey.gameplay.chart_bounds import (
-        COVE_OOB_PLACEMENT_MARGIN_FRAC,
-        chart_oob_distance,
-        ship_in_chart,
-    )
+    from gravity_ho_matey.gameplay.chart_bounds import chart_oob_distance, ship_in_chart
 
     world = build_level("cove")
-    placement_cfg = replace(world.config, chart_margin_frac=COVE_OOB_PLACEMENT_MARGIN_FRAC)
     rim = [
         a
         for a in world.asteroids
@@ -78,10 +71,9 @@ def test_cove_chart_rim_mediums_sit_just_outside_chart() -> None:
     ]
     assert len(rim) == 4
     for asteroid in rim:
-        assert not ship_in_chart(asteroid.pos, placement_cfg)
+        assert not ship_in_chart(asteroid.pos, world.config)
         dist = chart_oob_distance(asteroid.pos, world.config)
-        # Hazard rim frozen; expanded play chart may overlap slightly.
-        assert -2.0 <= dist <= 18.0
+        assert 2.0 <= dist <= 18.0
 
 
 def test_solar_level_is_open_space_layout() -> None:
@@ -130,26 +122,27 @@ def test_solar_level_has_patrol_enemies() -> None:
     assert any(enemy.alive for enemy in world.enemies)
 
 
-def test_cove_play_chart_wider_than_hazard_placement_rim() -> None:
-    from dataclasses import replace
-
+def test_cove_void_hazards_track_play_chart() -> None:
+    """Void ring and rim rocks share config.chart_margin_frac — one boundary."""
     from gravity_ho_matey.core.vector import Vec2
-    from gravity_ho_matey.gameplay.chart_bounds import (
-        COVE_OOB_PLACEMENT_MARGIN_FRAC,
-        chart_limits,
-        chart_limits_for_margin_frac,
-        ship_in_chart,
-    )
+    from gravity_ho_matey.gameplay.chart_bounds import chart_limits, oob_ring_radius, ship_in_chart
 
     world = build_level("cove")
     x0, _, x1, _ = chart_limits(world.config)
-    px0, _, px1, _ = chart_limits_for_margin_frac(world.config, COVE_OOB_PLACEMENT_MARGIN_FRAC)
-    assert x0 < px0
-    assert x1 > px1
-    probe = Vec2(px0 - 4.0, world.config.height * 0.5)
-    old_cfg = replace(world.config, chart_margin_frac=COVE_OOB_PLACEMENT_MARGIN_FRAC)
-    assert not ship_in_chart(probe, old_cfg)
-    assert ship_in_chart(probe, world.config)
+    probe = Vec2(x0 - 4.0, world.config.height * 0.5)
+    assert ship_in_chart(probe, world.config) is False
+
+    anchor = Vec2(world.config.width * 0.5, world.config.height * 0.5)
+    expected_ring = oob_ring_radius(world.config)
+    main_ring = [
+        a
+        for a in world.asteroids
+        if a.free_bounds and a.ring_radius and abs(a.ring_radius - expected_ring) < 1.0
+    ]
+    assert len(main_ring) == 12
+    for asteroid in main_ring:
+        self_dist = (asteroid.pos - anchor).length()
+        assert abs(self_dist - expected_ring) < 14.0
 
 
 def test_chart_sectors_use_expanded_margin_on_levels_one_and_two() -> None:
@@ -159,27 +152,30 @@ def test_chart_sectors_use_expanded_margin_on_levels_one_and_two() -> None:
     assert cove.config.chart_margin_frac == COVE_CHART_MARGIN_FRAC
     assert solar.config.chart_margin_frac == CHART_SECTOR_MARGIN_FRAC
     assert drift.config.chart_margin_frac != CHART_SECTOR_MARGIN_FRAC
-    assert abs(COVE_CHART_MARGIN_FRAC / COVE_OOB_PLACEMENT_MARGIN_FRAC - CHART_RIM_EXPAND_L12) < 1e-6
-    assert abs(CHART_SECTOR_MARGIN_FRAC / (COVE_OOB_PLACEMENT_MARGIN_FRAC - 0.05) - CHART_RIM_EXPAND_L12) < 1e-6
+    sector_base = CHART_BOUNDS_MARGIN_FRAC * 1.10
+    cove_pre_expand = sector_base + CHART_BOUNDS_MARGIN_FRAC
+    assert abs(COVE_CHART_MARGIN_FRAC / cove_pre_expand - CHART_RIM_EXPAND_L12) < 1e-6
+    assert abs(CHART_SECTOR_MARGIN_FRAC / sector_base - CHART_RIM_EXPAND_L12) < 1e-6
 
 
-def test_l12_play_chart_gives_more_room_than_pre_expand_rim() -> None:
-    """Play chart must extend well past the frozen hazard-placement rim on both L1/L2."""
+def test_l12_play_chart_expanded_vs_original_base() -> None:
+    """L1/L2 play charts extend outward vs pre-playtest base margins."""
     from gravity_ho_matey.gameplay.chart_bounds import chart_limits, chart_limits_for_margin_frac
 
-    for level_id in ("cove", "solar"):
+    sector_base = CHART_BOUNDS_MARGIN_FRAC * 1.10
+    for level_id, original_frac in (
+        ("cove", sector_base + CHART_BOUNDS_MARGIN_FRAC),
+        ("solar", sector_base),
+    ):
         world = build_level(level_id)
         x0, y0, x1, y1 = chart_limits(world.config)
-        px0, py0, px1, py1 = chart_limits_for_margin_frac(
-            world.config, COVE_OOB_PLACEMENT_MARGIN_FRAC if level_id == "cove" else (COVE_OOB_PLACEMENT_MARGIN_FRAC - 0.05)
-        )
-        assert x0 < px0
-        assert y0 < py0
-        assert x1 > px1
-        assert y1 > py1
-        # At least ~10 world units of grace beyond the old rim on every axis (Cove L1).
-        assert px0 - x0 >= 10.0
-        assert x1 - px1 >= 10.0
+        ox0, oy0, ox1, oy1 = chart_limits_for_margin_frac(world.config, original_frac)
+        assert x0 < ox0
+        assert y0 < oy0
+        assert x1 > ox1
+        assert y1 > oy1
+        assert ox0 - x0 >= 10.0
+        assert x1 - ox1 >= 10.0
 
 
 def test_level_registry_matches_builders() -> None:

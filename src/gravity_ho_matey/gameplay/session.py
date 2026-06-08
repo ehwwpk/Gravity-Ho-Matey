@@ -6,6 +6,7 @@ from gravity_ho_matey.gameplay.chart_bounds import nudge_ship_into_chart
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.gameplay.drone_session import deploy_drone_wingman
+from gravity_ho_matey.gameplay.nifflerp_session import deploy_nifflerp
 from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
 from gravity_ho_matey.gameplay.world import GameWorld
@@ -45,6 +46,7 @@ def wire_world_for_campaign(
     world.player_weapon_track = campaign.weapon_track
     world.player_weapon_advanced = campaign.weapon_advanced
     deploy_drone_wingman(world, campaign)
+    deploy_nifflerp(world, campaign)
 
 
 def chip_damage_recovers_in_place(*, life_lost: bool) -> bool:

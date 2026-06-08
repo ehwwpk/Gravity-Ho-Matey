@@ -53,6 +53,21 @@ class BroodMoonLevelTests(unittest.TestCase):
         self.assertEqual(len(world.egg_pods), 8)
         self.assertTrue(world.config.surface_wrap)
 
+    def test_objectives_greenlight_at_six_pods_not_all_eight(self) -> None:
+        from gravity_ho_matey.gameplay.brood_moon_mission import surface_objectives_met
+
+        world = build_level("brood_moon")
+        apply_surface_layout(world)
+        for beacon in world.beacons:
+            beacon.collected = True
+        for i, pod in enumerate(world.egg_pods):
+            pod.alive = i < 2  # six ruptured, two intact
+        self.assertTrue(surface_objectives_met(world))
+
+        for pod in world.egg_pods[:3]:
+            pod.alive = True
+        self.assertFalse(surface_objectives_met(world))
+
     def test_objectives_seal_and_dock_win(self) -> None:
         world = build_level("brood_moon")
         apply_surface_layout(world)

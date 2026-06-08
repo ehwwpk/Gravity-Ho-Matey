@@ -9,6 +9,7 @@ class PowerUpKind(Enum):
     BOOST_TAP = auto()
     RUBBER_HULL = auto()
     DRONE_WINGMAN = auto()
+    NIFFLERP = auto()
     HULL_REINFORCE = auto()
     DRONE_REPAIR = auto()
     DRONE_ARMOR = auto()
@@ -26,6 +27,7 @@ POWERUP_LABELS: dict[PowerUpKind, str] = {
     PowerUpKind.BOOST_TAP: "Shift Boost Coil — +8% shift-burst per tier",
     PowerUpKind.RUBBER_HULL: "Rubber Hull — 10 asteroid bounces, no chip damage",
     PowerUpKind.DRONE_WINGMAN: "Guardian Drone — escorts next sector, 5 HP, overheats",
+    PowerUpKind.NIFFLERP: "Nifflerp — jewel retriever, 3 HP, no guns, extreme agility",
     PowerUpKind.HULL_REINFORCE: "Bulkhead Plating — +2 hull chunks per life (max 3 buys)",
     PowerUpKind.DRONE_REPAIR: "Drone Field Kit — restore escort to full HP",
     PowerUpKind.DRONE_ARMOR: "Drone Armor Kit — escort max HP 8 (was 5)",
@@ -43,6 +45,7 @@ POWERUP_HUD_TAGS: dict[PowerUpKind, str] = {
     PowerUpKind.BOOST_TAP: "SHIFT",
     PowerUpKind.RUBBER_HULL: "RUBBER",
     PowerUpKind.DRONE_WINGMAN: "DRONE",
+    PowerUpKind.NIFFLERP: "NIFFLR",
     PowerUpKind.HULL_REINFORCE: "BULKHD",
     PowerUpKind.DRONE_REPAIR: "DR-FIX",
     PowerUpKind.DRONE_ARMOR: "DR-ARM",

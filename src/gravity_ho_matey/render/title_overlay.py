@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import tkinter as tk
 from enum import Enum, auto
 
@@ -10,11 +9,10 @@ from gravity_ho_matey.levels.level_registry import LEVEL_LABELS, LEVEL_ORDER
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.holo_shop_overlay import HoloShopOverlay
-from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_level_row, draw_menu_button, measure_text
+from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_level_row, draw_menu_button, draw_wrapped_text
 from gravity_ho_matey.render.shop_tree_view import ShopTreeView
-from gravity_ho_matey.render.title_home_layout import compute_body_panel, compute_codex_layout, compute_welcome_home_layout
+from gravity_ho_matey.render.title_home_layout import compute_codex_layout, compute_welcome_home_layout
 from gravity_ho_matey.render.title_home_viz import (
-    draw_campaign_status_chip,
     draw_hangar_bay,
     draw_title_starfield,
 )
@@ -24,21 +22,27 @@ from gravity_ho_matey.render.title_deploy_list import (
     DeployListLayout,
     TitleChromeLayout,
     clamp_scroll,
-    compute_deploy_list_layout,
+    compute_deploy_split_layout,
     row_screen_y,
     row_visible,
     title_chrome_layout,
     viewport_contains,
     visible_row_hit_rect,
 )
+from gravity_ho_matey.render.title_info_pages import (
+    draw_combat_page,
+    draw_helm_page,
+    draw_mission_page,
+    draw_sector_dossier,
+)
 
 _LEVEL_DETAILS: dict[str, str] = {
-    "cove": "Beacon run · gravity wells · training chart",
-    "solar": "Vertical strip · patrol skiffs · singularity",
-    "drift": "Open belts · void squids · north exit",
-    "rift": "Relay hold · 3 waves · Brood-Mother · RTB extract",
-    "siege": "12v12 skirmish · spiral belt · hostile station",
-    "brood_moon": "Land on nursery moon · tag · rupture · RTB",
+    "cove": "Tag 3/4 beacons · unlock exit · learn wells",
+    "solar": "All 3 beacons · cross singularity strip · south exit",
+    "drift": "No beacons · push north · open gate · shake squids",
+    "rift": "Hold relay · 3 waves · extract south",
+    "siege": "Clear 12-hostile roster · escorts · optional station",
+    "brood_moon": "Land · tag · rupture pods · seal lap · dock RTB",
 }
 
 _LEVEL_LOCK: dict[str, str] = {
@@ -68,9 +72,11 @@ TITLE_PAGE_ORDER: tuple[TitlePage, ...] = (
 )
 from gravity_ho_matey.settings import DEV_UNLOCK_ALL_LEVELS
 
-_PAGE_RAIL_H = 24.0
+_PAGE_RAIL_H = 42.0
 _PAGE_RAIL_GAP = 6.0
 _BODY_SHOP_GAP = 8.0
+_SHOP_STRIP_H = 34.0
+_WELCOME_BAZAAR_H = 112.0
 
 _PAGE_LABELS: dict[TitlePage, str] = {
     TitlePage.WELCOME: "WELCOME",
@@ -89,7 +95,9 @@ class TitleScreenOverlay:
     MARGIN = 20
     TOP_BAR_H = 54
     FOOTER_H = 52
-    SHOP_CTA_H = 36
+    SHOP_CTA_H = 36  # legacy alias for chart briefing parity
+    SHOP_STRIP_H = _SHOP_STRIP_H
+    PAGE_RAIL_H = _PAGE_RAIL_H
     FONT_TITLE = ("Courier New", 32, "bold")
     FONT_SUBTITLE = ("Courier New", 11)
 
@@ -124,12 +132,13 @@ class TitleScreenOverlay:
         accent = palette.HUD_ACCENT
         dim = palette.HUD_DIM
         frame = palette.HUD_FRAME
+        shop_strip = 0.0 if page is TitlePage.WELCOME else float(_SHOP_STRIP_H)
         chrome = title_chrome_layout(
             screen_h=float(self.HEIGHT),
             top_bar_h=float(self.TOP_BAR_H),
             footer_h=float(self.FOOTER_H),
-            rail_h=_PAGE_RAIL_H,
-            shop_h=float(self.SHOP_CTA_H),
+            rail_h=float(_PAGE_RAIL_H),
+            shop_h=shop_strip,
             margin_gap=_PAGE_RAIL_GAP,
             body_pad=_BODY_SHOP_GAP,
         )
@@ -144,36 +153,46 @@ class TitleScreenOverlay:
                 canvas, chrome, accent, dim, frame, campaign, hover_id, elapsed, codex,
             )
         elif page is TitlePage.MISSION:
-            self._draw_mission_page(canvas, chrome, accent, dim, frame)
+            draw_mission_page(
+                canvas, chrome, screen_w=float(self.WIDTH), accent=accent, dim=dim, frame=frame, elapsed=elapsed,
+            )
         elif page is TitlePage.HELM:
-            self._draw_helm_page(canvas, chrome, accent, dim, frame)
+            draw_helm_page(
+                canvas, chrome, screen_w=float(self.WIDTH), accent=accent, dim=dim, frame=frame, elapsed=elapsed,
+            )
         elif page is TitlePage.COMBAT:
-            self._draw_combat_page(canvas, chrome, accent, dim, frame)
+            draw_combat_page(
+                canvas, chrome, screen_w=float(self.WIDTH), accent=accent, dim=dim, frame=frame, elapsed=elapsed,
+            )
         else:
-            scroll = clamp_scroll(deploy_scroll, compute_deploy_list_layout(chrome, screen_w=float(self.WIDTH)))
+            split = compute_deploy_split_layout(chrome, screen_w=float(self.WIDTH))
+            scroll = clamp_scroll(deploy_scroll, split.list)
             self._draw_deploy_page(
                 canvas,
                 chrome,
+                split,
                 accent,
                 dim,
                 frame,
                 deploy_focus=deploy_focus,
                 deploy_scroll=scroll,
                 hover_id=hover_id,
+                elapsed=elapsed,
             )
 
-        self._shop.draw_bazaar_cta(
-            canvas,
-            x=self.MARGIN,
-            y=chrome.shop_y,
-            w=self.WIDTH - 2 * self.MARGIN,
-            h=chrome.shop_h,
-            campaign=campaign,
-            hits=self.hits,
-            accent=accent,
-            hover_id=hover_id,
-            elapsed=elapsed,
-        )
+        if page is not TitlePage.WELCOME and shop_strip > 0.0:
+            self._shop.draw_compact_bazaar_strip(
+                canvas,
+                x=self.MARGIN,
+                y=chrome.shop_y,
+                w=self.WIDTH - 2 * self.MARGIN,
+                h=chrome.shop_h,
+                campaign=campaign,
+                hits=self.hits,
+                accent=accent,
+                hover_id=hover_id,
+                elapsed=elapsed,
+            )
         self._draw_footer(
             canvas,
             page,
@@ -244,10 +263,6 @@ class TitleScreenOverlay:
                 font=hp.FONT_SMALL,
             )
 
-    def _body_panel(self, chrome: TitleChromeLayout) -> tuple[float, float, float, float]:
-        panel = compute_body_panel(chrome, screen_w=float(self.WIDTH))
-        return panel.x, panel.y, panel.w, panel.h
-
     def _draw_deploy_scrollbar(
         self,
         canvas: tk.Canvas,
@@ -272,6 +287,7 @@ class TitleScreenOverlay:
         self,
         canvas: tk.Canvas,
         chrome: TitleChromeLayout,
+        split,
         accent: str,
         dim: str,
         frame: str,
@@ -279,16 +295,18 @@ class TitleScreenOverlay:
         deploy_focus: int,
         deploy_scroll: float,
         hover_id: str | None,
+        elapsed: float,
     ) -> None:
-        layout = compute_deploy_list_layout(chrome, screen_w=float(self.WIDTH))
+        layout = split.list
         scroll = clamp_scroll(deploy_scroll, layout)
         self.deploy_layout = layout
+        level_id = LEVEL_ORDER[deploy_focus]
 
         x, y, w, h = layout.panel_x, layout.panel_y, layout.panel_w, layout.panel_h
         hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
-        draw_holo_corners(canvas, x, y, w, h, accent=accent)
+        draw_holo_corners(canvas, x, y, w, h, accent=accent, elapsed=elapsed)
         hp.draw_panel_title(canvas, x + 16, y + 14, "CHART MANIFEST", color=dim)
-        hint = "↑ ↓ · wheel scroll · Enter" if layout.max_scroll > 0.0 else "Click row or ↑ ↓ + Enter"
+        hint = "↑ ↓ · wheel · Enter" if layout.max_scroll > 0.0 else "↑ ↓ · Enter"
         canvas.create_text(x + w - 16, y + 14, anchor="e", text=hint, fill=dim, font=hp.FONT_SMALL)
 
         vy0 = layout.viewport_y
@@ -297,15 +315,15 @@ class TitleScreenOverlay:
         canvas.create_line(x + 12, vy1, x + w - 12, vy1, fill=frame, width=1)
 
         list_w = layout.viewport_w - (24.0 if layout.max_scroll > 0.0 else 0.0)
-        for i, level_id in enumerate(LEVEL_ORDER):
+        for i, lid in enumerate(LEVEL_ORDER):
             hit = visible_row_hit_rect(layout, i, scroll)
             if hit is None:
                 continue
             hx, hy, hw, hh = hit
-            region_id = f"level:{level_id}"
+            region_id = f"level:{lid}"
             self.hits.add(region_id, hx, hy, hw, hh)
             ry = row_screen_y(layout, i, scroll)
-            label = LEVEL_LABELS.get(level_id, level_id)
+            label = LEVEL_LABELS.get(lid, lid)
             title = label.split(" — ", 1)[-1] if " — " in label else label
             draw_level_row(
                 canvas,
@@ -315,17 +333,16 @@ class TitleScreenOverlay:
                 layout.row_h,
                 index=i + 1,
                 title=title,
-                detail=_LEVEL_DETAILS.get(level_id, ""),
+                detail=_LEVEL_DETAILS.get(lid, ""),
                 accent=accent,
                 dim=dim,
                 frame=frame,
-                unlocked=is_level_selectable(level_id),
-                lock_reason=_LEVEL_LOCK.get(level_id, "Locked"),
+                unlocked=is_level_selectable(lid),
+                lock_reason=_LEVEL_LOCK.get(lid, "Locked"),
                 selected=i == deploy_focus,
                 hover=hover_id == region_id,
             )
 
-        # Rows can extend past the viewport; mask bleed then restore chrome.
         canvas.create_rectangle(x, y, x + w, vy0, fill=palette.HUD_BG, outline="")
         canvas.create_rectangle(
             layout.viewport_x,
@@ -339,7 +356,7 @@ class TitleScreenOverlay:
         canvas.create_text(x + w - 16, y + 14, anchor="e", text=hint, fill=dim, font=hp.FONT_SMALL)
         canvas.create_line(x + 12, vy0, x + w - 12, vy0, fill=frame, width=1)
         canvas.create_line(x + 12, vy1, x + w - 12, vy1, fill=frame, width=1)
-        draw_holo_corners(canvas, x, y, w, h, accent=accent)
+        draw_holo_corners(canvas, x, y, w, h, accent=accent, elapsed=elapsed)
 
         self._draw_deploy_scrollbar(canvas, layout, scroll, accent=accent, dim=dim)
 
@@ -347,9 +364,23 @@ class TitleScreenOverlay:
             x + 16,
             vy1 + 8,
             anchor="w",
-            text="Power-up stacks persist for the whole campaign run.",
+            text="Fittings persist for the whole campaign run.",
             fill=dim,
             font=hp.FONT_BODY,
+        )
+
+        prev = split.preview
+        draw_sector_dossier(
+            canvas,
+            prev.x,
+            prev.y,
+            prev.w,
+            prev.h,
+            level_id,
+            accent=accent,
+            dim=dim,
+            frame=frame,
+            elapsed=elapsed,
         )
 
     def _draw_welcome_page(
@@ -370,7 +401,82 @@ class TitleScreenOverlay:
         entry = codex_state.entry()
         p = layout.panel
         hp.draw_panel(canvas, p.x, p.y, p.w, p.h, frame=frame, accent=accent, fill=palette.HUD_BG)
-        draw_holo_corners(canvas, p.x, p.y, p.w, p.h, accent=accent)
+        draw_holo_corners(canvas, p.x, p.y, p.w, p.h, accent=accent, elapsed=elapsed)
+
+        lx = layout.left_x
+        left_w = layout.left_w
+        ly = p.y + 20.0
+        bazaar_h = _WELCOME_BAZAAR_H
+        bazaar_y = p.y + p.h - bazaar_h - 14.0
+
+        canvas.create_line(lx - 4, p.y + 16, lx - 4, bazaar_y - 8, fill=frame, width=1)
+
+        canvas.create_text(lx, ly, anchor="w", text="GRAVITY HO,", fill=palette.TEXT, font=("Courier New", 28, "bold"))
+        canvas.create_text(lx, ly + 34, anchor="w", text="MATEY!", fill=accent, font=("Courier New", 28, "bold"))
+        draw_wrapped_text(
+            canvas,
+            lx,
+            ly + 76,
+            "Chart cursed sectors, loot patrol skiffs, and sling-shot past the maw.",
+            max_width=left_w - 8,
+            line_height=14.0,
+            color=dim,
+            font=self.FONT_SUBTITLE,
+            max_lines=2,
+        )
+
+        btn_w = left_w - 4.0
+        btn_h = 44.0
+        btn_x = lx
+        btn_y = ly + 108
+        self.hits.add("goto_deploy", btn_x, btn_y, btn_w, btn_h)
+        draw_menu_button(
+            canvas,
+            btn_x,
+            btn_y,
+            btn_w,
+            btn_h,
+            "SELECT LEVEL →",
+            accent=accent,
+            dim=dim,
+            frame=frame,
+            hover=hover_id == "goto_deploy",
+            selected=True,
+        )
+
+        hints_y = btn_y + btn_h + 16
+        canvas.create_text(
+            lx,
+            hints_y,
+            anchor="w",
+            text="↑ ↓ browse field codex",
+            fill=dim,
+            font=hp.FONT_SMALL,
+        )
+        canvas.create_text(
+            lx,
+            hints_y + 16,
+            anchor="w",
+            text="← → briefing tabs · Enter deploys",
+            fill=dim,
+            font=hp.FONT_SMALL,
+        )
+
+        self._shop.draw_welcome_bazaar_card(
+            canvas,
+            x=lx,
+            y=bazaar_y,
+            w=btn_w,
+            h=bazaar_h,
+            campaign=campaign,
+            hits=self.hits,
+            accent=accent,
+            dim=dim,
+            frame=frame,
+            hover_id=hover_id,
+            elapsed=elapsed,
+        )
+
         draw_hangar_bay(
             canvas,
             layout,
@@ -393,139 +499,6 @@ class TitleScreenOverlay:
             hover_id=hover_id,
             hits=self.hits,
         )
-
-        lx = layout.left_x
-        ly = p.y + 20.0
-        canvas.create_text(lx, ly, anchor="w", text="GRAVITY HO,", fill=palette.TEXT, font=("Courier New", 28, "bold"))
-        canvas.create_text(lx, ly + 34, anchor="w", text="MATEY!", fill=accent, font=("Courier New", 28, "bold"))
-        draw_fitted_text(
-            canvas,
-            lx,
-            ly + 78,
-            "Chart cursed sectors, loot patrol skiffs, and escape the maw.",
-            max_width=layout.left_w - 8,
-            color=dim,
-            font=self.FONT_SUBTITLE,
-        )
-
-        btn_w = min(240.0, layout.left_w - 4.0)
-        btn_h = 44.0
-        btn_x = lx
-        btn_y = ly + 108
-        self.hits.add("goto_deploy", btn_x, btn_y, btn_w, btn_h)
-        draw_menu_button(
-            canvas,
-            btn_x,
-            btn_y,
-            btn_w,
-            btn_h,
-            "SELECT LEVEL →",
-            accent=accent,
-            dim=dim,
-            frame=frame,
-            hover=hover_id == "goto_deploy",
-            selected=True,
-        )
-
-        draw_campaign_status_chip(
-            canvas, lx, btn_y + btn_h + 14, campaign=campaign, accent=accent, dim=dim, frame=frame,
-        )
-
-        tips_y = btn_y + btn_h + 58
-        canvas.create_text(
-            lx,
-            tips_y,
-            anchor="w",
-            text="Holo Bazaar below · B to trade",
-            fill=accent,
-            font=hp.FONT_BODY,
-        )
-        canvas.create_text(
-            lx,
-            tips_y + 20,
-            anchor="w",
-            text="↑ ↓ codex · ← → tabs · last tab = charts",
-            fill=dim,
-            font=hp.FONT_SMALL,
-        )
-
-    def _draw_mission_page(
-        self, canvas: tk.Canvas, chrome: TitleChromeLayout, accent: str, dim: str, frame: str,
-    ) -> None:
-        x, y, w, h = self._body_panel(chrome)
-        hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
-        draw_holo_corners(canvas, x, y, w, h, accent=accent)
-        hp.draw_panel_title(canvas, x + 16, y + 14, "MISSION DIRECTIVE", color=dim)
-        lines = [
-            ("Objective", "Collect every nav beacon on the chart."),
-            ("Exit", "All beacons logged unlocks the finish gate."),
-            ("Loot", "Destroy patrol skiffs — fittings carry across charts."),
-            ("Briefing", "Review the holo map before each launch."),
-            ("Holo Bazaar", "Trade deck on nav station and between sectors."),
-        ]
-        ry = y + 42
-        row_pitch = max(42.0, (h - 56) / max(1, len(lines)))
-        for heading, body in lines:
-            hp.draw_body_line(canvas, x + 20, ry, heading, color=accent, bold=True)
-            draw_fitted_text(canvas, x + 20, ry + 18, body, max_width=w - 40, color=palette.TEXT, font=hp.FONT_BODY)
-            ry += row_pitch
-
-    def _draw_helm_page(self, canvas: tk.Canvas, chrome: TitleChromeLayout, accent: str, dim: str, frame: str) -> None:
-        x, y, w, h = self._body_panel(chrome)
-        hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
-        draw_holo_corners(canvas, x, y, w, h, accent=accent)
-        hp.draw_panel_title(canvas, x + 16, y + 14, "HELM & WEAPONS", color=dim)
-        rows = [
-            ("A / D  ·  ← / →", "Rotate sail"),
-            ("W  ·  ↑", "Main thrusters"),
-            ("Shift", "Reactor burst"),
-            ("Space", "Fire cannon"),
-            ("V", "Tactical / chase camera"),
-            ("E (hold)", "Land / ascend (Brood Moon)"),
-            ("R", "Restart chart"),
-            ("Esc", "Return to nav station"),
-        ]
-        row_pitch = max(28.0, (h - 52) / max(1, len(rows)))
-        for i, (key, action) in enumerate(rows):
-            hp.draw_key_value_row(
-                canvas,
-                x + 24,
-                y + 42 + i * row_pitch,
-                key,
-                action,
-                accent=accent,
-                dim=palette.TEXT,
-                key_width=132.0,
-            )
-
-    def _draw_combat_page(self, canvas: tk.Canvas, chrome: TitleChromeLayout, accent: str, dim: str, frame: str) -> None:
-        x, y, w, h = self._body_panel(chrome)
-        hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
-        draw_holo_corners(canvas, x, y, w, h, accent=accent)
-        hp.draw_panel_title(canvas, x + 16, y + 14, "COMBAT & SURVIVAL", color=dim)
-        col_w = (w - 48) / 2
-        left_blocks = [
-            ("Lives", "3 lives for the full campaign.", palette.TEXT),
-            ("Hull", "3 chunks per life — chips respawn you.", palette.TEXT),
-            ("Maw", "Singularity contact = life lost.", palette.HUD_WARN),
-            ("Skiff scrape", "Patrol ram costs 1 hull chunk.", accent),
-        ]
-        right_blocks = [
-            ("Void squid", "Tentacles cling — 1 chunk / 2s.", palette.SQUID_CORE),
-            ("Asteroids", "Impact costs 1 hull chunk.", accent),
-            ("Open drift", "5s off-chart = 1 chunk, no respawn.", palette.HUD_WARN),
-        ]
-        block_pitch = max(48.0, (h - 56) / max(4, len(left_blocks)))
-        for i, (heading, body, color) in enumerate(left_blocks):
-            rx = x + 20
-            ry = y + 42 + i * block_pitch
-            hp.draw_body_line(canvas, rx, ry, heading, color=accent, bold=True)
-            draw_fitted_text(canvas, rx, ry + 18, body, max_width=col_w - 8, color=color, font=hp.FONT_BODY)
-        for i, (heading, body, color) in enumerate(right_blocks):
-            rx = x + 24 + col_w
-            ry = y + 42 + i * block_pitch
-            hp.draw_body_line(canvas, rx, ry, heading, color=accent, bold=True)
-            draw_fitted_text(canvas, rx, ry + 18, body, max_width=col_w - 8, color=color, font=hp.FONT_BODY)
 
     def _draw_footer(
         self,
@@ -577,11 +550,11 @@ class TitleScreenOverlay:
         )
 
         if page is TitlePage.DEPLOY:
-            center = "Select a chart · Enter confirms · wheel scrolls list · B opens Holo Bazaar"
+            center = "Pick a chart · dossier updates on focus · Enter launches · B = Bazaar"
         elif page is TitlePage.WELCOME:
-            center = "Open Holo Bazaar to trade · Select Level to launch"
+            center = "Field codex · deploy from Select Level or last tab"
         else:
-            center = "Use PREV / NEXT tabs · B opens Holo Bazaar"
+            center = "Briefing tabs below · B opens Holo Bazaar on any page"
         draw_fitted_text(
             canvas,
             self.WIDTH // 2,
@@ -629,29 +602,31 @@ class TitleScreenOverlay:
         hover_id: str | None,
         elapsed: float,
     ) -> None:
-        tab_h = 22.0
-        tab_y = chrome.rail_y + (chrome.rail_h - tab_h) * 0.5
-        idx = TITLE_PAGE_ORDER.index(page)
-        inner_w = self.WIDTH - self.MARGIN * 2
-        tab_font = hp.FONT_BODY
-        tab_pad = 12.0
-        tab_gap = 6.0
-        labels = [_PAGE_LABELS[terminal] for terminal in TITLE_PAGE_ORDER]
-        tab_widths = [measure_text(label, tab_font) + tab_pad * 2 for label in labels]
-        total_w = sum(tab_widths) + tab_gap * (len(tab_widths) - 1)
-        start_x = self.MARGIN + max(0.0, (inner_w - total_w) * 0.5)
-        tab_x = start_x
-        for terminal, label, tab_w in zip(TITLE_PAGE_ORDER, labels, tab_widths):
+        _ = elapsed
+        bar_x = float(self.MARGIN)
+        bar_y = chrome.rail_y
+        bar_w = float(self.WIDTH - 2 * self.MARGIN)
+        bar_h = chrome.rail_h
+        tab_gap = 4.0
+        count = len(TITLE_PAGE_ORDER)
+        seg_w = (bar_w - tab_gap * (count - 1)) / count
+
+        hp.draw_panel(canvas, bar_x, bar_y, bar_w, bar_h, frame=dim, accent=accent, fill="#060810")
+        canvas.create_line(bar_x, bar_y, bar_x + bar_w, bar_y, fill=accent, width=1)
+
+        for index, terminal in enumerate(TITLE_PAGE_ORDER):
+            label = _PAGE_LABELS[terminal]
+            sx = bar_x + index * (seg_w + tab_gap)
             region_id = f"tab:{terminal.name.lower()}"
-            self.hits.add(region_id, tab_x, tab_y, tab_w, tab_h)
+            self.hits.add(region_id, sx, bar_y, seg_w, bar_h)
             selected = terminal is page
             hover = hover_id == region_id
             draw_menu_button(
                 canvas,
-                tab_x,
-                tab_y,
-                tab_w,
-                tab_h,
+                sx,
+                bar_y + 2.0,
+                seg_w,
+                bar_h - 4.0,
                 label,
                 accent=accent,
                 dim=dim,
@@ -660,15 +635,8 @@ class TitleScreenOverlay:
                 selected=selected,
                 hover=hover,
             )
-            tab_x += tab_w + tab_gap
-        pulse = 0.5 + 0.5 * math.sin(elapsed * 3.0)
-        canvas.create_text(
-            self.WIDTH / 2,
-            chrome.rail_y - 6,
-            text=TITLE_PAGE_ORDER[idx].name.replace("_", " ").title(),
-            fill=accent if pulse > 0.5 else dim,
-            font=hp.FONT_SMALL,
-        )
+            if selected:
+                canvas.create_line(sx + 6, bar_y + bar_h - 3, sx + seg_w - 6, bar_y + bar_h - 3, fill=accent, width=2)
 
     def _draw_background_stars(
         self,

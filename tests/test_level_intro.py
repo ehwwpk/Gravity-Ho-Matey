@@ -368,6 +368,50 @@ class LevelIntroRenderTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_intro_status_line_is_rift_only(self) -> None:
+        try:
+            import tkinter as tk
+        except tk.TclError:
+            self.skipTest("Tk unavailable")
+        from gravity_ho_matey.render.animated_image import AnimatedImageSequence
+        from gravity_ho_matey.render.level_intro_overlay import LevelIntroOverlay
+
+        def _header_text(level_id: str) -> str:
+            spec = intro_spec_for(level_id)
+            asset = resolve_intro_asset(spec) if spec else None
+            if spec is None or asset is None:
+                self.skipTest(f"{level_id} intro asset unavailable")
+            root = tk.Tk()
+            root.withdraw()
+            try:
+                canvas = tk.Canvas(root, width=960, height=640)
+                sequence = AnimatedImageSequence.load(asset, max_width=900, max_height=460, master=root)
+                frame = sequence.frame(0)
+                canvas._hold = frame
+                LevelIntroOverlay().draw(
+                    canvas,
+                    level_id=level_id,
+                    spec=spec,
+                    frame_image=frame,
+                    elapsed=1.0,
+                    playback_seconds=6.0,
+                    progress=0.2,
+                )
+                parts = [
+                    canvas.itemcget(item, "text")
+                    for item in canvas.find_all()
+                    if canvas.type(item) == "text"
+                ]
+                return " ".join(parts)
+            finally:
+                root.destroy()
+
+        cove_txt = _header_text("cove")
+        self.assertIn("LINK", cove_txt)
+        self.assertNotIn("RELAY", cove_txt)
+        rift_txt = _header_text("rift")
+        self.assertIn("RELAY", rift_txt)
+
 
 if __name__ == "__main__":
     unittest.main()

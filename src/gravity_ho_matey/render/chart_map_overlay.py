@@ -18,10 +18,16 @@ from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode
 from gravity_ho_matey.render.entity_viz import draw_gate_glyph
-from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button
+from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button, draw_wrapped_text
 from gravity_ho_matey.render.shop_tree_view import ShopTreeView
 from gravity_ho_matey.render.gravity_field_viz import heatmap_cell_visible, inside_black_hole_footprint
 from gravity_ho_matey.render.world_draw import gravity_field_color
+from gravity_ho_matey.narrative.chart_briefing_copy import (
+    BRIEFING_LOW_PRIORITY,
+    BRIEFING_SECTION_ORDER,
+    LEVEL_BRIEFING,
+    LEVEL_INTEL,
+)
 
 # Layout aligned with SciFiHudOverlay command deck (960×640).
 _HEADER_H = 54
@@ -29,8 +35,56 @@ _CLEARED_H = 34
 _FOOTER_H = 82
 _SHOP_CTA_H = 38
 _MARGIN = 12
-_SIDE_W = 164
-_MAP_GAP = 10
+_BRIEFING_W = 252
+_INTEL_W = 142
+_MAP_GAP = 8
+_BRIEF_LINE_H = 12.0
+_INTEL_LINE_H = 12.0
+
+
+@dataclass(frozen=True, slots=True)
+class _ChartBodyLayout:
+    body_top: float
+    body_h: float
+    briefing_x: float
+    briefing_w: float
+    map_x: float
+    map_w: float
+    intel_x: float
+    intel_w: float
+
+
+def _chart_body_layout(vw: float, body_top: float, body_h: float) -> _ChartBodyLayout:
+    briefing_x = float(_MARGIN)
+    briefing_w = float(_BRIEFING_W)
+    intel_w = float(_INTEL_W)
+    intel_x = float(vw) - _MARGIN - intel_w
+    map_x = briefing_x + briefing_w + _MAP_GAP
+    map_w = max(320.0, intel_x - _MAP_GAP - map_x)
+    return _ChartBodyLayout(
+        body_top=body_top,
+        body_h=body_h,
+        briefing_x=briefing_x,
+        briefing_w=briefing_w,
+        map_x=map_x,
+        map_w=map_w,
+        intel_x=intel_x,
+        intel_w=intel_w,
+    )
+
+
+def _group_briefing_sections(rows: tuple[tuple[str, str], ...]) -> dict[str, str]:
+    """Merge continuation lines into one wrapped body per section label."""
+    sections: dict[str, list[str]] = {}
+    current = ""
+    for label, value in rows:
+        if label:
+            current = label
+            if value:
+                sections.setdefault(current, []).append(value)
+        elif value and current:
+            sections.setdefault(current, []).append(value)
+    return {key: " · ".join(parts) for key, parts in sections.items()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,14 +166,13 @@ class ChartMapOverlay:
         footer_top = vh - _FOOTER_H - 8
         body_bottom = footer_top - _SHOP_CTA_H - 6
         body_h = body_bottom - body_top
-        map_x = _MARGIN + _SIDE_W + _MAP_GAP
-        map_w = vw - 2 * _MARGIN - 2 * _SIDE_W - 2 * _MAP_GAP
+        layout = _chart_body_layout(vw, body_top, body_h)
         self._draw_side_mission(
             canvas,
-            _MARGIN,
-            body_top,
-            _SIDE_W,
-            body_h,
+            layout.briefing_x,
+            layout.body_top,
+            layout.briefing_w,
+            layout.body_h,
             campaign,
             cleared_level_id,
             elapsed,
@@ -129,13 +182,13 @@ class ChartMapOverlay:
             dim,
             frame,
         )
-        self._draw_holo_map(canvas, world, field, map_x, body_top, map_w, body_h, accent, dim, frame, elapsed)
+        self._draw_holo_map(canvas, world, field, layout.map_x, layout.body_top, layout.map_w, layout.body_h, accent, dim, frame, elapsed)
         self._draw_side_intel(
             canvas,
-            vw - _MARGIN - _SIDE_W,
-            body_top,
-            _SIDE_W,
-            body_h,
+            layout.intel_x,
+            layout.body_top,
+            layout.intel_w,
+            layout.body_h,
             world,
             upcoming_level_id,
             accent,
@@ -202,27 +255,27 @@ class ChartMapOverlay:
             beacon_color = palette.BEACON
         canvas.create_text(344, 30, anchor="w", text=beacon_text, fill=beacon_color, font=self.FONT_DISPLAY)
 
-        hp.draw_panel(canvas, 470, 6, 118, 42, frame=frame, accent=accent)
-        hp.draw_panel_title(canvas, 478, 12, "SECTOR", color=dim)
+        hp.draw_panel(canvas, 462, 6, 132, 42, frame=frame, accent=accent)
+        hp.draw_panel_title(canvas, 470, 12, "SECTOR", color=dim)
         draw_fitted_text(
             canvas,
-            478,
+            470,
             30,
             world.config.level_name.upper(),
-            max_width=104,
+            max_width=118,
             color=accent,
-            font=("Courier New", 10, "bold"),
+            font=("Courier New", 9, "bold"),
         )
 
-        hp.draw_panel(canvas, 594, 6, 118, 42, frame=frame, accent=accent)
-        hp.draw_panel_title(canvas, 602, 12, "CHART MODE", color=dim)
-        chart_mode = "HOLO PREVIEW" if cleared_level_id else "INITIAL BRIEF"
+        hp.draw_panel(canvas, 600, 6, 112, 42, frame=frame, accent=accent)
+        hp.draw_panel_title(canvas, 608, 12, "CHART MODE", color=dim)
+        chart_mode = "PREVIEW" if cleared_level_id else "PRE-BRIEF"
         draw_fitted_text(
             canvas,
-            602,
+            608,
             30,
             chart_mode,
-            max_width=104,
+            max_width=98,
             color=accent,
             font=("Courier New", 10, "bold"),
         )
@@ -337,6 +390,92 @@ class ChartMapOverlay:
             ry += line_h
         return ry
 
+    @staticmethod
+    def _draw_wrapped_kv(
+        canvas: tk.Canvas,
+        x: float,
+        y: float,
+        width: float,
+        label: str,
+        value: str,
+        *,
+        accent: str,
+        dim: str,
+        value_color: str | None = None,
+        max_lines: int = 3,
+        line_h: float = _INTEL_LINE_H,
+        bottom_y: float | None = None,
+    ) -> float:
+        if bottom_y is not None and y >= bottom_y:
+            return y
+        inner = max(8.0, width - 20.0)
+        hp.draw_panel_title(canvas, x + 10, y, label, color=dim)
+        text_y = y + 11
+        if bottom_y is not None and text_y >= bottom_y:
+            return y
+        used = draw_wrapped_text(
+            canvas,
+            x + 10,
+            text_y,
+            value,
+            max_width=inner,
+            line_height=line_h,
+            color=value_color or accent,
+            font=ChartMapOverlay.FONT_SMALL,
+            max_lines=max_lines,
+        )
+        return text_y + used + 6.0
+
+    @staticmethod
+    def _draw_briefing_sections(
+        canvas: tk.Canvas,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        *,
+        sections: dict[str, str],
+        accent: str,
+        dim: str,
+    ) -> None:
+        bottom = y + h - 8.0
+        ry = y + 28.0
+        inner = max(8.0, w - 20.0)
+        ordered = [key for key in BRIEFING_SECTION_ORDER if key in sections]
+        for key in sections:
+            if key not in ordered:
+                ordered.append(key)
+
+        def _section_height(body: str, max_lines: int) -> float:
+            from gravity_ho_matey.render.menu_ui import wrap_text_lines
+
+            lines = wrap_text_lines(body, inner, ChartMapOverlay.FONT_SMALL, max_lines=max_lines)
+            return 11.0 + len(lines) * _BRIEF_LINE_H + 8.0
+
+        # First pass: draw high-priority sections; skip low-priority if they would clip.
+        for label in ordered:
+            body = sections[label]
+            max_lines = 4 if label in ("OBJECTIVE", "ORBITAL", "SURFACE", "WIN") else 2
+            need = _section_height(body, max_lines)
+            if label in BRIEFING_LOW_PRIORITY and ry + need > bottom:
+                continue
+            if ry + 11.0 > bottom:
+                break
+            hp.draw_panel_title(canvas, x + 10, ry, label, color=dim)
+            ry += 11.0
+            used = draw_wrapped_text(
+                canvas,
+                x + 10,
+                ry,
+                body,
+                max_width=inner,
+                line_height=_BRIEF_LINE_H,
+                color=accent,
+                font=ChartMapOverlay.FONT_SMALL,
+                max_lines=max_lines,
+            )
+            ry += used + 8.0
+
     def _draw_side_mission(
         self,
         canvas: tk.Canvas,
@@ -356,84 +495,11 @@ class ChartMapOverlay:
         hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
         if cleared_level_id is None:
             hp.draw_panel_title(canvas, x + 10, y + 10, "BRIEFING", color=dim)
-            if upcoming_level_id == "siege":
-                rows = [
-                    ("OBJECTIVE", "Eliminate 12 hostiles"),
-                    ("", "Exit opens on roster clear"),
-                    ("", "Station optional · blocks lane"),
-                    ("ALLIES", "12 wing escorts"),
-                    ("", "Push through spiral belt"),
-                    ("HAZARDS", "Hostile station · tractor"),
-                    ("", "Reinforcements ~17s"),
-                    ("", "4 black hole pockets"),
-                    ("STATUS", "Ready to launch"),
-                ]
-            elif upcoming_level_id == "brood_moon":
-                rows = [
-                    ("OBJECTIVE", "Land on the Brood Moon"),
-                    ("", "Tag 3 surface beacons"),
-                    ("", "Rupture 8 egg pods"),
-                    ("", "Circumnav seal · quarantine dock"),
-                    ("OPTIONAL", "Brood-Mother hunt · jewels"),
-                    ("CONTROLS", "Hold E to land / ascend"),
-                    ("HAZARDS", "Squid nursery · alarm pods"),
-                    ("", "Boss locks liftoff nearby"),
-                    ("STATUS", "Ready to launch"),
-                ]
-            elif upcoming_level_id == "rift":
-                rows = [
-                    ("OBJECTIVE", "Hold the relay station"),
-                    ("", "Survive 3 timed waves"),
-                    ("", "Kill Brood-Mother + swarm"),
-                    ("EXIT", "RTB to south extract pad"),
-                    ("ALLIES", "Station spawn bay"),
-                    ("", "Fighters drip from relay"),
-                    ("HAZARDS", "3 titan black holes"),
-                    ("", "Patrol + squid assault"),
-                    ("STATUS", "Ready to launch"),
-                ]
-            elif upcoming_level_id == "drift":
-                rows = [
-                    ("OBJECTIVE", "Reach north exit gate"),
-                    ("", "No beacons — gate open"),
-                    ("HAZARDS", "7 concentric belts"),
-                    ("", "Titan black holes"),
-                    ("", "Void squid wrap"),
-                    ("STATUS", "Ready to launch"),
-                ]
-            elif upcoming_level_id == "solar":
-                rows = [
-                    ("OBJECTIVE", "Collect all beacons"),
-                    ("", "Cross the singularity"),
-                    ("HAZARDS", "Patrol skiffs · maw"),
-                    ("", "Drifting asteroids"),
-                    ("STATUS", "Ready to launch"),
-                ]
-            else:
-                rows = [
-                    ("OBJECTIVE", "Collect all beacons"),
-                    ("", "Unlock exit gate"),
-                    ("CONTROLS", "Arrows · thrust · fire"),
-                    ("HAZARDS", "Gravity wells"),
-                    ("", "Drifting asteroids"),
-                    ("STATUS", "Ready to launch"),
-                ]
-            ry = y + 28
-            for label, value in rows:
-                if label:
-                    hp.draw_panel_title(canvas, x + 10, ry, label, color=dim)
-                    ry += 13
-                if value:
-                    draw_fitted_text(
-                        canvas,
-                        x + 10,
-                        ry,
-                        value,
-                        max_width=w - 20,
-                        color=accent,
-                        font=self.FONT,
-                    )
-                    ry += 18 if label else 15
+            rows = LEVEL_BRIEFING.get(upcoming_level_id, LEVEL_BRIEFING["cove"])
+            sections = _group_briefing_sections(rows)
+            self._draw_briefing_sections(
+                canvas, x, y, w, h, sections=sections, accent=accent, dim=dim,
+            )
             return
 
         hp.draw_panel_title(canvas, x + 10, y + 10, "MISSION LOG", color=dim)
@@ -512,6 +578,30 @@ class ChartMapOverlay:
                 dim=dim,
                 value_color=palette.DRONE_CORE,
             )
+        if campaign.nifflerp_pending:
+            ry = self._draw_kv_line(
+                canvas,
+                x,
+                ry,
+                w,
+                "NIFFLERP",
+                "Deploys next sector",
+                accent=accent,
+                dim=dim,
+                value_color=palette.NIFFLERP_CORE,
+            )
+        elif campaign.nifflerp_hp > 0:
+            ry = self._draw_kv_line(
+                canvas,
+                x,
+                ry,
+                w,
+                "NIFFLERP",
+                f"{campaign.nifflerp_hp}/3 HP jewel retriever",
+                accent=accent,
+                dim=dim,
+                value_color=palette.NIFFLERP_CORE,
+            )
         if campaign.powerup_stacks:
             hp.draw_panel_title(canvas, x + 10, ry + 2, "FITTINGS", color=dim)
             chip_y = ry + 16
@@ -578,72 +668,49 @@ class ChartMapOverlay:
         hostiles = sum(1 for e in world.enemies if e.alive)
         squids = sum(1 for e in world.enemies if e.alive and e.kind is EnemyKind.SQUID)
         roster = world.roster_enemies_total if world.config.exit_requires_roster_clear else 0
-        hostile_label = "SQUIDS" if squids and squids == hostiles else "HOSTILES"
-        intel_rows: list[tuple[str, str]] = [
-            ("CHART ID", upcoming_level_id.upper()),
-            ("THEME", cfg.level_theme.upper()),
-            ("EXTENT", f"{cfg.width}×{cfg.height}"),
-            ("BEACONS", str(len(world.beacons)) if world.beacons else "NONE"),
-            ("WELLS", str(len(world.wells))),
-            (hostile_label, str(hostiles) if hostiles else "—"),
-        ]
+        bottom = y + h - (18.0 if strip else 8.0)
+        ry = y + 28.0
+
+        refresher = LEVEL_INTEL.get(upcoming_level_id, LEVEL_INTEL["cove"])
+        for label, value in refresher:
+            ry = self._draw_wrapped_kv(
+                canvas, x, ry, w, label, value,
+                accent=accent, dim=dim, max_lines=3, bottom_y=bottom,
+            )
+
+        status_parts: list[str] = []
+        if world.beacons:
+            required = world.beacons_required_for_exit
+            status_parts.append(f"{required} of {len(world.beacons)} beacons")
+        elif world.config.brood_moon_mission:
+            status_parts.append("surface beacons after land")
+        else:
+            status_parts.append("exit open — no beacons")
         if roster:
-            intel_rows.append(("ROSTER", f"{world.roster_enemies_remaining}/{roster}"))
+            status_parts.append(f"roster {world.roster_enemies_remaining}/{roster}")
+        elif hostiles:
+            label = "squids" if squids and squids == hostiles else "hostiles"
+            status_parts.append(f"{hostiles} {label}")
         if world.allies:
             alive_wings = sum(1 for a in world.allies if a.alive)
-            intel_rows.append(("ALLIES", f"{alive_wings}/{len(world.allies)}"))
-        if world.friendly_stations:
-            for station in world.friendly_stations:
-                if station.alive:
-                    intel_rows.append((f"RELAY {station.station_label}", f"{station.hits_remaining} HP"))
-        elif world.space_station is not None and world.space_station.alive:
-            intel_rows.append(("STATION", f"{world.space_station.hits_remaining} HP"))
-        intel_rows.extend(
-            [
-                ("ASTEROIDS", str(len(world.asteroids))),
-                ("BOUNDS", "OPEN" if cfg.open_bounds else "BOUNDED"),
-            ]
-        )
-        ry = y + 28
-        for label, value in intel_rows:
-            ry = self._draw_kv_line(canvas, x, ry, w, label, value, accent=accent, dim=dim, row_h=28.0)
-        hp.draw_panel_title(canvas, x + 10, ry + 4, "LEGEND", color=dim)
-        legend_y = ry + 20
-        legend_items = (
-            ("◆", "Beacon", palette.BEACON),
-            ("◎", "Well", palette.WELL),
-            ("●", "Singularity", palette.BLACK_HOLE_RING),
-            ("▣", "Gate", palette.GATE_LOCKED),
-            ("▲", "Spawn", palette.SHIP),
-            ("×", "Patrol", palette.ENEMY),
-            ("◉", "Squid", palette.SQUID_CORE),
-            ("⬡", "Asteroid", palette.ASTEROID_EDGE),
-        )
-        col_w = (w - 24) * 0.5
-        for index, (glyph, text, color) in enumerate(legend_items):
-            col = index % 2
-            row = index // 2
-            lx = x + 10 + col * col_w
-            ly = legend_y + row * 15
-            canvas.create_text(lx + 4, ly, anchor="w", text=glyph, fill=color, font=self.FONT)
-            draw_fitted_text(
-                canvas,
-                lx + 20,
-                ly,
-                text,
-                max_width=col_w - 24,
-                color=dim,
-                font=self.FONT_SMALL,
+            status_parts.append(f"{alive_wings}/{len(world.allies)} escorts")
+        if status_parts and ry < bottom:
+            ry = self._draw_wrapped_kv(
+                canvas, x, ry, w, "FIELD", " · ".join(status_parts),
+                accent=accent, dim=dim, max_lines=2, bottom_y=bottom,
             )
-        if strip:
-            draw_fitted_text(
+
+        if strip and ry < bottom:
+            draw_wrapped_text(
                 canvas,
                 x + 10,
-                y + h - 18,
-                "Vertical strip — spawn window on holo",
+                y + h - 22,
+                "Tall sector — map pans with your position.",
                 max_width=w - 20,
+                line_height=11.0,
                 color=dim,
                 font=self.FONT_SMALL,
+                max_lines=2,
             )
 
     def _draw_holo_map(
@@ -674,7 +741,7 @@ class ChartMapOverlay:
         inner_x = x + 14
         inner_y = y + 28
         inner_w = w - 28
-        inner_h = h - 42
+        inner_h = h - 56
         canvas.create_rectangle(inner_x, inner_y, inner_x + inner_w, inner_y + inner_h, fill="#040810", outline=frame)
         transform = self._map_transform(world, inner_x, inner_y, inner_w, inner_h)
         self._draw_map_field(canvas, field, transform, world.wells)
@@ -684,7 +751,27 @@ class ChartMapOverlay:
         self._draw_map_entities(canvas, world, transform, dim, elapsed)
         if transform.strip_window:
             self._draw_strip_window_chrome(canvas, world, transform, accent, dim)
+        self._draw_map_legend(canvas, inner_x, inner_y + inner_h + 4, inner_w, dim)
         hp.draw_scanlines(canvas, inner_x, inner_y, inner_w, inner_h)
+
+    @staticmethod
+    def _draw_map_legend(canvas: tk.Canvas, x: float, y: float, w: float, dim: str) -> None:
+        """Compact glyph strip under the map — same on every level."""
+        items = (
+            ("◆", palette.BEACON),
+            ("◎", palette.WELL),
+            ("●", palette.BLACK_HOLE_RING),
+            ("▣", palette.GATE_LOCKED),
+            ("▲", palette.SHIP),
+            ("×", palette.ENEMY),
+            ("◉", palette.SQUID_CORE),
+            ("⬡", palette.ASTEROID_EDGE),
+        )
+        step = w / len(items)
+        for index, (glyph, color) in enumerate(items):
+            cx = x + step * (index + 0.5)
+            canvas.create_text(cx, y + 6, text=glyph, fill=color, font=ChartMapOverlay.FONT_SMALL, anchor="center")
+        canvas.create_line(x, y, x + w, y, fill=dim, width=1)
 
     def _map_transform(
         self,
@@ -912,6 +999,10 @@ class ChartMapOverlay:
                 from gravity_ho_matey.render.squid_viz import draw_squid_map_glyph
 
                 draw_squid_map_glyph(canvas, mx, my, radius=r, facing=enemy.facing_angle)
+            elif enemy.kind is EnemyKind.HOSTILE_FIGHTER:
+                from gravity_ho_matey.render.enemy_viz import draw_hostile_fighter_map_glyph
+
+                draw_hostile_fighter_map_glyph(canvas, mx, my, radius=r, facing=enemy.facing_angle)
             else:
                 from gravity_ho_matey.render.enemy_viz import draw_patrol_enemy_map_glyph
 
@@ -966,7 +1057,7 @@ class ChartMapOverlay:
                 t.clip_x0 + 8,
                 t.clip_y0 + 10,
                 anchor="w",
-                text=f"↑ {int(t.world_y0)}u hidden",
+                text="↑ more chart",
                 fill=dim,
                 font=self.FONT_SMALL,
             )
@@ -975,7 +1066,7 @@ class ChartMapOverlay:
                 t.clip_x0 + 8,
                 t.clip_y1 - 10,
                 anchor="w",
-                text=f"↓ {int(wh - t.world_y1)}u below",
+                text="↓ more chart",
                 fill=dim,
                 font=self.FONT_SMALL,
             )
@@ -983,7 +1074,7 @@ class ChartMapOverlay:
             t.clip_x1 - 8,
             t.clip_y0 + 10,
             anchor="e",
-            text=f"WINDOW {int(t.world_y1 - t.world_y0)}u",
+            text="◈ PAN VIEW ◈",
             fill=accent,
             font=self.FONT_SMALL,
         )
@@ -1016,7 +1107,7 @@ class ChartMapOverlay:
             btn_y,
             launch_w,
             btn_h,
-            "▶  LAUNCH COURSE",
+            "▶  START LEVEL",
             accent=accent,
             dim=dim,
             frame=frame,

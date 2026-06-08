@@ -7,9 +7,10 @@ from gravity_ho_matey.gameplay.asteroid_tiers import AsteroidTier
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.entities import Asteroid
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
+from gravity_ho_matey.gameplay.hostile_fighter import HostileFighter
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
 
-EnemyUnit = PatrolEnemy | SquidEnemy
+EnemyUnit = PatrolEnemy | SquidEnemy | HostileFighter
 
 BEACON_JEWEL_MIN = 2
 BEACON_JEWEL_MAX = 5
@@ -37,6 +38,8 @@ def jewel_count_for_enemy(enemy: EnemyUnit, rng: random.Random | None = None) ->
     roll = rng or rng_at(enemy.pos)
     if enemy.kind is EnemyKind.SQUID:
         return roll.randint(1, 4) if roll.random() < 0.75 else 0
+    if enemy.kind is EnemyKind.HOSTILE_FIGHTER:
+        return roll.randint(5, 10) if roll.random() < 0.88 else 0
     return roll.randint(4, 9) if roll.random() < 0.85 else 0
 
 

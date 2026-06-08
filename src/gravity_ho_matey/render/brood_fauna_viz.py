@@ -89,7 +89,6 @@ def _draw_drift_ribbon(
     elapsed: float,
     to_screen,
 ) -> None:
-    del seed
     pts: list[tuple[float, float]] = []
     segments = 5
     for i in range(segments + 1):

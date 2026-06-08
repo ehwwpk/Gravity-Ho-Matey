@@ -74,18 +74,18 @@ class ShopSkillTreeLayoutTests(unittest.TestCase):
         base = skill_tree_nodes(CampaignState.new())
         contracted = CampaignState.new()
         contracted.drone_wingman_pending = True
-        self.assertEqual(len(base), 9)
-        self.assertEqual(len(skill_tree_nodes(contracted)), 11)
+        self.assertEqual(len(base), 10)
+        self.assertEqual(len(skill_tree_nodes(contracted)), 12)
 
     def test_weapon_doctrine_shows_advanced_node(self) -> None:
         from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 
         campaign = CampaignState.new()
-        self.assertEqual(len(skill_tree_nodes(campaign)), 9)
-        campaign.weapon_track = WeaponTrack.SHOTGUN
         self.assertEqual(len(skill_tree_nodes(campaign)), 10)
+        campaign.weapon_track = WeaponTrack.SHOTGUN
+        self.assertEqual(len(skill_tree_nodes(campaign)), 11)
         campaign.weapon_advanced = True
-        self.assertEqual(len(skill_tree_nodes(campaign)), 9)
+        self.assertEqual(len(skill_tree_nodes(campaign)), 10)
 
     def test_open_anim_starts_zoomed_out(self) -> None:
         campaign = CampaignState.new()

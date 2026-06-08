@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import tkinter as tk
 
 from gravity_ho_matey.gameplay.campaign import CampaignState, MAX_LIVES
@@ -12,6 +13,7 @@ from gravity_ho_matey.gameplay.chart_bounds import (
     ship_in_chart,
 )
 from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks, powerup_hud_tag
+from gravity_ho_matey.gameplay.hud_objectives import HudObjectiveCounter, objective_counters_for_world
 from gravity_ho_matey.gameplay.jewel_config import TREASURY_FLASH_SECONDS
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.camera import CameraMode
@@ -31,6 +33,10 @@ class SciFiHudOverlay:
     FONT_WAVE = ("Courier New", 12, "bold")
     FONT_WAVE_ALERT = ("Courier New", 13, "bold")
     FONT_WAVE_HINT = ("Courier New", 10, "bold")
+    OBJECTIVE_FONT = ("Courier New", 14, "bold")
+    OBJECTIVE_COL_W = 98.0
+    OBJECTIVE_PANEL_MIN_W = 128.0
+    OBJECTIVE_PANEL_X = 336.0
 
     @staticmethod
     def playfield_top(
@@ -102,32 +108,22 @@ class SciFiHudOverlay:
         if campaign.powerup_stacks:
             self._draw_hull_fittings(canvas, 170, 38, campaign.powerup_stacks, dim, cargo_highlight)
 
-        self._panel(canvas, 336, 6, 128, 42, frame, accent)
-        if world.beacons:
-            self._label(canvas, 344, 12, "NAV BEACONS", dim)
-            remaining = world.beacons_remaining
-            total = len(world.beacons)
-            beacon_color = palette.BEACON if remaining else palette.BEACON_COLLECTED
-            canvas.create_text(
-                344,
-                30,
-                anchor="w",
-                text=f"{remaining:02d} / {total:02d}",
-                fill=beacon_color,
-                font=("Courier New", 14, "bold"),
-            )
-            if world.egg_pods:
-                pods_left = world.egg_pods_remaining
-                pod_total = len(world.egg_pods)
-                canvas.create_text(
-                    344,
-                    44,
-                    anchor="w",
-                    text=f"PODS {pods_left:02d} / {pod_total:02d}",
-                    fill=palette.HUD_WARN if pods_left else palette.GATE_OPEN,
-                    font=self.FONT_SMALL,
+        nav_panel_right = self.OBJECTIVE_PANEL_X + self.OBJECTIVE_PANEL_MIN_W
+        counters = objective_counters_for_world(world)
+        if counters:
+            panel_w = max(self.OBJECTIVE_PANEL_MIN_W, len(counters) * self.OBJECTIVE_COL_W)
+            self._panel(canvas, self.OBJECTIVE_PANEL_X, 6, panel_w, 42, frame, accent)
+            for i, counter in enumerate(counters):
+                self._draw_objective_counter(
+                    canvas,
+                    self.OBJECTIVE_PANEL_X + 8 + i * self.OBJECTIVE_COL_W,
+                    12,
+                    counter,
+                    dim,
                 )
+            nav_panel_right = self.OBJECTIVE_PANEL_X + panel_w
         else:
+            self._panel(canvas, self.OBJECTIVE_PANEL_X, 6, self.OBJECTIVE_PANEL_MIN_W, 42, frame, accent)
             if brood and world.brood_moon is not None:
                 from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
 
@@ -197,14 +193,23 @@ class SciFiHudOverlay:
                 wave_font = self.FONT_WAVE
                 wave_y = 30
                 sub_font = self.FONT_SMALL
+                relay_hp = 0
+                if world.friendly_stations:
+                    relay = world.friendly_stations[0]
+                    relay_hp = relay.hits_remaining if relay.alive else 0
+                hostiles = world.protection_hostiles_alive()
+                context = ""
                 if world.finish_unlocked:
-                    wave_txt, wave_color = "EXTRACT OPEN", palette.GATE_OPEN
-                    relay_sub = "RTB · south pad"
+                    if world.protection_hold_complete_ttl > 0.0:
+                        wave_txt, wave_color = "HOLD COMPLETE", palette.GATE_OPEN
+                    else:
+                        wave_txt, wave_color = "EXTRACT OPEN", palette.GATE_OPEN
+                    context = "RTB · south pad"
                     sub_color = palette.RIFT_HUD_ACCENT
-                elif world.protection_boss_intro_flash > 0.0:
+                elif world.protection_wave_alert_ttl > 0.0:
                     wave_txt, wave_color = "WAVE 3 / 3", palette.HUD_WARN
                     wave_font = self.FONT_WAVE_ALERT
-                    relay_sub = "brood mother contact"
+                    context = "final assault"
                     sub_color = palette.RIFT_HUD_ACCENT
                     sub_font = self.FONT_WAVE_HINT
                 elif world.wave_director is not None:
@@ -216,23 +221,23 @@ class SciFiHudOverlay:
                         wave_txt = f"WAVE {director.nudge_wave} / 3"
                         wave_color = palette.HUD_ACCENT if director.nudge_ttl > 0.35 else palette.HUD_WARN
                         wave_font = self.FONT_WAVE_ALERT
-                        relay_sub = nudge.subtitle
+                        context = nudge.subtitle
                         sub_font = self.FONT_WAVE_HINT
                         sub_color = palette.HUD_ACCENT
                     elif inbound is not None:
                         wave_txt = f"WAVE {wave} / 3"
                         wave_color = palette.HUD_WARN
-                        relay_sub = f"next · {inbound.subtitle}"
+                        context = f"next · {inbound.subtitle}"
                         sub_font = self.FONT_WAVE_HINT
                         sub_color = palette.RIFT_HUD_ACCENT
                     else:
                         wave_txt = f"WAVE {wave} / 3"
                         wave_color = palette.HUD_WARN
-                        relay_sub = None
+                        if hostiles > 0:
+                            context = f"{hostiles} hostiles"
                         sub_color = palette.HUD_DIM
                 else:
                     wave_txt, wave_color = "STANDBY", palette.HUD_DIM
-                    relay_sub = None
                     sub_color = palette.HUD_DIM
                 canvas.create_text(
                     344,
@@ -242,31 +247,17 @@ class SciFiHudOverlay:
                     fill=wave_color,
                     font=wave_font,
                 )
-                if world.friendly_stations:
-                    relay = world.friendly_stations[0]
-                    relay_hp = relay.hits_remaining if relay.alive else 0
-                    if relay_sub:
-                        sub_txt = relay_sub
-                    elif (
-                        world.mega_squid is not None
-                        and world.mega_squid.alive
-                        and world.wave_director is not None
-                        and world.wave_director.current_wave >= 3
-                    ):
-                        sub_txt = "kill brood-mother"
-                        sub_color = palette.RIFT_HUD_ACCENT
-                        sub_font = self.FONT_WAVE_HINT
-                    else:
-                        sub_txt = f"RELAY {relay_hp:02d} HP"
-                        sub_color = palette.HUD_DIM
-                    canvas.create_text(
-                        344,
-                        44,
-                        anchor="w",
-                        text=sub_txt,
-                        fill=sub_color,
-                        font=sub_font,
-                    )
+                relay_line = f"RELAY {relay_hp:02d} HP"
+                if context:
+                    relay_line = f"{relay_line} · {context}"
+                canvas.create_text(
+                    344,
+                    44,
+                    anchor="w",
+                    text=relay_line,
+                    fill=sub_color if context else palette.HUD_DIM,
+                    font=sub_font if context else self.FONT_SMALL,
+                )
             else:
                 self._label(canvas, 344, 12, "EXIT VECTOR", dim)
                 canvas.create_text(
@@ -278,10 +269,12 @@ class SciFiHudOverlay:
                     font=("Courier New", 11, "bold"),
                 )
 
-        self._panel(canvas, 470, 6, 118, 42, frame, accent)
-        self._label(canvas, 478, 12, "CHRONO", dim)
+        chrono_x = nav_panel_right + 6.0
+        reactor_x = chrono_x + 118.0 + 6.0
+        self._panel(canvas, chrono_x, 6, 118, 42, frame, accent)
+        self._label(canvas, chrono_x + 8, 12, "CHRONO", dim)
         canvas.create_text(
-            478,
+            chrono_x + 8,
             30,
             anchor="w",
             text=f"{world.elapsed:05.1f}s",
@@ -289,12 +282,19 @@ class SciFiHudOverlay:
             font=("Courier New", 14, "bold"),
         )
 
-        self._panel(canvas, 594, 6, 118, 42, frame, accent)
-        self._label(canvas, 602, 12, "REACTOR", dim)
+        self._panel(canvas, reactor_x, 6, 118, 42, frame, accent)
+        self._label(canvas, reactor_x + 8, 12, "REACTOR", dim)
         boost_pct = int(world.ship.boost_energy * 100)
         boost_color = palette.HUD_BOOST if boost_pct > 25 else palette.HUD_WARN
-        canvas.create_text(602, 30, anchor="w", text=f"{boost_pct:3d}%", fill=boost_color, font=("Courier New", 14, "bold"))
-        self._boost_bar(canvas, 602, 38, 100, 6, world.ship.boost_energy, accent, dim)
+        canvas.create_text(
+            reactor_x + 8,
+            30,
+            anchor="w",
+            text=f"{boost_pct:3d}%",
+            fill=boost_color,
+            font=("Courier New", 14, "bold"),
+        )
+        self._boost_bar(canvas, reactor_x + 8, 38, 100, 6, world.ship.boost_energy, accent, dim)
 
         if world.squid_cling_timer > 0.0:
             from gravity_ho_matey.gameplay.squid_enemy import SQUID_CLING_DAMAGE_INTERVAL
@@ -365,6 +365,29 @@ class SciFiHudOverlay:
                 anchor="nw",
                 text=drone_txt,
                 fill=drone_color,
+                font=self.FONT_SMALL,
+            )
+
+        if world.nifflerp is not None and world.nifflerp.alive:
+            buddy = world.nifflerp
+            niff_y = 34
+            if world.squid_cling_timer > 0.0:
+                niff_y = 54
+            elif (rift or siege) and world.allies:
+                niff_y = 74
+            if campaign.rubber_hull_charges > 0:
+                niff_y += 20
+            if world.drone_wingman is not None and world.drone_wingman.alive:
+                niff_y += 20
+            niff_txt = f"NIFFLR {buddy.hits_remaining:02d}/{buddy.hits_max}"
+            niff_color = palette.NIFFLERP_BOOST if buddy.boost_flash > 0.0 else palette.NIFFLERP_CORE
+            self._badge(
+                canvas,
+                720,
+                niff_y,
+                anchor="nw",
+                text=niff_txt,
+                fill=niff_color,
                 font=self.FONT_SMALL,
             )
 
@@ -441,6 +464,22 @@ class SciFiHudOverlay:
                 flash_y + self.ALERT_H // 2,
                 text="◈ BROOD MOTHER INBOUND ◈",
                 fill=palette.SQUID_CORE,
+                font=("Courier New", 10, "bold"),
+            )
+            banner_y = flash_y + self.ALERT_H
+        elif (
+            rift
+            and world.config.protection_mission
+            and world.protection_wave_alert_ttl > 0.0
+        ):
+            flash_y = banner_y if banner_y > self.PANEL_H else self.PANEL_H
+            canvas.create_rectangle(0, flash_y, width, flash_y + self.ALERT_H, fill="#281818", outline="")
+            canvas.create_line(0, flash_y + self.ALERT_H, width, flash_y + self.ALERT_H, fill=palette.ENEMY_EDGE, width=1)
+            canvas.create_text(
+                width // 2,
+                flash_y + self.ALERT_H // 2,
+                text="◈ FINAL ASSAULT INBOUND ◈",
+                fill=palette.ENEMY_EDGE,
                 font=("Courier New", 10, "bold"),
             )
 
@@ -583,13 +622,15 @@ class SciFiHudOverlay:
         charge = 0.0
         label = ""
         active = False
+        blocked = False
         if bm.phase is BroodPhase.ORBITAL and in_landing_zone(world.ship.pos, bm.layout):
             charge = bm.landing_charge / max(1e-6, LANDING_CHARGE_SECONDS)
             label = "LAND"
             active = True
-        elif bm.phase is BroodPhase.SURFACE and bm.ascent_ready and not liftoff_blocked(world):
+        elif bm.phase is BroodPhase.SURFACE and bm.ascent_ready:
             charge = bm.liftoff_charge / max(1e-6, LIFTOFF_CHARGE_SECONDS)
             label = "ASCEND"
+            blocked = liftoff_blocked(world)
             active = True
         if not active:
             return
@@ -598,17 +639,43 @@ class SciFiHudOverlay:
         cy = height - 72.0
         outer_r = 34.0
         inner_r = 26.0
-        canvas.create_oval(
-            cx - outer_r,
-            cy - outer_r,
-            cx + outer_r,
-            cy + outer_r,
-            outline=dim,
-            width=2,
-        )
+        elapsed = world.elapsed
+        pulse = 0.55 + 0.45 * math.sin(elapsed * 3.4)
+        ring_color = dim if blocked else accent
+        fill_color = accent if not blocked else palette.BOSS_SCRAPE_WARN
+        if blocked:
+            canvas.create_oval(
+                cx - outer_r,
+                cy - outer_r,
+                cx + outer_r,
+                cy + outer_r,
+                outline=ring_color,
+                width=2,
+                dash=(5, 4),
+            )
+        else:
+            canvas.create_oval(
+                cx - outer_r,
+                cy - outer_r,
+                cx + outer_r,
+                cy + outer_r,
+                outline=ring_color,
+                width=2,
+            )
+            if charge < 0.08:
+                breathe = inner_r + 2.5 * pulse
+                canvas.create_oval(
+                    cx - breathe,
+                    cy - breathe,
+                    cx + breathe,
+                    cy + breathe,
+                    outline=accent,
+                    width=1,
+                    dash=(3, 5),
+                )
         start = 90.0
         extent = -360.0 * max(0.0, min(1.0, charge))
-        if abs(extent) > 0.5:
+        if abs(extent) > 0.5 and not blocked:
             canvas.create_arc(
                 cx - inner_r,
                 cy - inner_r,
@@ -618,18 +685,51 @@ class SciFiHudOverlay:
                 extent=extent,
                 style=tk.PIESLICE,
                 outline="",
-                fill=accent,
+                fill=fill_color,
             )
         canvas.create_oval(
             cx - inner_r,
             cy - inner_r,
             cx + inner_r,
             cy + inner_r,
-            outline=accent,
+            outline=fill_color if not blocked else ring_color,
             width=2,
+            dash=(4, 3) if blocked else (),
         )
-        canvas.create_text(cx, cy - 4, text="E", fill=accent, font=("Courier New", 14, "bold"))
+        canvas.create_text(cx, cy - 4, text="E", fill=fill_color if not blocked else dim, font=("Courier New", 14, "bold"))
         canvas.create_text(cx, cy + 12, text=label, fill=dim, font=self.FONT_SMALL)
+
+        if not blocked:
+            self._draw_brood_exosphere_lane(canvas, width, hud_top, accent, dim, elapsed)
+
+    @staticmethod
+    def _draw_brood_exosphere_lane(
+        canvas: tk.Canvas,
+        width: float,
+        hud_top: float,
+        accent: str,
+        dim: str,
+        elapsed: float,
+    ) -> None:
+        """Faint exosphere band — visual 'way out' cue paired with bottom E ring."""
+        pulse = 0.45 + 0.35 * math.sin(elapsed * 2.6)
+        band_y = hud_top + 20.0
+        lane = palette.GATE_OPEN if pulse > 0.55 else dim
+        canvas.create_line(56, band_y, width - 56, band_y, fill=lane, dash=(6, 8), width=1)
+        cx = width * 0.5
+        tri_h = 5.0 + pulse * 2.0
+        tri_w = 7.0 + pulse * 2.0
+        canvas.create_polygon(
+            cx,
+            band_y - tri_h - 4.0,
+            cx - tri_w,
+            band_y + 1.0,
+            cx + tri_w,
+            band_y + 1.0,
+            fill="",
+            outline=lane,
+            width=1,
+        )
 
     def _draw_chart_bounds_playfield_overlay(
         self,
@@ -723,6 +823,26 @@ class SciFiHudOverlay:
 
     def _label(self, canvas: tk.Canvas, x: float, y: float, text: str, color: str) -> None:
         hp.draw_panel_title(canvas, x, y, text, color=color)
+
+    def _draw_objective_counter(
+        self,
+        canvas: tk.Canvas,
+        x: float,
+        y: float,
+        counter: HudObjectiveCounter,
+        dim: str,
+    ) -> None:
+        """Shared NAV BEACONS / EGG PODS readout — label + remaining/total tally."""
+        self._label(canvas, x, y, counter.label, dim)
+        value_color = palette.BEACON_COLLECTED if counter.complete else palette.BEACON
+        canvas.create_text(
+            x,
+            y + 18,
+            anchor="w",
+            text=f"{counter.remaining:02d} / {counter.total:02d}",
+            fill=value_color,
+            font=self.OBJECTIVE_FONT,
+        )
 
     def _draw_lives(
         self,

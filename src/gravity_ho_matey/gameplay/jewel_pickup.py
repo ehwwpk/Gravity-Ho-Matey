@@ -49,30 +49,51 @@ def tick_jewels(
     dt: float,
     *,
     allow_collect: bool = True,
+    helper_pos: Vec2 | None = None,
+    helper_radius: float = 0.0,
 ) -> tuple[list[JewelPickup], int]:
     remaining: list[JewelPickup] = []
     collected = 0
     drag = JEWEL_DRAG ** max(0.0, dt * 60.0)
 
     for jewel in jewels:
-        to_ship = ship_pos - jewel.pos
-        dist = to_ship.length()
-        collect_dist = ship_radius + jewel.radius
+        collectors: list[tuple[Vec2, float]] = [(ship_pos, ship_radius)]
+        if helper_pos is not None and helper_radius > 0.0:
+            collectors.append((helper_pos, helper_radius))
 
-        if allow_collect and dist <= collect_dist:
-            collected += 1
+        picked_up = False
+        if allow_collect:
+            for c_pos, c_radius in collectors:
+                if (c_pos - jewel.pos).length() <= c_radius + jewel.radius:
+                    collected += 1
+                    picked_up = True
+                    break
+        if picked_up:
             continue
 
-        if dist <= MAGNET_RANGE and dist > 1e-6:
-            jewel.vel = to_ship.normalized() * MAGNET_SPEED
+        magnet_pos: Vec2 | None = None
+        magnet_dist = float("inf")
+        for c_pos, c_radius in collectors:
+            to_collector = c_pos - jewel.pos
+            dist = to_collector.length()
+            if dist <= MAGNET_RANGE and dist < magnet_dist:
+                magnet_pos = c_pos
+                magnet_dist = dist
+
+        if magnet_pos is not None and magnet_dist > 1e-6:
+            jewel.vel = (magnet_pos - jewel.pos).normalized() * MAGNET_SPEED
         else:
             jewel.vel = jewel.vel * drag
 
         jewel.pos = jewel.pos + jewel.vel * dt
 
-        if allow_collect and (ship_pos - jewel.pos).length() <= collect_dist:
-            collected += 1
-        else:
+        if allow_collect:
+            for c_pos, c_radius in collectors:
+                if (c_pos - jewel.pos).length() <= c_radius + jewel.radius:
+                    collected += 1
+                    picked_up = True
+                    break
+        if not picked_up:
             remaining.append(jewel)
 
     return remaining, collected

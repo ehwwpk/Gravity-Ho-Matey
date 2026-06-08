@@ -20,15 +20,14 @@ from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
 from gravity_ho_matey.render.drone_viz import draw_drone_wingman_tactical
 from gravity_ho_matey.render.enemy_viz import draw_patrol_enemy_tactical
 from gravity_ho_matey.render.lighting import LightRig
-from gravity_ho_matey.render.squid_boss_viz import draw_boss_scrape_zone
 from gravity_ho_matey.render.squid_viz import (
-    draw_boss_tentacle_crown,
     draw_squid_body_lit,
     draw_squid_coil_ring,
     draw_squid_tentacles_enhanced,
 )
 from gravity_ho_matey.render.station_viz import _draw_lit_station
 from gravity_ho_matey.render.title_codex import CodexEntry
+from gravity_ho_matey.render.ship_viz import draw_hostile_fighter_ship
 from gravity_ho_matey.render.world_draw import WELL_RING_VISUAL_SCALE, draw_ship, draw_well
 
 
@@ -76,10 +75,10 @@ def draw_codex_tactical_preview(
         _draw_station(canvas, cx, cy, faction=StationFaction.HOSTILE, label="STN", rig=rig, elapsed=elapsed, scale=0.34)
     elif kind == "patrol":
         _draw_patrol(canvas, cx, cy, rig=rig, elapsed=elapsed, yaw=yaw)
+    elif kind == "hostile_fighter":
+        _draw_hostile_fighter(canvas, cx, cy, rig=rig, elapsed=elapsed, yaw=yaw)
     elif kind == "void_squid":
         _draw_squid(canvas, cx, cy, rig=rig, elapsed=elapsed, yaw=yaw)
-    elif kind == "brood_mother":
-        _draw_brood(canvas, cx, cy, rig=rig, elapsed=elapsed, yaw=yaw)
     elif kind == "drone":
         _draw_drone(canvas, cx, cy, rig=rig, elapsed=elapsed, yaw=yaw)
     elif kind == "asteroid":
@@ -188,25 +187,10 @@ def _draw_squid(canvas: tk.Canvas, cx: float, cy: float, *, rig: LightRig, elaps
     _ = camera
 
 
-def _draw_brood(canvas: tk.Canvas, cx: float, cy: float, *, rig: LightRig, elapsed: float, yaw: float) -> None:
-    scale = 0.62
-    facing = math.pi * 0.5 + math.sin(yaw) * 0.12
-    sx, sy = cx, cy - 4.0
-    prey_x, prey_y = sx, sy + 52.0
-    r = 42.0 * scale
-    draw_ground_fog_glow(canvas, sx, sy + r * 0.15, r * 1.8, palette.CHASE_FOG_BOSS, pulse=elapsed * 3.6)
-    draw_boss_scrape_zone(canvas, sx, sy, r * 2.4, ship_inside=False, flash=0.0, elapsed=elapsed, scale=1.0, facing=facing)
-    draw_boss_tentacle_crown(
-        canvas, sx, sy,
-        radius=42.0, scale=scale, facing=facing,
-        prey_x=prey_x, prey_y=prey_y,
-        engaging=True, elapsed=elapsed,
-    )
-    draw_squid_body_lit(
-        canvas, sx, sy,
-        radius=42.0, scale=scale, rig=rig, kind="mega_squid",
-        facing=facing, elapsed=elapsed, engaging=True,
-    )
+def _draw_hostile_fighter(canvas: tk.Canvas, cx: float, cy: float, *, rig: LightRig, elapsed: float, yaw: float) -> None:
+    angle = math.pi * 0.5 + math.sin(yaw + 0.4) * 0.18
+    draw_hostile_fighter_ship(canvas, Vec2(cx, cy - 2.0), angle, scale=1.12, rig=rig)
+    _ = elapsed
 
 
 def _draw_drone(canvas: tk.Canvas, cx: float, cy: float, *, rig: LightRig, elapsed: float, yaw: float) -> None:

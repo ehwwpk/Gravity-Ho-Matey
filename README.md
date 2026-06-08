@@ -21,7 +21,7 @@ This repo is structured like a serious project base rather than a single-file to
 
 **Core loop:** title → level intro GIF → faster launch countdown → play → shop / skill tree between levels → next sector.
 
-**Gameplay:** gravity-bent shots and routes, beacon collection, finish gates, chart radiation on L1–2, reactor burst, asteroid tiers (pebble → boulder), patrol enemies, relay defense waves, Brood Moon surface seal / orbital return.
+**Gameplay:** gravity-bent shots and routes, beacon collection, finish gates, chart radiation on L1–2, reactor burst, asteroid tiers (pebble → boulder), patrol enemies, relay defense waves (3-wave hold), Brood Moon surface seal / orbital return.
 
 **Cameras:** tactical top-down (`V` toggles) and chase rig with banking, boost FOV kick, engine exhaust, and shared starfield / gravity heatmap polish.
 

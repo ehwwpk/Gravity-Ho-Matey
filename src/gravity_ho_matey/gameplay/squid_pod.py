@@ -22,6 +22,9 @@ class SquidPod:
     wobble: float = 0.0
     alive: bool = True
 
+    def hit_radius(self) -> float:
+        return 16.0 if self.phase is PodPhase.HATCHING else 10.0
+
     def tick(self, dt: float) -> bool:
         """Returns True when hatch completes and caller should spawn squid."""
         self.wobble += dt * 7.5

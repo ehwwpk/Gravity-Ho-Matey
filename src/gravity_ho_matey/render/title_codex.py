@@ -54,6 +54,15 @@ CODEX_ENTRIES: tuple[CodexEntry, ...] = (
         "Automated hunter-killer. Lead-aim guns, beacon greed. Wreck it — jewels and power-ups fall out.",
     ),
     CodexEntry(
+        "corsair",
+        "STRIKE CORSAIR",
+        "RELAY BREACH",
+        "MEAN",
+        "hostile_fighter",
+        "rift",
+        "Gunship wave on Relay Hold — delta wings, longer reach than skiffs. Drops a fat jewel roll when you strip it.",
+    ),
+    CodexEntry(
         "squid",
         "VOID SQUID",
         "KRAKEN",
@@ -61,15 +70,6 @@ CODEX_ENTRIES: tuple[CodexEntry, ...] = (
         "void_squid",
         "drift",
         "Eight arms, zero mercy. Tentacles latch the hull; you bleed a chunk every two seconds till you shake it.",
-    ),
-    CodexEntry(
-        "brood",
-        "BROOD-MOTHER",
-        "MEGA BOSS",
-        "APEX",
-        "brood_mother",
-        "rift",
-        "Rift apex. Soaks turret fire, births squids and pods. Tag her down, then burn for the extract pad.",
     ),
     CodexEntry(
         "drone",

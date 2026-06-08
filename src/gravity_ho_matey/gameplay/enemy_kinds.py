@@ -7,3 +7,4 @@ class EnemyKind(Enum):
     PATROL = auto()
     SQUID = auto()
     MEGA_SQUID = auto()
+    HOSTILE_FIGHTER = auto()

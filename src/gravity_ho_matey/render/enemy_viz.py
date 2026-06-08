@@ -398,3 +398,37 @@ def draw_patrol_enemy_map_glyph(
     ex = mx + math.cos(facing) * radius * 0.55
     ey = my + math.sin(facing) * radius * 0.55
     canvas.create_oval(ex - 2, ey - 2, ex + 2, ey + 2, fill=palette.STATION_HOSTILE_GLOW, outline="")
+
+
+def draw_hostile_fighter_map_glyph(
+    canvas: tk.Canvas,
+    mx: float,
+    my: float,
+    *,
+    radius: float,
+    facing: float,
+) -> None:
+    """Delta-wing strike craft — warmer fill than patrol skiff chevron."""
+    c = math.cos(facing)
+    s = math.sin(facing)
+    pts: list[tuple[float, float]] = []
+    for lx, ly in ((1.05, 0.0), (-0.7, 0.78), (-0.92, 0.0), (-0.7, -0.78)):
+        wx = lx * c - ly * s
+        wy = lx * s + ly * c
+        pts.append((mx + wx * radius, my + wy * radius))
+    canvas.create_polygon(
+        *[coord for pt in pts for coord in pt],
+        fill=palette.ENEMY,
+        outline=palette.ENEMY_EDGE,
+        width=1,
+    )
+    wing_span = radius * 0.72
+    perp = facing + math.pi / 2.0
+    wx1 = mx + math.cos(perp) * wing_span
+    wy1 = my + math.sin(perp) * wing_span
+    wx2 = mx - math.cos(perp) * wing_span
+    wy2 = my - math.sin(perp) * wing_span
+    canvas.create_line(wx1, wy1, wx2, wy2, fill=palette.ENEMY_EDGE, width=2)
+    ex = mx + math.cos(facing) * radius * 0.62
+    ey = my + math.sin(facing) * radius * 0.62
+    canvas.create_oval(ex - 2.5, ey - 2.5, ex + 2.5, ey + 2.5, fill=palette.ENEMY_EDGE, outline="")

@@ -61,6 +61,26 @@ def draw_edge_hints(
         tag = "XT" if world.finish_unlocked else "PD"
         color = palette.GATE_OPEN if world.finish_unlocked else palette.RIFT_PAD_COOLDOWN
         _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top)
+        if (
+            world.config.protection_mission
+            and world.wave_director is not None
+            and world.wave_director.inbound_wave > 0
+            and not world.finish_unlocked
+        ):
+            from gravity_ho_matey.levels.guard_layout import NORTHERN_RIFT
+
+            _maybe_hint(
+                hints,
+                camera,
+                NORTHERN_RIFT,
+                ship,
+                ship_angle,
+                "IN",
+                palette.RIFT_HUD_ACCENT,
+                vw,
+                vh,
+                play_top,
+            )
     elif world.config.brood_moon_mission and world.brood_moon is not None:
         from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
 
@@ -102,6 +122,26 @@ def draw_edge_hints(
             from gravity_ho_matey.gameplay.friendly_fighter_config import PATROL_ENGAGE_RANGE
             from gravity_ho_matey.gameplay.planetside_flight import PLANETSIDE_MAX_EDGE_HINTS, wrap_shortest_delta
 
+            boss_hint: tuple[float, str, str] | None = None
+            boss = world.mega_squid
+            if bm.boss_spawned and boss is not None and boss.alive:
+                boss_hints: list[tuple[float, str, str]] = []
+                _maybe_hint(
+                    boss_hints,
+                    camera,
+                    boss.pos,
+                    ship,
+                    ship_angle,
+                    "BOSS",
+                    palette.SQUID_WRAP_GLOW[-1],
+                    vw,
+                    vh,
+                    play_top,
+                    wrap_width=wrap_w,
+                )
+                if boss_hints:
+                    boss_hint = boss_hints[0]
+
             alive_pods = [pod for pod in world.egg_pods if pod.alive]
             if alive_pods:
                 ranked = sorted(
@@ -123,22 +163,6 @@ def draw_edge_hints(
                         wrap_width=wrap_w,
                     )
 
-            boss = world.mega_squid
-            if boss is not None and boss.alive:
-                _maybe_hint(
-                    hints,
-                    camera,
-                    boss.pos,
-                    ship,
-                    ship_angle,
-                    "BM",
-                    palette.SQUID_TENTACLE,
-                    vw,
-                    vh,
-                    play_top,
-                    wrap_width=wrap_w,
-                )
-
             for enemy in world.enemies:
                 if not enemy.alive:
                     continue
@@ -156,12 +180,57 @@ def draw_edge_hints(
                     continue
                 if (projectile.pos - ship).length() > 520.0:
                     continue
+                if getattr(projectile, "boss_energy_orb", False):
+                    tag, color = "ORB", palette.BOSS_ORB_CORE
+                else:
+                    tag, color = "BL", palette.CHASE_BOLT_HOSTILE_CORE
                 _maybe_hint(
                     hints, camera, projectile.pos, ship, ship_angle,
-                    "BL", palette.CHASE_BOLT_HOSTILE_CORE, vw, vh, play_top,
+                    tag, color, vw, vh, play_top,
                     wrap_width=wrap_w,
                 )
                 break
+
+            hints.sort(key=lambda item: item[0])
+            max_other = 7 if boss_hint is not None else 8
+            for angle, tag, color in hints[:max_other]:
+                _draw_rim_chevron(canvas, cx, cy, angle, tag, color, vw, vh, play_top, margin)
+            if boss_hint is not None:
+                angle, tag, color = boss_hint
+                ascent_fork = bm.ascent_ready and boss is not None and boss.alive
+                if ascent_fork:
+                    pulse = 0.5 + 0.5 * math.sin(world.elapsed * 2.8)
+                    color = palette.SQUID_CORE
+                    _draw_rim_chevron(
+                        canvas,
+                        cx,
+                        cy,
+                        angle,
+                        tag,
+                        color,
+                        vw,
+                        vh,
+                        play_top,
+                        margin,
+                        font_size=11,
+                        highlight=True,
+                        pulse=pulse,
+                    )
+                else:
+                    _draw_rim_chevron(
+                        canvas,
+                        cx,
+                        cy,
+                        angle,
+                        tag,
+                        color,
+                        vw,
+                        vh,
+                        play_top,
+                        margin,
+                        font_size=10,
+                    )
+            return
 
     hints.sort(key=lambda item: item[0])
     for angle, tag, color in hints[:8]:
@@ -228,6 +297,10 @@ def _draw_rim_chevron(
     vh: float,
     hud_top: float,
     margin: float,
+    *,
+    font_size: int = 9,
+    highlight: bool = False,
+    pulse: float = 0.0,
 ) -> None:
     cos_a = math.cos(angle)
     sin_a = math.sin(angle)
@@ -238,8 +311,21 @@ def _draw_rim_chevron(
     )
     x = cx + cos_a * reach
     y = cy + sin_a * reach
-    canvas.create_text(x, y, text=tag, fill=color, font=("Courier New", 9, "bold"))
-    tip = Vec2(x, y) + Vec2.from_angle(angle) * 10
-    left = Vec2(x, y) + Vec2.from_angle(angle + 2.6) * 7
-    right = Vec2(x, y) + Vec2.from_angle(angle - 2.6) * 7
+    if highlight:
+        ring_r = 16.0 + 2.5 * pulse
+        canvas.create_oval(
+            x - ring_r,
+            y - ring_r,
+            x + ring_r,
+            y + ring_r,
+            outline=color,
+            width=1,
+            dash=(3, 4),
+        )
+    canvas.create_text(x, y, text=tag, fill=color, font=("Courier New", font_size, "bold"))
+    tip_len = 12.0 if font_size >= 10 else 10.0
+    wing = 8.0 if font_size >= 10 else 7.0
+    tip = Vec2(x, y) + Vec2.from_angle(angle) * tip_len
+    left = Vec2(x, y) + Vec2.from_angle(angle + 2.6) * wing
+    right = Vec2(x, y) + Vec2.from_angle(angle - 2.6) * wing
     canvas.create_polygon(tip.x, tip.y, left.x, left.y, right.x, right.y, fill=color, outline="")

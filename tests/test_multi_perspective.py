@@ -105,9 +105,6 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         scene = PlayScene("rift", CampaignState.new())
         host = _FakeHost()
         scene.world.wave_director.waves_spawned = 3  # type: ignore[union-attr]
-        scene.world.boss_cleared = True
-        if scene.world.mega_squid is not None:
-            scene.world.mega_squid.alive = False
         for enemy in scene.world.enemies:
             enemy.alive = False
         scene.world._prune_dead_enemies()

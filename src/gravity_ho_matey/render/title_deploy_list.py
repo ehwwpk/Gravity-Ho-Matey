@@ -9,6 +9,8 @@ from gravity_ho_matey.levels.level_registry import LEVEL_ORDER
 DEPLOY_ROW_H = 64.0
 DEPLOY_ROW_GAP = 8.0
 DEPLOY_ROW_PITCH = DEPLOY_ROW_H + DEPLOY_ROW_GAP
+DEPLOY_PREVIEW_FRAC = 0.40
+DEPLOY_SPLIT_GAP = 12.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +25,20 @@ class TitleChromeLayout:
     rail_h: float
     footer_y: float
     footer_h: float
+
+
+@dataclass(frozen=True, slots=True)
+class DeployPreviewLayout:
+    x: float
+    y: float
+    w: float
+    h: float
+
+
+@dataclass(frozen=True, slots=True)
+class DeploySplitLayout:
+    list: DeployListLayout
+    preview: DeployPreviewLayout
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,9 +70,13 @@ def title_chrome_layout(
 ) -> TitleChromeLayout:
     footer_y = screen_h - footer_h
     rail_y = footer_y - margin_gap - rail_h
-    shop_y = rail_y - margin_gap - shop_h
+    if shop_h > 0.0:
+        shop_y = rail_y - margin_gap - shop_h
+        body_bottom = shop_y - body_pad
+    else:
+        shop_y = rail_y
+        body_bottom = rail_y - body_pad
     body_top = top_bar_h + body_pad
-    body_bottom = shop_y - body_pad
     return TitleChromeLayout(
         body_top=body_top,
         body_bottom=body_bottom,
@@ -69,18 +89,59 @@ def title_chrome_layout(
     )
 
 
+def compute_deploy_split_layout(
+    chrome: TitleChromeLayout,
+    *,
+    screen_w: float,
+    margin: float = 16.0,
+    header_h: float = 36.0,
+    footer_hint_h: float = 22.0,
+) -> DeploySplitLayout:
+    """Full-width deploy panel — scroll list left, sector dossier right."""
+    body_h = max(120.0, chrome.body_bottom - chrome.body_top)
+    panel_w = screen_w - margin * 2.0
+    panel_x = margin
+    panel_y = chrome.body_top
+    panel_h = body_h
+    preview_w = max(280.0, panel_w * DEPLOY_PREVIEW_FRAC)
+    list_w = panel_w - preview_w - DEPLOY_SPLIT_GAP
+    list = compute_deploy_list_layout(
+        chrome,
+        screen_w=screen_w,
+        panel_w=list_w,
+        panel_x=panel_x,
+        panel_y=panel_y,
+        panel_h=panel_h,
+        header_h=header_h,
+        footer_hint_h=footer_hint_h,
+    )
+    preview = DeployPreviewLayout(
+        x=panel_x + list_w + DEPLOY_SPLIT_GAP,
+        y=panel_y,
+        w=preview_w,
+        h=panel_h,
+    )
+    return DeploySplitLayout(list=list, preview=preview)
+
+
 def compute_deploy_list_layout(
     chrome: TitleChromeLayout,
     *,
     screen_w: float,
     panel_w: float = 820.0,
+    panel_x: float | None = None,
+    panel_y: float | None = None,
+    panel_h: float | None = None,
     header_h: float = 36.0,
     footer_hint_h: float = 22.0,
 ) -> DeployListLayout:
     body_h = max(120.0, chrome.body_bottom - chrome.body_top)
-    panel_h = body_h
-    panel_x = (screen_w - panel_w) / 2.0
-    panel_y = chrome.body_top
+    resolved_h = panel_h if panel_h is not None else body_h
+    resolved_x = panel_x if panel_x is not None else (screen_w - panel_w) / 2.0
+    resolved_y = panel_y if panel_y is not None else chrome.body_top
+    panel_h = resolved_h
+    panel_x = resolved_x
+    panel_y = resolved_y
     viewport_x = panel_x + 12.0
     viewport_y = panel_y + header_h
     viewport_w = panel_w - 24.0

@@ -287,6 +287,39 @@ def draw_fighter_ship(
                 )
 
 
+def draw_hostile_fighter_ship(
+    canvas: tk.Canvas,
+    pos: Vec2,
+    angle: float,
+    *,
+    scale: float,
+    rig: LightRig,
+) -> None:
+    material = material_for("enemy_fighter", theme=rig.theme, view=rig.view)
+    hull = fighter_hull_screen_points(pos, angle, scale)
+    draw_illustrated_polygon(
+        canvas,
+        hull,
+        rig=rig,
+        material=material,
+        seed=29,
+        radius_hint=18.0 * scale,
+        outline_width=max(1, int(1 + scale * 0.85)),
+        crater_count=0,
+    )
+    forward = Vec2.from_angle(angle)
+    cp = pos + forward * (8.0 * scale)
+    canvas.create_oval(
+        cp.x - 3.0 * scale,
+        cp.y - 2.0 * scale,
+        cp.x + 3.0 * scale,
+        cp.y + 2.0 * scale,
+        fill=material.crater_rim_hi,
+        outline=material.rim,
+        width=1,
+    )
+
+
 def draw_friendly_fighter_ship(
     canvas: tk.Canvas,
     pos: Vec2,

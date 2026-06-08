@@ -135,8 +135,10 @@ class PlayScene(Scene):
             self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
         self._tick_brood_transition(dt)
         from gravity_ho_matey.gameplay.drone_session import sync_drone_wingman_to_campaign
+        from gravity_ho_matey.gameplay.nifflerp_session import sync_nifflerp_to_campaign
 
         sync_drone_wingman_to_campaign(self.world, self.campaign)
+        sync_nifflerp_to_campaign(self.world, self.campaign)
         self._sync_chart_bounds_state(suppress_toast=False)
 
         if self.world.status is GameStatus.WON:

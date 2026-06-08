@@ -388,17 +388,17 @@ class TitleScene(Scene):
 
 
     def _deploy_layout(self):
-        from gravity_ho_matey.render.title_deploy_list import compute_deploy_list_layout, title_chrome_layout
+        from gravity_ho_matey.render.title_deploy_list import compute_deploy_split_layout, title_chrome_layout
         from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
 
         chrome = title_chrome_layout(
             screen_h=float(TitleScreenOverlay.HEIGHT),
             top_bar_h=float(TitleScreenOverlay.TOP_BAR_H),
             footer_h=float(TitleScreenOverlay.FOOTER_H),
-            rail_h=24.0,
-            shop_h=float(TitleScreenOverlay.SHOP_CTA_H),
+            rail_h=float(TitleScreenOverlay.PAGE_RAIL_H),
+            shop_h=float(TitleScreenOverlay.SHOP_STRIP_H),
         )
-        return compute_deploy_list_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH))
+        return compute_deploy_split_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH)).list
 
     def _sync_deploy_scroll(self) -> None:
         from gravity_ho_matey.render.title_deploy_list import scroll_to_show_index

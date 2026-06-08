@@ -10,6 +10,7 @@ from gravity_ho_matey.gameplay.planet_mission import in_planet_landing_band, lim
 from gravity_ho_matey.levels.brood_moon_layout import (
     BOSS_COMBAT_RADIUS,
     CINEMATIC_DEFAULT_SECONDS,
+    EGG_PODS_REQUIRED,
     LANDING_CHARGE_SECONDS,
     LIFTOFF_CHARGE_SECONDS,
     SEAL_TRAVEL_DISTANCE,
@@ -107,12 +108,16 @@ def liftoff_blocked(world) -> bool:
     return dist <= BOSS_COMBAT_RADIUS
 
 
+def egg_pods_ruptured(world) -> int:
+    return sum(1 for pod in world.egg_pods if not pod.alive)
+
+
 def surface_objectives_met(world) -> bool:
     if not world.beacons:
         beacons_done = True
     else:
         beacons_done = world.beacons_remaining == 0
-    pods_done = not any(pod.alive for pod in world.egg_pods)
+    pods_done = egg_pods_ruptured(world) >= EGG_PODS_REQUIRED
     return beacons_done and pods_done
 
 
@@ -130,7 +135,7 @@ def tick_seal_progress(world, dt: float) -> None:
     if bm.seal_travel >= SEAL_TRAVEL_DISTANCE:
         bm.seal_complete = True
         bm.ascent_ready = True
-        bm.hud_prompt = "SEAL COMPLETE — HOLD E TO ASCEND"
+        bm.hud_prompt = ""
 
 
 def wrap_surface_x(x: float, wrap_width: float) -> float:

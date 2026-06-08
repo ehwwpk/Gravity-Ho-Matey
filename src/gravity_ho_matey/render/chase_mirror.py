@@ -263,9 +263,15 @@ def draw_rear_view_mirror(
             continue
         px, py, aft = hit
         closing = _closing_from_behind(projectile.pos, projectile.vel, ship_pos, ship_vel, ship_angle)
-        color = palette.HOSTILE_PROJECTILE if projectile.hostile else palette.PROJECTILE
-        kind = "hostile_shot" if projectile.hostile else "shot"
-        blips.append((aft, closing, kind, px, py, 4.0 if projectile.hostile else 3.0, color, projectile.vel))
+        if projectile.boss_energy_orb:
+            color = palette.BOSS_ORB_MID
+            kind = "hostile_shot"
+            blip_size = 6.5
+        else:
+            color = palette.HOSTILE_PROJECTILE if projectile.hostile else palette.PROJECTILE
+            kind = "hostile_shot" if projectile.hostile else "shot"
+            blip_size = 4.0 if projectile.hostile else 3.0
+        blips.append((aft, closing, kind, px, py, blip_size, color, projectile.vel))
 
     blips.sort(key=lambda item: item[0], reverse=True)
     pulse = 0.5 + 0.5 * math.sin(elapsed * 5.0)

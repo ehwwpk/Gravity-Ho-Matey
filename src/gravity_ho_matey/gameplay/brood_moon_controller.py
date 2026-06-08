@@ -132,7 +132,7 @@ def _spawn_surface_boss(world) -> None:
     if bm is not None:
         bm.boss_spawned = True
         bm.boss_intro_flash = 3.5
-        bm.hud_prompt = "BROOD MOTHER AWAKE — OPTIONAL HUNT"
+        bm.hud_prompt = ""
 
 
 def _spawn_alarm_squids(world, pod: EggPodObjective) -> None:
@@ -216,7 +216,6 @@ def tick_brood_moon(world, dt: float, *, interaction_hold: bool) -> bool:
             world.ship.vel = Vec2(world.ship.vel.x * 0.992, world.ship.vel.y + pull)
 
         if bm.ascent_ready and not liftoff_blocked(world):
-            bm.hud_prompt = "HOLD E TO ASCEND"
             if interaction_hold:
                 bm.liftoff_charge = min(LIFTOFF_CHARGE_SECONDS, bm.liftoff_charge + dt)
                 if bm.liftoff_charge >= LIFTOFF_CHARGE_SECONDS:
@@ -224,7 +223,6 @@ def tick_brood_moon(world, dt: float, *, interaction_hold: bool) -> bool:
             else:
                 bm.liftoff_charge = max(0.0, bm.liftoff_charge - dt * 2.0)
         elif liftoff_blocked(world):
-            bm.hud_prompt = "BROOD COMBAT — ESCAPE LOCKED"
             bm.liftoff_charge = 0.0
         else:
             bm.liftoff_charge = max(0.0, bm.liftoff_charge - dt * 2.0)

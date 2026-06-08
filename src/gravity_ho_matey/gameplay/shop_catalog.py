@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from gravity_ho_matey.gameplay.powerup_kinds import POWERUP_HUD_TAGS, POWERUP_LABELS, PowerUpKind
 from gravity_ho_matey.gameplay.drone_config import DRONE_WINGMAN_SHOP_PRICE
+from gravity_ho_matey.gameplay.nifflerp_config import NIFFLERP_SHOP_PRICE
 from gravity_ho_matey.gameplay.upgrade_config import (
     DRONE_ARMOR_PRICE,
     DRONE_REPAIR_PRICE,
@@ -94,6 +95,13 @@ SHOP_CATALOG: tuple[ShopItem, ...] = (
         DRONE_WINGMAN_SHOP_PRICE,
         POWERUP_HUD_TAGS[PowerUpKind.DRONE_WINGMAN],
         POWERUP_LABELS[PowerUpKind.DRONE_WINGMAN],
+        max_stacks=None,
+    ),
+    ShopItem(
+        PowerUpKind.NIFFLERP,
+        NIFFLERP_SHOP_PRICE,
+        POWERUP_HUD_TAGS[PowerUpKind.NIFFLERP],
+        POWERUP_LABELS[PowerUpKind.NIFFLERP],
         max_stacks=None,
     ),
 )
@@ -191,6 +199,7 @@ def shop_price_for(
         return item.base_price * (HULL_REINFORCE_COST_MULTIPLIER**hull_reinforce_purchases)
     if kind in (
         PowerUpKind.DRONE_WINGMAN,
+        PowerUpKind.NIFFLERP,
         PowerUpKind.DRONE_REPAIR,
         PowerUpKind.DRONE_ARMOR,
         PowerUpKind.RAPID_FIRE,

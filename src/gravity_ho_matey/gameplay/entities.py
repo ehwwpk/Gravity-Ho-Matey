@@ -43,6 +43,7 @@ class Projectile:
     pierce_remaining: int = 0
     explosive_radius: float = 0.0
     weapon_track: WeaponTrack | None = None
+    boss_energy_orb: bool = False
 
 
 @dataclass(frozen=True, slots=True)

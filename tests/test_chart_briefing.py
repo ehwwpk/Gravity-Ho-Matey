@@ -63,7 +63,7 @@ class ChartBriefingLayoutTests(unittest.TestCase):
         )
         text_items = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
         joined = " ".join(str(t) for t in text_items if t)
-        self.assertIn("WINDOW", joined)
+        self.assertIn("PAN VIEW", joined)
         self.assertIn("Singularity Crossing".upper(), joined)
 
     def test_map_transform_fits_compact_sector(self) -> None:
@@ -103,8 +103,11 @@ class ChartBriefingLayoutTests(unittest.TestCase):
         text_items = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
         joined = " ".join(str(t) for t in text_items if t)
         self.assertIn("CHART BRIEF", joined)
-        self.assertIn("INITIAL BRIEF", joined)
+        self.assertIn("PRE-BRIEF", joined)
         self.assertIn("BRIEFING", joined)
+        self.assertIn("WIN", joined)
+        self.assertIn("3 of 4", joined)
+        self.assertNotIn("…", joined)
         self.assertIn("MERCHANT TREE", joined)
         self.assertNotIn("PURCHASE", joined)
         self.assertGreater(len(canvas.find_all()), 40)

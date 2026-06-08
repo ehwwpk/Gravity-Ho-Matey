@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import math
-
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.entities import Beacon
 from gravity_ho_matey.render import palette
+from gravity_ho_matey.render.gate_viz import draw_gate_portal_map, draw_gate_portal_play
 from gravity_ho_matey.render.lighting import LightRig
 
 
@@ -27,23 +26,16 @@ def draw_gate_glyph(
     scale: float = 1.0,
     elapsed: float = 0.0,
 ) -> None:
-    color = palette.GATE_OPEN if unlocked else palette.GATE_LOCKED
-    r = max(14.0, size * 0.45) * scale
-    extent = 140.0
-    if unlocked and elapsed > 0.0:
-        extent = 128.0 + 12.0 * (0.5 + 0.5 * math.sin(elapsed * 4.2))
-    if solar and unlocked:
-        for i, frac in enumerate((1.08, 1.18)):
-            rr = r * frac
-            canvas.create_arc(
-                x - rr, y - rr, x + rr, y + rr,
-                start=200 + i * 8, extent=120, style="arc",
-                outline=palette.HUD_ACCENT if i else color, width=1,
-            )
-    canvas.create_arc(x - r, y - r, x + r, y + r, start=200, extent=extent, style="arc", outline=color, width=3)
-    canvas.create_line(x - r * 0.85, y + r * 0.35, x + r * 0.85, y + r * 0.35, fill=color, width=2)
-    font_size = max(7, min(8, int(8 * scale)))
-    canvas.create_text(x, y - 2, text=gate_label(unlocked=unlocked, solar=solar), fill=color, font=("Courier New", font_size, "bold"))
+    draw_gate_portal_map(
+        canvas,
+        x,
+        y,
+        size=size,
+        unlocked=unlocked,
+        solar=solar,
+        scale=scale,
+        label=gate_label(unlocked=unlocked, solar=solar),
+    )
 
 
 def draw_beacon_glyph(
@@ -84,8 +76,13 @@ def draw_gate_portal(
     solar: bool,
     hud_top: float = 0.0,
     elapsed: float = 0.0,
+    rig: LightRig | None = None,
 ) -> None:
-    draw_gate_glyph(
+    theme = "solar" if solar else "cove"
+    from gravity_ho_matey.render.camera import CameraMode
+
+    play_rig = rig or LightRig.for_play(theme=theme, camera_mode=CameraMode.TACTICAL)
+    draw_gate_portal_play(
         canvas,
         center.x,
         center.y + hud_top,
@@ -93,7 +90,9 @@ def draw_gate_portal(
         unlocked=unlocked,
         solar=solar,
         scale=1.0,
+        rig=play_rig,
         elapsed=elapsed,
+        label=gate_label(unlocked=unlocked, solar=solar),
     )
 
 

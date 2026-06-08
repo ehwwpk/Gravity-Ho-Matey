@@ -154,11 +154,12 @@ class LevelIntroOverlay:
             anchor="e",
         )
         tick = "▮" if int(elapsed * 4) % 2 == 0 else "▯"
+        status = f"RELAY {tick} LIVE" if level_id == "rift" else f"LINK {tick} LIVE"
         canvas.create_text(
             vw - 14,
             36,
             anchor="e",
-            text=f"RELAY {tick} LIVE",
+            text=status,
             fill=dim,
             font=hp.FONT_SMALL,
         )

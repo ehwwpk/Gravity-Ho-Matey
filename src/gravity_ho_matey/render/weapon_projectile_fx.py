@@ -26,6 +26,21 @@ def draw_tactical_projectile(
     x, y = p.x, p.y + hud_top
     fill, tail_color, r = tactical_bolt_style(projectile)
 
+    if projectile.boss_energy_orb:
+        pulse = 0.72 + 0.28 * math.sin(elapsed * 11.0)
+        draw_ground_fog_glow(canvas, x, y, r * 2.8 * pulse, palette.BOSS_ORB_GLOW, pulse=elapsed * 8.0)
+        for ring_i in range(3):
+            rr = r * (0.55 + ring_i * 0.28) * pulse
+            canvas.create_oval(x - rr, y - rr, x + rr, y + rr, outline=palette.BOSS_ORB_MID, width=1)
+        canvas.create_oval(x - r, y - r, x + r, y + r, fill=fill, outline=palette.BOSS_ORB_CORE, width=2)
+        canvas.create_oval(x - r * 0.35, y - r * 0.35, x + r * 0.35, y + r * 0.35, fill=palette.BOSS_ORB_CORE, outline="")
+        vel = projectile.vel
+        if vel.length_sq() > 1.0:
+            tail = Vec2(x, y) - vel.normalized() * 24
+            canvas.create_line(tail.x, tail.y, x, y, fill=tail_color, width=4)
+            canvas.create_line(tail.x, tail.y, x, y, fill=palette.BOSS_ORB_CORE, width=2)
+        return
+
     if projectile.hostile:
         draw_ground_fog_glow(canvas, x, y, r * 2.4, (palette.CHASE_BOLT_HOSTILE_GLOW, palette.CHASE_BOLT_HOSTILE_MID), pulse=0.0)
         canvas.create_oval(x - r, y - r, x + r, y + r, fill=fill, outline=palette.CHASE_BOLT_HOSTILE_CORE, width=1)

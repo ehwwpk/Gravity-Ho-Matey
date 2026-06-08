@@ -47,6 +47,12 @@ def shop_owned_status(campaign: CampaignState, kind: PowerUpKind) -> str:
         if campaign.drone_wingman_hp > 0:
             return f"ACTIVE · {campaign.drone_wingman_hp}/{campaign.drone_hits_max} HP"
         return "One escort contract per campaign life"
+    if kind is PowerUpKind.NIFFLERP:
+        if campaign.nifflerp_pending:
+            return "Purchased — deploys next sector"
+        if campaign.nifflerp_hp > 0:
+            return f"ACTIVE · {campaign.nifflerp_hp}/3 HP jewel retriever"
+        return "Non-combat jewel sweeper — 3 HP"
     if kind is PowerUpKind.DRONE_REPAIR:
         if not campaign.has_drone_contract:
             return "Requires active drone"
@@ -101,6 +107,12 @@ def shop_card_hint(campaign: CampaignState, kind: PowerUpKind) -> str:
         if campaign.drone_wingman_hp > 0:
             return f"{campaign.drone_wingman_hp}/{campaign.drone_hits_max} HP"
         return "Escort contract"
+    if kind is PowerUpKind.NIFFLERP:
+        if campaign.nifflerp_pending:
+            return "Deploys next sector"
+        if campaign.nifflerp_hp > 0:
+            return f"{campaign.nifflerp_hp}/3 HP"
+        return "Jewel retriever"
     if kind is PowerUpKind.DRONE_REPAIR:
         if not campaign.has_drone_contract:
             return "Needs drone"
@@ -141,6 +153,8 @@ def shop_button_label(campaign: CampaignState, kind: PowerUpKind) -> str:
             return "INSTALLED"
         if kind is PowerUpKind.DRONE_WINGMAN and campaign.has_drone_contract:
             return "ACTIVE" if campaign.drone_wingman_hp > 0 else "DEPLOYING"
+        if kind is PowerUpKind.NIFFLERP and campaign.has_nifflerp_contract:
+            return "ACTIVE" if campaign.nifflerp_hp > 0 else "DEPLOYING"
         if kind is PowerUpKind.DRONE_REPAIR:
             if campaign.drone_wingman_hp >= campaign.drone_hits_max and campaign.drone_wingman_hp > 0:
                 return "FULL"

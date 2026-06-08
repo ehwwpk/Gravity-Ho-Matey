@@ -4,7 +4,7 @@ import math
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
-from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
+from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss, PHASE_SHIFT_FX_SECONDS
 from gravity_ho_matey.gameplay.squid_pod import PodPhase, SquidPod
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
@@ -54,6 +54,89 @@ def _chase_world_px(camera: ViewCamera, world_units: float, depth: float) -> flo
 
 def _clamp_glow(radius: float, *, cap: float = 280.0) -> float:
     return min(max(0.0, radius), cap)
+
+
+def _phase_accent(phase: int) -> str:
+    idx = max(0, min(2, phase - 1))
+    return palette.BOSS_PHASE_RING[idx]
+
+
+def _boss_invuln_hidden(elapsed: float, invuln: float) -> bool:
+    return invuln > 0.0 and int(elapsed * 14) % 2 == 0
+
+
+def draw_boss_phase_transition_fx(
+    canvas: tk.Canvas,
+    sx: float,
+    sy: float,
+    r: float,
+    *,
+    phase: int,
+    fx_t: float,
+    elapsed: float,
+) -> None:
+    if fx_t <= 0.0:
+        return
+    t = 1.0 - fx_t / PHASE_SHIFT_FX_SECONDS
+    accent = _phase_accent(phase)
+    ring_r = r * (1.05 + t * 1.85)
+    draw_fog_glow(
+        canvas,
+        sx,
+        sy,
+        _clamp_glow(ring_r * 1.35, cap=320.0),
+        (palette.BOSS_ORB_GLOW[0], palette.BOSS_ORB_GLOW[1], accent),
+        pulse=elapsed * 12.0 + phase,
+    )
+    segments = 16
+    for ring_i in range(3):
+        spread = ring_r * (0.55 + ring_i * 0.28) * (0.85 + 0.15 * math.sin(elapsed * 9.0 + ring_i))
+        pts: list[float] = []
+        for i in range(segments):
+            angle = math.tau * i / segments + elapsed * (2.4 + ring_i * 0.6)
+            wobble = 1.0 + 0.1 * math.sin(elapsed * 7.0 + i * 0.8 + ring_i)
+            pr = spread * wobble
+            pts.extend((sx + math.cos(angle) * pr, sy + math.sin(angle) * pr * 0.82))
+        if len(pts) >= 6:
+            alpha_w = max(1, int(3 - ring_i))
+            canvas.create_polygon(*pts, fill="", outline=accent, width=alpha_w)
+    for i in range(8):
+        angle = math.tau * i / 8 + elapsed * 4.5
+        spark_r = ring_r * (0.35 + t * 0.95)
+        px = sx + math.cos(angle) * spark_r
+        py = sy + math.sin(angle) * spark_r * 0.78
+        sr = 3.5 + 2.0 * (1.0 - t)
+        canvas.create_oval(px - sr, py - sr, px + sr, py + sr, fill=lerp_hex(accent, "#ffffff", 0.45), outline="")
+
+
+def draw_boss_combat_aura(
+    canvas: tk.Canvas,
+    sx: float,
+    sy: float,
+    r: float,
+    *,
+    phase: int,
+    elapsed: float,
+    brood: bool,
+) -> None:
+    accent = _phase_accent(phase)
+    fog = palette.CHASE_FOG_BROOD if brood else palette.CHASE_FOG_BOSS
+    pulse = elapsed * (4.0 + phase * 0.8)
+    draw_ground_fog_glow(canvas, sx, sy + r * 0.15, r * (2.35 + phase * 0.12), fog, pulse=pulse)
+    tick_r = r * (1.12 + 0.04 * math.sin(elapsed * 5.5 + phase))
+    segments = 12 + phase * 2
+    for i in range(segments):
+        angle = math.tau * i / segments + elapsed * (1.8 + phase * 0.35)
+        inner = tick_r * 0.88
+        outer = tick_r * (1.02 + 0.06 * math.sin(elapsed * 6.0 + i))
+        canvas.create_line(
+            sx + math.cos(angle) * inner,
+            sy + math.sin(angle) * inner * 0.82,
+            sx + math.cos(angle) * outer,
+            sy + math.sin(angle) * outer * 0.82,
+            fill=lerp_hex(accent, fog[-1], 0.35),
+            width=1,
+        )
 
 
 def draw_boss_scrape_zone(
@@ -114,6 +197,9 @@ def draw_mega_squid_tactical(
 ) -> None:
     if not boss.alive:
         return
+    invuln = boss.phase_invuln_remaining
+    phase = boss.combat_phase
+    phase_fx = boss.phase_shift_fx
     p = camera.world_to_screen(boss.pos, ship_pos, ship_angle)
     ship_p = camera.world_to_screen(ship_pos, ship_pos, ship_angle)
     sx, sy = p.x, p.y + hud_top
@@ -123,8 +209,10 @@ def draw_mega_squid_tactical(
     ship_inside = (boss.pos - ship_pos).length() <= boss.radius + ship_radius
     facing = math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x)
     brood = rig.theme == "brood_moon"
-    fog = palette.CHASE_FOG_BROOD if brood else palette.CHASE_FOG_BOSS
-    draw_ground_fog_glow(canvas, sx, sy + r * 0.2, r * 2.2, fog, pulse=elapsed * 4.0)
+    draw_boss_combat_aura(canvas, sx, sy, r, phase=phase, elapsed=elapsed, brood=brood)
+    draw_boss_phase_transition_fx(
+        canvas, sx, sy, r, phase=phase, fx_t=phase_fx, elapsed=elapsed,
+    )
     draw_boss_scrape_zone(
         canvas,
         sx,
@@ -144,19 +232,32 @@ def draw_mega_squid_tactical(
         radius=boss.radius, scale=scale, facing=facing,
         prey_x=ship_p.x, prey_y=ship_p.y + hud_top,
         engaging=engaging, elapsed=elapsed,
+        phase=phase,
     )
-    draw_squid_body_lit(
-        canvas,
-        sx,
-        sy,
-        radius=boss.radius,
-        scale=scale,
-        rig=rig,
-        kind="mega_squid",
-        facing=math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x),
-        elapsed=elapsed,
-        engaging=engaging,
-    )
+    if not _boss_invuln_hidden(elapsed, invuln):
+        draw_squid_body_lit(
+            canvas,
+            sx,
+            sy,
+            radius=boss.radius,
+            scale=scale,
+            rig=rig,
+            kind="mega_squid",
+            facing=math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x),
+            elapsed=elapsed,
+            engaging=engaging,
+        )
+    elif invuln > 0.0:
+        canvas.create_oval(
+            sx - r * 1.05,
+            sy - r * 0.72,
+            sx + r * 1.05,
+            sy + r * 0.68,
+            fill="",
+            outline=_phase_accent(phase),
+            width=3,
+            dash=(6, 4),
+        )
     material = material_for("mega_squid", theme=rig.theme, view=rig.view)
     hp_frac = boss.hits_remaining / max(1, boss.hits_max)
     draw_health_bar(
@@ -185,6 +286,9 @@ def draw_mega_squid_chase(
 ) -> None:
     if not boss.alive:
         return
+    invuln = boss.phase_invuln_remaining
+    phase = boss.combat_phase
+    phase_fx = boss.phase_shift_fx
     projected = chase_boss_projected(camera, boss, ship_pos, ship_angle)
     if projected is None:
         return
@@ -195,14 +299,9 @@ def draw_mega_squid_chase(
     ship_inside = (boss.pos - ship_pos).length() <= boss.radius + ship_radius
     facing = math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x)
     brood = rig is not None and rig.theme == "brood_moon"
-    fog = palette.CHASE_FOG_BROOD if brood else palette.CHASE_FOG_BOSS
-    draw_ground_fog_glow(
-        canvas,
-        sp_x,
-        sp_y + 6,
-        _clamp_glow(r * 2.2, cap=220.0),
-        fog,
-        pulse=elapsed * 5.0,
+    draw_boss_combat_aura(canvas, sp_x, sp_y, r, phase=phase, elapsed=elapsed, brood=brood)
+    draw_boss_phase_transition_fx(
+        canvas, sp_x, sp_y, r, phase=phase, fx_t=phase_fx, elapsed=elapsed,
     )
     draw_boss_scrape_zone(
         canvas,
@@ -223,30 +322,43 @@ def draw_mega_squid_chase(
         radius=boss.radius, scale=entity_scale, facing=facing,
         prey_x=sp_x, prey_y=sp_y,
         engaging=engaging, elapsed=elapsed,
+        phase=phase,
     )
-    if rig is not None:
-        draw_squid_body_lit(
-            canvas,
-            sp_x,
-            sp_y,
-            radius=boss.radius,
-            scale=entity_scale,
-            rig=rig,
-            kind="mega_squid",
-            facing=math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x),
-            elapsed=elapsed,
-            engaging=ship_inside or scrape_flash > 0.0,
-        )
-    else:
-        draw_squid_body(
-            canvas,
-            sp_x,
-            sp_y,
-            radius=boss.radius,
-            scale=entity_scale,
-            facing=math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x),
-            elapsed=elapsed,
-            engaging=ship_inside,
+    if not _boss_invuln_hidden(elapsed, invuln):
+        if rig is not None:
+            draw_squid_body_lit(
+                canvas,
+                sp_x,
+                sp_y,
+                radius=boss.radius,
+                scale=entity_scale,
+                rig=rig,
+                kind="mega_squid",
+                facing=math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x),
+                elapsed=elapsed,
+                engaging=ship_inside or scrape_flash > 0.0,
+            )
+        else:
+            draw_squid_body(
+                canvas,
+                sp_x,
+                sp_y,
+                radius=boss.radius,
+                scale=entity_scale,
+                facing=math.atan2(ship_pos.y - boss.pos.y, ship_pos.x - boss.pos.x),
+                elapsed=elapsed,
+                engaging=ship_inside,
+            )
+    elif invuln > 0.0:
+        canvas.create_oval(
+            sp_x - r * 1.05,
+            sp_y - r * 0.72,
+            sp_x + r * 1.05,
+            sp_y + r * 0.68,
+            fill="",
+            outline=_phase_accent(phase),
+            width=3,
+            dash=(6, 4),
         )
     hp_frac = boss.hits_remaining / max(1, boss.hits_max)
     bar_w = r * 1.6

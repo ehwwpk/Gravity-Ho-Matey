@@ -42,6 +42,8 @@ class CampaignState:
     drone_armored: bool = False
     drone_wingman_hp: int = 0
     drone_wingman_pending: bool = False
+    nifflerp_hp: int = 0
+    nifflerp_pending: bool = False
     weapon_track: WeaponTrack | None = None
     weapon_advanced: bool = False
 
@@ -52,6 +54,10 @@ class CampaignState:
     @property
     def has_drone_contract(self) -> bool:
         return self.drone_wingman_hp > 0 or self.drone_wingman_pending
+
+    @property
+    def has_nifflerp_contract(self) -> bool:
+        return self.nifflerp_hp > 0 or self.nifflerp_pending
 
     @property
     def max_hull_chunks_per_life(self) -> int:
@@ -88,6 +94,8 @@ class CampaignState:
             return self.rubber_hull_charges <= 0
         if kind is PowerUpKind.DRONE_WINGMAN:
             return not self.has_drone_contract
+        if kind is PowerUpKind.NIFFLERP:
+            return not self.has_nifflerp_contract
         if kind is PowerUpKind.HULL_REINFORCE:
             return self.hull_reinforce_purchases < HULL_REINFORCE_MAX_PURCHASES
         if kind is PowerUpKind.DRONE_REPAIR:
@@ -128,6 +136,8 @@ class CampaignState:
             self.rubber_hull_purchases += 1
         elif kind is PowerUpKind.DRONE_WINGMAN:
             self.drone_wingman_pending = True
+        elif kind is PowerUpKind.NIFFLERP:
+            self.nifflerp_pending = True
         elif kind is PowerUpKind.HULL_REINFORCE:
             self.hull_reinforce_purchases += 1
             self.hull_chunks = min(

@@ -538,4 +538,23 @@ Hostile damage parity, overlap destroy without ghost chip, hostile blocked from 
 
 ---
 
+## 2026-06-02 — Relay Hold gap sweep (L4 polish)
+
+### +EV · End-to-end audit closed remaining cross-slice gaps
+Post-overhaul review found stale map glyphs, missing codex entry, generic intro header, and doc drift — fixed in one pass without changing win flow.
+
+### Delivered
+- **`HostileFighter` map glyph** — distinct delta-wing marker on holo chart (not patrol chevron)
+- **Jewel tier** — corsair kills roll 5–10 (typed in `jewel_drops.py`)
+- **Wave-3 banner** — `◈ FINAL ASSAULT INBOUND ◈` top strip on rift (mirrors Brood Moon pattern)
+- **Welcome codex** — `STRIKE CORSAIR` entry + tactical preview; removed dead brood-mother preview helpers
+- **Level intro** — `RELAY LIVE` rift-only; other sectors show `LINK LIVE`
+- **`world.py` cleanup** — `_boss_alive()`, relay ingress keyed on `guard_layout`, generic mega-squid scrape copy
+- **Tests** — rift briefing copy, intro status line, fighter map/jewel, multi_perspective win without `boss_cleared`
+- **Docs** — `ARCHITECTURE.md` protection-mission table; brainstorm horror line updated
+
+### neutral · Full pytest green after sweep
+
+---
+
 <!-- Append new entries above this line, newest first within each day -->

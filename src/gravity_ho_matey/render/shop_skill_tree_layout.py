@@ -66,6 +66,7 @@ _HULL_NODES: tuple[SkillTreeNode, ...] = (
 
 _ESCORT_BASE: tuple[SkillTreeNode, ...] = (
     SkillTreeNode(PowerUpKind.DRONE_WINGMAN, 58.0, 178.0, "escort", 0),
+    SkillTreeNode(PowerUpKind.NIFFLERP, 106.0, 178.0, "escort", 0),
 )
 
 _ESCORT_UPGRADES: tuple[SkillTreeNode, ...] = (

@@ -88,11 +88,11 @@ class JewelHudTests(unittest.TestCase):
             campaign = CampaignState.new()
             director = world.wave_director
             assert director is not None
-            director.poll_spawn(0.0)
+            director.poll_spawn(0.0, hostiles_alive=0)
             director.tick(15.0, 0.016)
             overlay.draw(canvas, world, campaign)
             self.assertGreater(len(canvas.find_all()), 0)
-            director.poll_spawn(20.0)
+            director.poll_spawn(20.0, hostiles_alive=0)
             overlay.draw(canvas, world, campaign)
             self.assertGreater(len(canvas.find_all()), 0)
         finally:

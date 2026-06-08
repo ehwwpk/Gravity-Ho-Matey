@@ -285,6 +285,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_pit=palette.STATION_HOSTILE_DEEP,
             crater_rim_hi=palette.ENEMY_EDGE,
         )
+    if kind == "enemy_fighter":
+        return MaterialTones(
+            highlight=lerp_hex(palette.ENEMY_EDGE, "#ffd0a8", 0.22),
+            mid=lerp_hex(palette.STATION_HOSTILE_HULL, palette.ENEMY, 0.35),
+            shadow=palette.STATION_HOSTILE_SHADOW,
+            deep=palette.STATION_HOSTILE_DEEP,
+            rim=palette.ENEMY_EDGE,
+            crater_pit=palette.STATION_HOSTILE_DEEP,
+            crater_rim_hi=lerp_hex(palette.STATION_HOSTILE_GLOW, palette.ENEMY_EDGE, 0.5),
+        )
     if kind == "station_neutral":
         return _station_faction_material(StationFaction.NEUTRAL, theme=theme, view=view)
     if kind == "brood_regolith":

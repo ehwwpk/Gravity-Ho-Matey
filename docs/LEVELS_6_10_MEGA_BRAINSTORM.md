@@ -35,7 +35,7 @@
 |-------|-------------|
 | **Arc** | Smuggler training → solar choke → open drift horror → relay defense → two-fleet siege |
 | **Human line** | Patrol skiffs, roster wingmen, friendly fighters, hostile/friendly stations |
-| **Horror line** | Void squids, coil rings, tentacle reach, Brood-Mother on Rift |
+| **Horror line** | Void squids, coil rings, tentacle reach, corsair strike on Relay Hold |
 | **Environment** | Black holes (maw + footprint), asteroid tiers/breakup, ring/shower drift, radiation (optional) |
 | **Mission types** | Beacon gate race, open survival/extract, timed waves, kill quota + station assault |
 | **Meta** | 3 lives, hull chunks, jewel treasury, radial skill deck, weapon doctrine + advanced branch |

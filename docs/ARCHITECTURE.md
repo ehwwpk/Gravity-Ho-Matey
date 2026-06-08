@@ -121,4 +121,14 @@ Every coding session that touches the repo should run the DevGov loop — **chec
 
 ## Tests
 
-Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, registry alignment, drifting asteroid shape/motion/collision/render paths, and destructible asteroid combat (tiers, breakup, threat snapshot refresh).
+Coverage includes vector math, gravity, beacon/finish flow, level builders, campaign lives/power-ups, hull chip/lethal damage, enemy patrol/combat, camera projection, gravity field bake, registry alignment, drifting asteroid shape/motion/collision/render paths, destructible asteroid combat (tiers, breakup, threat snapshot refresh), and relay protection missions (timed waves, stack cap, extract-after-clear).
+
+## Protection missions (Relay Hold / `rift`)
+
+| Piece | Module | Role |
+|-------|--------|------|
+| Layout | `levels/guard_layout.py`, `guard_waves.py`, `guard_asteroids.py` | North ingress, 3-wave spawn tables (patrol → squids → squids + `HostileFighter`) |
+| Pacing | `gameplay/wave_mission.py` | `WaveMissionPresentation` — clock spawn, clear-to-advance breather, alive stack cap |
+| Win | `gameplay/world.py` | `protection_combat_cleared` — all waves fired, relay alive, zero hostiles; south extract pad unlocks after HOLD COMPLETE beat |
+| HUD | `gameplay/hud_objectives.py`, `render/hud_overlay.py`, `render/edge_hints.py` | WAVES/HOSTILES counters, relay HP, wave-3 top banner, north `IN` hint during inbound waves |
+| Enemy | `gameplay/hostile_fighter.py` | Wave-3 corsair strike craft — distinct map glyph and jewel tier |

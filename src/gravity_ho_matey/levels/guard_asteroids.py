@@ -29,6 +29,9 @@ def build_guard_asteroids(layout: GuardLayout, config: WorldConfig) -> list[Aste
         (Vec2(980.0, 1520.0), "rock", 44023),
         (Vec2(3020.0, 1480.0), "rock", 44024),
         (Vec2(CENTER.x, 2180.0), "pebble", 44025),
+        (Vec2(1420.0, 1180.0), "pebble", 44026),
+        (Vec2(2580.0, 1240.0), "pebble", 44027),
+        (Vec2(1380.0, 1360.0), "rock", 44028),
     )
     for pos, size_class, seed in specs:
         drift = Vec2.from_angle(rng.uniform(0.0, 6.28)) * rng.uniform(8.0, 22.0)

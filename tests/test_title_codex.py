@@ -133,11 +133,32 @@ class TitleCodexSceneTests(unittest.TestCase):
 
 
 class TitleCodexContentTests(unittest.TestCase):
-    def test_entry_count_includes_drone_and_hostile_station(self) -> None:
+    def test_entry_count_is_ten(self) -> None:
         ids = {e.entry_id for e in CODEX_ENTRIES}
         self.assertIn("drone", ids)
         self.assertIn("hostile_stn", ids)
+        self.assertIn("relay", ids)
+        self.assertIn("corsair", ids)
+        self.assertNotIn("brood", ids)
+        self.assertNotIn("moon_matriarch", ids)
         self.assertEqual(len(CODEX_ENTRIES), 10)
+
+    def test_all_preview_kinds_are_supported(self) -> None:
+        from gravity_ho_matey.render.title_codex_tactical import draw_codex_tactical_preview
+        from gravity_ho_matey.render.lighting import LightRig
+        from gravity_ho_matey.render.camera import CameraMode
+
+        root, canvas = _canvas()
+        try:
+            rig = LightRig.for_play(theme="cove", camera_mode=CameraMode.TACTICAL)
+            for entry in CODEX_ENTRIES:
+                canvas.delete("all")
+                draw_codex_tactical_preview(
+                    canvas, entry, 120.0, 120.0, rig=rig, elapsed=1.0, yaw=0.3,
+                )
+                self.assertGreater(len(canvas.find_all()), 0, msg=entry.entry_id)
+        finally:
+            root.destroy()
 
     def test_blurb_is_single_string(self) -> None:
         for entry in CODEX_ENTRIES:

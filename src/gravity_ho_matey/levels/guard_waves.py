@@ -4,22 +4,23 @@ import math
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.enemies import PatrolEnemy
-from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
+from gravity_ho_matey.gameplay.hostile_fighter import HostileFighter
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
 from gravity_ho_matey.levels.guard_layout import (
-    BOSS_SPAWN,
-    RELAY_INGRESS_BOSS_SPEED,
     RELAY_INGRESS_SQUID_SPEED,
-    SQUID_SPAWN_RADIUS,
-    WAVE1_INGRESS_Y,
+    WAVE1_NE_SPAWNS,
+    WAVE1_NW_SPAWNS,
+    WAVE3_FIGHTER_SPAWNS,
     GuardLayout,
+    squid_arc_positions,
 )
 
 WAVE1_PATROL_COUNT = 4
 WAVE2_SQUID_COUNT = 7
-WAVE3_SQUID_COUNT = 7
+WAVE3_SQUID_COUNT = 8
+WAVE3_FIGHTER_COUNT = 4
 
-_WAVE1_XS = (1720.0, 1860.0, 2140.0, 2280.0)
+GuardWaveEnemy = PatrolEnemy | SquidEnemy | HostileFighter
 
 
 def _station_target(layout: GuardLayout) -> Vec2:
@@ -70,8 +71,8 @@ def _patrol_ingress(spawn: Vec2, station: Vec2) -> tuple[Vec2, ...]:
 def spawn_wave1_patrols(layout: GuardLayout) -> list[PatrolEnemy]:
     station = _station_target(layout)
     enemies: list[PatrolEnemy] = []
-    for index, x in enumerate(_WAVE1_XS):
-        spawn = Vec2(x, WAVE1_INGRESS_Y)
+    spawns = (*WAVE1_NW_SPAWNS, *WAVE1_NE_SPAWNS)
+    for index, spawn in enumerate(spawns):
         enemies.append(
             PatrolEnemy(
                 waypoints=_patrol_ingress(spawn, station),
@@ -87,20 +88,10 @@ def spawn_wave1_patrols(layout: GuardLayout) -> list[PatrolEnemy]:
     return enemies
 
 
-def _squid_ring_positions(layout: GuardLayout, count: int, *, seed_offset: int) -> list[Vec2]:
-    positions: list[Vec2] = []
-    center = layout.squid_ring_center
-    for i in range(count):
-        angle = math.tau * i / count + seed_offset * 0.11
-        pos = center + Vec2(math.cos(angle), math.sin(angle)) * SQUID_SPAWN_RADIUS
-        positions.append(pos)
-    return positions
-
-
 def spawn_wave2_squids(layout: GuardLayout) -> list[SquidEnemy]:
     station = _station_target(layout)
     squids: list[SquidEnemy] = []
-    for i, pos in enumerate(_squid_ring_positions(layout, WAVE2_SQUID_COUNT, seed_offset=0)):
+    for i, pos in enumerate(squid_arc_positions(layout.squid_ring_center, WAVE2_SQUID_COUNT, seed_offset=0)):
         facing = math.atan2(station.y - pos.y, station.x - pos.x)
         squids.append(
             _relay_squid(
@@ -115,12 +106,12 @@ def spawn_wave2_squids(layout: GuardLayout) -> list[SquidEnemy]:
     return squids
 
 
-def spawn_wave3_squids_and_boss(layout: GuardLayout) -> tuple[list[SquidEnemy], MegaSquidBoss]:
+def spawn_wave3_assault(layout: GuardLayout) -> list[GuardWaveEnemy]:
     station = _station_target(layout)
-    squids: list[SquidEnemy] = []
-    for i, pos in enumerate(_squid_ring_positions(layout, WAVE3_SQUID_COUNT, seed_offset=3)):
+    enemies: list[GuardWaveEnemy] = []
+    for i, pos in enumerate(squid_arc_positions(layout.squid_ring_center, WAVE3_SQUID_COUNT, seed_offset=3)):
         facing = math.atan2(station.y - pos.y, station.x - pos.x)
-        squids.append(
+        enemies.append(
             _relay_squid(
                 pos,
                 station=station,
@@ -130,23 +121,23 @@ def spawn_wave3_squids_and_boss(layout: GuardLayout) -> tuple[list[SquidEnemy], 
                 engage_range=1420.0,
             )
         )
-    boss_pos = Vec2(BOSS_SPAWN.x, BOSS_SPAWN.y)
-    boss = MegaSquidBoss(
-        pos=boss_pos,
-        anchor=station,
-        approach_gain=4.8,
-        max_cruise=118.0,
-    )
-    boss.vel = _ingress_velocity(boss_pos, station, RELAY_INGRESS_BOSS_SPEED)
-    return squids, boss
+    for index, spawn in enumerate(WAVE3_FIGHTER_SPAWNS[:WAVE3_FIGHTER_COUNT]):
+        facing = math.atan2(station.y - spawn.y, station.x - spawn.x)
+        fighter = HostileFighter(
+            pos=Vec2(spawn.x, spawn.y),
+            vel=_ingress_velocity(spawn, station, 148.0),
+            facing_angle=facing,
+            fire_cooldown=0.35 + index * 0.22,
+        )
+        enemies.append(fighter)
+    return enemies
 
 
-def wave_spawn_for(layout: GuardLayout, wave: int) -> tuple[list[PatrolEnemy | SquidEnemy], MegaSquidBoss | None]:
+def wave_spawn_for(layout: GuardLayout, wave: int) -> list[GuardWaveEnemy]:
     if wave == 1:
-        return spawn_wave1_patrols(layout), None
+        return spawn_wave1_patrols(layout)
     if wave == 2:
-        return spawn_wave2_squids(layout), None
+        return spawn_wave2_squids(layout)
     if wave == 3:
-        squids, boss = spawn_wave3_squids_and_boss(layout)
-        return squids, boss
-    return [], None
+        return spawn_wave3_assault(layout)
+    return []

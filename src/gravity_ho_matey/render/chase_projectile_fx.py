@@ -12,6 +12,13 @@ from gravity_ho_matey.render.chase_fx import draw_ground_fog_glow
 
 
 def _bolt_palette(projectile: Projectile) -> tuple[str, str, str, str]:
+    if projectile.boss_energy_orb:
+        return (
+            palette.BOSS_ORB_CORE,
+            palette.BOSS_ORB_MID,
+            palette.BOSS_ORB_TAIL,
+            palette.BOSS_ORB_GLOW[2],
+        )
     if projectile.hostile:
         return (
             palette.CHASE_BOLT_HOSTILE_CORE,
@@ -51,6 +58,8 @@ def _bolt_palette(projectile: Projectile) -> tuple[str, str, str, str]:
 
 def tactical_bolt_style(projectile: Projectile) -> tuple[str, str, float]:
     """Tactical-view bolt fill, tail, and radius — mirrors chase doctrine colors."""
+    if projectile.boss_energy_orb:
+        return palette.BOSS_ORB_MID, palette.BOSS_ORB_TAIL, 7.0
     if projectile.hostile:
         return palette.HOSTILE_PROJECTILE, palette.HOSTILE_PROJECTILE, 3.5
     core, mid, tail, _glow = _bolt_palette(projectile)
@@ -79,7 +88,9 @@ def _screen_streak(
         return head.x, head.y, head.x, head.y, 0.0
 
     streak_len = min(56.0, 14.0 + speed * 0.16)
-    if projectile.hostile:
+    if projectile.boss_energy_orb:
+        streak_len = min(78.0, 22.0 + speed * 0.2)
+    elif projectile.hostile:
         streak_len = min(62.0, 16.0 + speed * 0.18)
     elif projectile.weapon_track is WeaponTrack.EXPLOSIVE:
         streak_len = min(48.0, 18.0 + speed * 0.12)
@@ -129,6 +140,8 @@ def _draw_tapered_bolt(
     px, py = -uy, ux
 
     bloom_r = 10.0 if hostile else 8.0
+    if track is None and hostile:
+        bloom_r = 14.0
     draw_ground_fog_glow(canvas, hx, hy + 2, bloom_r, (glow, mid), pulse=0.0)
 
     layers: tuple[tuple[float, str, int], ...]
@@ -208,7 +221,22 @@ def draw_chase_projectile(
     )
     core, mid, tail, glow = _bolt_palette(projectile)
     track = projectile.weapon_track
-    if not projectile.hostile and track is WeaponTrack.EXPLOSIVE:
+    if projectile.boss_energy_orb:
+        pulse = 0.72 + 0.28 * math.sin(elapsed * 11.0)
+        draw_ground_fog_glow(
+            canvas,
+            hx,
+            hy + 2,
+            18.0 * pulse,
+            palette.BOSS_ORB_GLOW,
+            pulse=elapsed * 8.0,
+        )
+        for ring_i in range(3):
+            rr = (6.0 + ring_i * 3.5) * pulse
+            canvas.create_oval(hx - rr, hy - rr * 0.85, hx + rr, hy + rr * 0.75, outline=mid, width=1)
+        canvas.create_oval(hx - 5.5, hy - 4.5, hx + 5.5, hy + 4.0, fill=mid, outline=core, width=2)
+        canvas.create_oval(hx - 2.2, hy - 1.8, hx + 2.2, hy + 1.6, fill=core, outline="")
+    elif not projectile.hostile and track is WeaponTrack.EXPLOSIVE:
         pulse = 0.65 + 0.35 * math.sin(elapsed * 14.0)
         draw_ground_fog_glow(canvas, hx, hy + 2, 14.0 * pulse, (glow, mid), pulse=elapsed * 6.0)
         canvas.create_oval(hx - 7 * pulse, hy - 5 * pulse, hx + 7 * pulse, hy + 5 * pulse, outline=core, width=2)
@@ -216,20 +244,24 @@ def draw_chase_projectile(
         draw_ground_fog_glow(canvas, hx, hy + 2, 11.0, (glow, mid), pulse=0.0)
     elif not projectile.hostile and track is WeaponTrack.SHOTGUN:
         draw_ground_fog_glow(canvas, hx, hy + 2, 9.0, (glow, mid), pulse=0.0)
-    _draw_tapered_bolt(
-        canvas,
-        hx=hx,
-        hy=hy,
-        tx=tx,
-        ty=ty,
-        length=length,
-        core=core,
-        mid=mid,
-        tail=tail,
-        glow=glow,
-        hostile=projectile.hostile,
-        track=track if not projectile.hostile else None,
-    )
+    if not projectile.boss_energy_orb:
+        _draw_tapered_bolt(
+            canvas,
+            hx=hx,
+            hy=hy,
+            tx=tx,
+            ty=ty,
+            length=length,
+            core=core,
+            mid=mid,
+            tail=tail,
+            glow=glow,
+            hostile=projectile.hostile,
+            track=track if not projectile.hostile else None,
+        )
+    elif length >= 2.0:
+        canvas.create_line(tx, ty, hx, hy, fill=tail, width=4, capstyle=tk.ROUND)
+        canvas.create_line(tx, ty, hx, hy, fill=mid, width=2, capstyle=tk.ROUND)
 
 
 def draw_mirror_hostile_bolt(

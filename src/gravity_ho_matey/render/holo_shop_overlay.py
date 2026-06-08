@@ -9,7 +9,7 @@ from gravity_ho_matey.gameplay.shop_catalog import shop_hit_id
 from gravity_ho_matey.gameplay.shop_display import shop_button_label, shop_card_hint, shop_owned_status
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
-from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button, draw_wrapped_text
+from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button, draw_wrapped_text, draw_wrapped_text
 from gravity_ho_matey.render.shop_skill_tree_layout import (
     BRANCHES,
     SkillTreeNode,
@@ -116,6 +116,123 @@ class HoloShopOverlay:
             text="▶",
             fill=border,
             font=hp.FONT_BODY_BOLD,
+        )
+
+    def draw_welcome_bazaar_card(
+        self,
+        canvas: tk.Canvas,
+        *,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        campaign: CampaignState,
+        hits: MenuHitMap,
+        accent: str,
+        dim: str,
+        frame: str,
+        hover_id: str | None,
+        elapsed: float = 0.0,
+    ) -> None:
+        """Embedded Holo Bazaar on the welcome column — primary trade entry."""
+        hover = hover_id == "shop_open"
+        pulse = 0.65 + 0.35 * math.sin(elapsed * 3.0)
+        border = palette.JEWEL_CORE if hover else accent
+        fill = "#142838" if hover else "#0c1828"
+        hp.draw_panel(canvas, x, y, w, h, frame=border if hover else frame, accent=accent, fill=fill)
+        draw_holo_corners(canvas, x, y, w, h, accent=palette.JEWEL_CORE if pulse > 0.75 else accent, elapsed=elapsed)
+        hits.add("shop_open", x, y, w, h)
+
+        hp.draw_panel_title(canvas, x + 12, y + 10, "HOLO BAZAAR", color=dim)
+        canvas.create_text(
+            x + w - 12,
+            y + 10,
+            anchor="e",
+            text="B",
+            fill=palette.JEWEL_CORE if hover else accent,
+            font=hp.FONT_BODY_BOLD,
+        )
+        canvas.create_line(x + 12, y + 26, x + w - 12, y + 26, fill=frame, width=1)
+
+        canvas.create_text(
+            x + 14,
+            y + 40,
+            anchor="w",
+            text="◈ MERCHANT TREE",
+            fill=accent,
+            font=hp.FONT_BODY_BOLD,
+        )
+        canvas.create_text(
+            x + 14,
+            y + 58,
+            anchor="w",
+            text=f"★ {campaign.jewels} treasury jewels",
+            fill=palette.JEWEL_CORE,
+            font=hp.FONT_DISPLAY,
+        )
+        draw_wrapped_text(
+            canvas,
+            x + 14,
+            y + 78,
+            "Doctrine · drive · hull · escort — fittings persist for the run.",
+            max_width=w - 28,
+            line_height=13.0,
+            color=dim,
+            font=hp.FONT_SMALL,
+            max_lines=2,
+        )
+
+        btn_y = y + h - 36.0
+        btn_h = 28.0
+        btn_fill = palette.JEWEL_CORE if hover else accent
+        canvas.create_rectangle(x + 10, btn_y, x + w - 10, btn_y + btn_h, outline=btn_fill, fill="#0e2030", width=2 if hover else 1)
+        draw_fitted_text(
+            canvas,
+            x + w / 2,
+            btn_y + btn_h / 2,
+            "OPEN UPGRADE TREE →",
+            max_width=w - 28,
+            color=btn_fill,
+            font=hp.FONT_BODY_BOLD,
+            anchor="center",
+        )
+
+    def draw_compact_bazaar_strip(
+        self,
+        canvas: tk.Canvas,
+        *,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        campaign: CampaignState,
+        hits: MenuHitMap,
+        accent: str,
+        hover_id: str | None,
+        elapsed: float = 0.0,
+    ) -> None:
+        """Slim trade strip above the tab rail on briefing pages."""
+        hover = hover_id == "shop_open"
+        border = palette.JEWEL_CORE if hover else accent
+        hp.draw_panel(canvas, x, y, w, h, frame=border, accent=accent, fill="#0e2030" if hover else "#0a1420")
+        hits.add("shop_open", x, y, w, h)
+        draw_fitted_text(
+            canvas,
+            x + 14,
+            y + h / 2,
+            f"◈ HOLO BAZAAR · ★ {campaign.jewels} · MERCHANT TREE",
+            max_width=w - 56,
+            color=palette.JEWEL_CORE if hover else accent,
+            font=hp.FONT_BODY_BOLD,
+            anchor="w",
+        )
+        canvas.create_text(
+            x + w - 14,
+            y + h / 2,
+            anchor="e",
+            text="B · OPEN ▶",
+            fill=border,
+            font=hp.FONT_BODY,
         )
 
     @staticmethod
@@ -659,6 +776,8 @@ class HoloShopOverlay:
             return campaign.powerup_stacks.get(kind, 0) > 0
         if kind is PowerUpKind.DRONE_WINGMAN:
             return campaign.has_drone_contract
+        if kind is PowerUpKind.NIFFLERP:
+            return campaign.has_nifflerp_contract
         if kind is PowerUpKind.DRONE_ARMOR:
             return campaign.drone_armored
         if kind is PowerUpKind.RUBBER_HULL:

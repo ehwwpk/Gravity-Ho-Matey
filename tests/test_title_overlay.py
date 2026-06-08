@@ -38,7 +38,7 @@ class TitleOverlayTests(unittest.TestCase):
         )
         texts = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
         joined = " ".join(str(t) for t in texts if t)
-        for label in ("WELCOME", "MISSION", "CONTROLS", "COMBAT", "SELECT LEVEL", "MERCHANT TREE"):
+        for label in ("WELCOME", "MISSION", "CONTROLS", "COMBAT", "SELECT LEVEL", "HOLO BAZAAR", "MERCHANT TREE"):
             self.assertIn(label, joined, msg=f"missing tab/shop label: {label}")
         for bad in ("WELCO…", "WELCO...", "MISSI…", "SELEC…"):
             self.assertNotIn(bad, joined)

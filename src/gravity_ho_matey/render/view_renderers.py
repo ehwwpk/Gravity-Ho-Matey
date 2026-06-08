@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
@@ -120,6 +119,24 @@ class TacticalViewRenderer:
             and world.brood_moon is not None
             and not world.brood_moon.on_surface
         )
+        if brood_orbital and world.brood_moon is not None and world.brood_moon.layout is not None:
+            from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
+            from gravity_ho_matey.render.planet_mission_viz import draw_planet_landing_band_tactical
+
+            if world.brood_moon.phase is BroodPhase.ORBITAL:
+                draw_planet_landing_band_tactical(
+                    canvas,
+                    world.brood_moon.layout.planet,
+                    camera=camera,
+                    ship_pos=ship_pos,
+                    ship_angle=world.ship.angle,
+                    hud_top=float(hud_top),
+                    accent=palette.BROOD_MOON_HUD_ACCENT,
+                    dim=palette.HUD_DIM,
+                    elapsed=world.elapsed,
+                    show_fog=True,
+                    show_rings=False,
+                )
         threat_radius = ORBITAL_ASTEROID_THREAT_RADIUS if brood_orbital else 0.0
         scree_material = "brood_regolith" if brood else "asteroid"
         if brood_orbital:
@@ -189,6 +206,7 @@ class TacticalViewRenderer:
                 solar=solar,
                 hud_top=hud_top,
                 elapsed=world.elapsed,
+                rig=rig,
             )
         for beacon in world.beacons:
             p = camera.world_to_screen(beacon.pos, ship_pos, world.ship.angle)
@@ -242,30 +260,6 @@ class TacticalViewRenderer:
                     elapsed=world.elapsed,
                     rig=rig,
                 )
-        if rift and world.mega_squid is not None and world.mega_squid.alive:
-            from gravity_ho_matey.render.squid_boss_viz import draw_mega_squid_tactical, draw_squid_pods_tactical
-
-            draw_mega_squid_tactical(
-                canvas,
-                world.mega_squid,
-                camera,
-                ship_pos=ship_pos,
-                ship_angle=world.ship.angle,
-                ship_radius=world.ship.radius,
-                hud_top=float(hud_top),
-                rig=rig,
-                elapsed=world.elapsed,
-                scrape_flash=world.boss_scrape_flash,
-            )
-            draw_squid_pods_tactical(
-                canvas,
-                world.squid_pods,
-                camera,
-                ship_pos=ship_pos,
-                ship_angle=world.ship.angle,
-                hud_top=float(hud_top),
-                elapsed=world.elapsed,
-            )
         if brood and world.mega_squid is not None and world.mega_squid.alive:
             from gravity_ho_matey.render.squid_boss_viz import draw_mega_squid_tactical
 
@@ -280,6 +274,18 @@ class TacticalViewRenderer:
                 rig=rig,
                 elapsed=world.elapsed,
                 scrape_flash=world.boss_scrape_flash,
+            )
+        if world.squid_pods:
+            from gravity_ho_matey.render.squid_boss_viz import draw_squid_pods_tactical
+
+            draw_squid_pods_tactical(
+                canvas,
+                world.squid_pods,
+                camera,
+                ship_pos=ship_pos,
+                ship_angle=world.ship.angle,
+                hud_top=float(hud_top),
+                elapsed=world.elapsed,
             )
         if brood and world.egg_pods:
             from gravity_ho_matey.render.egg_pod_viz import draw_egg_pods_tactical
@@ -312,6 +318,8 @@ class TacticalViewRenderer:
                     accent=palette.BROOD_MOON_HUD_ACCENT,
                     dim=palette.HUD_DIM,
                     elapsed=world.elapsed,
+                    show_fog=False,
+                    show_rings=True,
                 )
         for projectile in world.projectiles:
             self._projectile(canvas, projectile, camera, ship_pos, hud_top, elapsed=world.elapsed)
@@ -368,6 +376,32 @@ class TacticalViewRenderer:
                     fill=palette.DRONE_CORE,
                     low_fill=palette.HUD_WARN,
                 )
+        if world.nifflerp is not None and world.nifflerp.alive:
+            from gravity_ho_matey.render.nifflerp_viz import draw_nifflerp_tactical
+
+            buddy = world.nifflerp
+            bp = camera.world_to_screen(buddy.pos, ship_pos, world.ship.angle)
+            draw_nifflerp_tactical(
+                canvas,
+                Vec2(bp.x, bp.y + hud_top),
+                buddy.facing_angle,
+                scale=ally_scale * 0.78,
+                buddy=buddy,
+                rig=rig,
+            )
+            buddy_hp = hp_fraction(buddy)
+            if buddy_hp is not None:
+                bar_y = bp.y + hud_top - 14.0 * ally_scale
+                draw_health_bar(
+                    canvas,
+                    bp.x,
+                    bar_y,
+                    11.0 * ally_scale,
+                    buddy_hp,
+                    outline=palette.NIFFLERP_TRIM,
+                    fill=palette.NIFFLERP_CORE,
+                    low_fill=palette.HUD_WARN,
+                )
         ship_screen = camera.world_to_screen(world.ship.pos, ship_pos, world.ship.angle)
         from gravity_ho_matey.gameplay.planetside_flight import is_planetside, ship_draw_jolt_angle
 
@@ -421,8 +455,6 @@ class TacticalViewRenderer:
     def _draw_tactical_enemy(
         self, canvas, enemy, camera, ship_pos, ship_radius, hud_top, *, elapsed: float = 0.0, rig: LightRig | None = None
     ) -> None:
-        p = camera.world_to_screen(enemy.pos, ship_pos, 0.0)
-        x, y = p.x, p.y + hud_top
         if enemy.kind is EnemyKind.SQUID:
             assert isinstance(enemy, SquidEnemy)
             from gravity_ho_matey.render.squid_viz import draw_squid_enemy_tactical
@@ -452,6 +484,21 @@ class TacticalViewRenderer:
                 rig=rig,
                 elapsed=elapsed,
             )
+            return
+        from gravity_ho_matey.gameplay.hostile_fighter import HostileFighter
+        from gravity_ho_matey.render.ship_viz import draw_hostile_fighter_ship
+
+        if isinstance(enemy, HostileFighter) and rig is not None:
+            p = camera.world_to_screen(enemy.pos, ship_pos, 0.0)
+            if p.visible:
+                scale = max(0.55, camera.perspective_scale(p.depth) / camera.focal_length * 0.72)
+                draw_hostile_fighter_ship(
+                    canvas,
+                    Vec2(p.x, p.y + hud_top),
+                    enemy.facing_angle,
+                    scale=scale,
+                    rig=rig,
+                )
             return
         self._enemy(canvas, enemy.pos, enemy.radius, enemy.facing_angle, camera, ship_pos, hud_top)
 
@@ -623,6 +670,8 @@ class PerspectiveViewRenderer:
                         accent=palette.BROOD_MOON_HUD_ACCENT,
                         dim=palette.HUD_DIM,
                         elapsed=elapsed,
+                        show_fog=True,
+                        show_rings=False,
                     )
         if not brood_on_surface:
             heat_step = 8 if brood_orbital_chase else (4 if field.rows >= 64 else 2)
@@ -682,6 +731,23 @@ class PerspectiveViewRenderer:
             ship_angle=ship_angle,
             material_kind=chase_scree_material,
         )
+        if brood_orbital_chase and world.brood_moon is not None and world.brood_moon.layout is not None:
+            from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
+            from gravity_ho_matey.render.planet_mission_viz import draw_planet_landing_band_chase
+
+            if world.brood_moon.phase is BroodPhase.ORBITAL:
+                draw_planet_landing_band_chase(
+                    canvas,
+                    world.brood_moon.layout.planet,
+                    camera=camera,
+                    ship_pos=ship_pos,
+                    ship_angle=ship_angle,
+                    accent=palette.BROOD_MOON_HUD_ACCENT,
+                    dim=palette.HUD_DIM,
+                    elapsed=elapsed,
+                    show_fog=False,
+                    show_rings=True,
+                )
 
         sprites: list[tuple[float, str, object]] = []
         from gravity_ho_matey.render.chase_wells import chase_well_drawable
@@ -750,6 +816,11 @@ class PerspectiveViewRenderer:
             if p.visible:
                 scale = max(0.32, camera.perspective_scale(p.depth) / camera.focal_length * 0.82)
                 sprites.append((p.depth, "drone", (Vec2(p.x, p.y), world.drone_wingman, scale)))
+        if world.nifflerp is not None and world.nifflerp.alive:
+            p = camera.world_to_screen(world.nifflerp.pos, ship_pos, ship_angle)
+            if p.visible:
+                scale = max(0.28, camera.perspective_scale(p.depth) / camera.focal_length * 0.72)
+                sprites.append((p.depth, "nifflerp", (Vec2(p.x, p.y), world.nifflerp, scale)))
         if world.mega_squid is not None and world.mega_squid.alive:
             from gravity_ho_matey.render.squid_boss_viz import chase_boss_projected
 
@@ -816,6 +887,7 @@ class PerspectiveViewRenderer:
                         gate_size=gate_size,
                         depth_scale=g_scale,
                         elapsed=elapsed,
+                        rig=rig,
                     )
             elif kind == "beacon":
                 pos, beacon, b_scale = payload
@@ -918,6 +990,30 @@ class PerspectiveViewRenderer:
                         fill=palette.DRONE_CORE,
                         low_fill=palette.HUD_WARN,
                     )
+            elif kind == "nifflerp":
+                from gravity_ho_matey.render.nifflerp_viz import draw_nifflerp_chase
+
+                pos, buddy, scale = payload
+                draw_nifflerp_chase(
+                    canvas,
+                    pos,
+                    buddy.facing_angle,
+                    scale=scale * CHASE_SHIP_SCALE,
+                    buddy=buddy,
+                )
+                buddy_hp = hp_fraction(buddy)
+                if buddy_hp is not None:
+                    r = min(buddy.radius * scale * CHASE_SHIP_SCALE, 18.0)
+                    draw_health_bar(
+                        canvas,
+                        pos.x,
+                        pos.y - r - 6,
+                        r * 1.1,
+                        buddy_hp,
+                        outline=palette.NIFFLERP_TRIM,
+                        fill=palette.NIFFLERP_CORE,
+                        low_fill=palette.HUD_WARN,
+                    )
             elif kind == "enemy":
                 pos, enemy, scale = payload
                 if enemy.kind is EnemyKind.SQUID and isinstance(enemy, SquidEnemy):
@@ -951,17 +1047,29 @@ class PerspectiveViewRenderer:
                             low_fill=palette.BOSS_SCRAPE_WARN,
                         )
                 else:
-                    draw_chase_enemy(
-                        canvas,
-                        pos,
-                        enemy=enemy,
-                        camera=camera,
-                        ship_pos=ship_pos,
-                        ship_angle=ship_angle,
-                        scale=scale,
-                        rig=rig,
-                        elapsed=elapsed,
-                    )
+                    from gravity_ho_matey.gameplay.hostile_fighter import HostileFighter
+                    from gravity_ho_matey.render.ship_viz import draw_hostile_fighter_ship
+
+                    if isinstance(enemy, HostileFighter):
+                        draw_hostile_fighter_ship(
+                            canvas,
+                            pos,
+                            enemy.facing_angle,
+                            scale=scale * CHASE_SHIP_SCALE,
+                            rig=rig,
+                        )
+                    else:
+                        draw_chase_enemy(
+                            canvas,
+                            pos,
+                            enemy=enemy,
+                            camera=camera,
+                            ship_pos=ship_pos,
+                            ship_angle=ship_angle,
+                            scale=scale,
+                            rig=rig,
+                            elapsed=elapsed,
+                        )
             elif kind == "projectile":
                 pos, projectile = payload
                 draw_chase_projectile(
@@ -975,7 +1083,7 @@ class PerspectiveViewRenderer:
                     extended_tail=brood_combat_read and projectile.hostile,
                 )
 
-        if rift and world.squid_pods:
+        if world.squid_pods:
             from gravity_ho_matey.render.squid_boss_viz import draw_squid_pods_chase
 
             draw_squid_pods_chase(

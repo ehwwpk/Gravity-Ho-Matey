@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from gravity_ho_matey.core.geometry import Rect
@@ -19,18 +20,18 @@ EXTRACT_GATE_HALF = 38.0
 # South extract pad — same lane as spawn; fly here after the hold is clear.
 EXTRACT_PAD_CENTER = Vec2(PLAYER_SPAWN.x, PLAYER_SPAWN.y + 52.0)
 RELAY_INGRESS_SQUID_SPEED = 175.0
-RELAY_INGRESS_BOSS_SPEED = 145.0
-# Brood-Mother pops tight on the relay hull (wave 3) — south quarter, not down-lane.
-_MEGA_SQUID_BOSS_RADIUS = 42.0
-_BOSS_STATION_CLEARANCE = 14.0
-BOSS_SPAWN = Vec2(
-    STATION_RELAY.x,
-    STATION_RELAY.y + STATION_RADIUS + _MEGA_SQUID_BOSS_RADIUS + _BOSS_STATION_CLEARANCE,
-)
-# Legacy far-south spawn was PLAYER_SPAWN.y + 140 (~270 from relay anchor).
-BOSS_SPAWN_RELAY_OFFSET = BOSS_SPAWN.y - STATION_RELAY.y
+NORTHERN_RIFT = Vec2(CENTER.x, 520.0)
 WAVE1_INGRESS_Y = 480.0
-SQUID_SPAWN_RADIUS = 1320.0
+# Wave 1 dual-lane patrol ingress (NW / NE).
+WAVE1_NW_SPAWNS = (Vec2(1100.0, 520.0), Vec2(1300.0, 480.0))
+WAVE1_NE_SPAWNS = (Vec2(2700.0, 520.0), Vec2(2900.0, 480.0))
+# Wave 3 corsair ingress — lateral north approach.
+WAVE3_FIGHTER_SPAWNS = (
+    Vec2(1050.0, 680.0),
+    Vec2(1280.0, 620.0),
+    Vec2(2720.0, 620.0),
+    Vec2(2950.0, 680.0),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,21 @@ class GuardLayout:
     station_anchor: Vec2
     wells: tuple[GravityWell, ...]
     squid_ring_center: Vec2
+
+
+def squid_arc_positions(center: Vec2, count: int, *, seed_offset: int = 0) -> list[Vec2]:
+    """Spawn on a south-facing arc from the rift — threats drop into the relay lane."""
+    positions: list[Vec2] = []
+    arc_center = Vec2(center.x, 880.0)
+    radius = 520.0
+    arc_span = math.pi * 0.78
+    start = math.pi * 0.5 - arc_span * 0.5
+    for i in range(count):
+        angle = start + arc_span * i / max(1, count - 1) + seed_offset * 0.09
+        positions.append(
+            arc_center + Vec2(math.cos(angle), math.sin(angle)) * radius
+        )
+    return positions
 
 
 def build_extract_gate() -> FinishGate:
@@ -56,22 +72,22 @@ def build_guard_layout() -> GuardLayout:
     wells = (
         GravityWell(
             Vec2(620.0, 900.0),
-            strength=52000.0,
-            radius=280.0 * 6.0,
+            strength=47800.0,
+            radius=280.0 * 5.5,
             label="Graviton Maw",
             kind="black_hole",
             maw_radius=14.0,
         ),
         GravityWell(
             Vec2(3380.0, 900.0),
-            strength=51000.0,
-            radius=270.0 * 6.0,
+            strength=46900.0,
+            radius=270.0 * 5.5,
             label="Void Sink",
             kind="black_hole",
             maw_radius=14.0,
         ),
         GravityWell(
-            Vec2(CENTER.x, 520.0),
+            NORTHERN_RIFT,
             strength=48000.0,
             radius=250.0 * 6.0,
             label="Northern Rift",
@@ -86,5 +102,5 @@ def build_guard_layout() -> GuardLayout:
         finish_gate=build_extract_gate(),
         station_anchor=STATION_RELAY,
         wells=wells,
-        squid_ring_center=CENTER,
+        squid_ring_center=NORTHERN_RIFT,
     )

@@ -9,6 +9,7 @@ from gravity_ho_matey.gameplay.entities import Asteroid, Projectile
 from gravity_ho_matey.gameplay.explosions import ExplosionKind
 from gravity_ho_matey.gameplay.jewel_drops import jewel_count_for_enemy
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
+from gravity_ho_matey.gameplay.squid_pod import SquidPod
 from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 
 if TYPE_CHECKING:
@@ -66,9 +67,13 @@ def apply_explosive_burst(world: GameWorld, center: Vec2, radius: float, *, drop
             )
 
     boss = world.mega_squid
-    if boss is not None and boss.alive and (boss.pos - center).length() <= radius + boss.radius:
-        if boss.apply_shot():
-            world._on_boss_defeated()
+    if (
+        boss is not None
+        and boss.alive
+        and not boss.is_damage_immune()
+        and (boss.pos - center).length() <= radius + boss.radius
+    ):
+        world._apply_boss_combat_hit(boss, tag_player=drop_loot)
 
     station = world.space_station
     if station is not None and station.alive and (station.pos - center).length() <= radius + station.radius:
@@ -119,5 +124,13 @@ def apply_explosive_burst(world: GameWorld, center: Vec2, radius: float, *, drop
             from gravity_ho_matey.gameplay.brood_moon_controller import on_egg_pod_destroyed
 
             on_egg_pod_destroyed(world, pod)
+
+    for pod in world.squid_pods:
+        if not pod.alive:
+            continue
+        if (pod.pos - center).length() > pod.hit_radius() + radius:
+            continue
+        pod.alive = False
+        world.explosions.spawn(ExplosionKind.ENEMY_DESTROYED, Vec2(pod.pos.x, pod.pos.y), scale=0.95)
 
     world._prune_dead_enemies()
