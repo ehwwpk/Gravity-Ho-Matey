@@ -19,6 +19,7 @@ from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.camera import CameraMode
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
+from gravity_ho_matey.render.weapon_heat_viz import barrel_status
 
 
 class SciFiHudOverlay:
@@ -307,6 +308,22 @@ class SciFiHudOverlay:
                 anchor="nw",
                 text=f"CLING {int(frac * 100):3d}%",
                 fill=palette.SQUID_TOUCH_TIP,
+                font=self.FONT_SMALL,
+            )
+
+        barrel = barrel_status(world.ship)
+        if barrel is not None:
+            barrel_txt, barrel_color = barrel
+            barrel_y = 34
+            if world.squid_cling_timer > 0.0:
+                barrel_y = 54
+            self._badge(
+                canvas,
+                width - 12,
+                barrel_y,
+                anchor="ne",
+                text=barrel_txt,
+                fill=barrel_color,
                 font=self.FONT_SMALL,
             )
 

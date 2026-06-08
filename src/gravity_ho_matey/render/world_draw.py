@@ -12,6 +12,7 @@ from gravity_ho_matey.render.camera import CameraMode, ViewCamera
 from gravity_ho_matey.render.lighting import LightRig, arc_tone_for_point, material_for, well_material_kind
 from gravity_ho_matey.gameplay.powerup_stacks import PowerUpStacks
 from gravity_ho_matey.render.ship_viz import draw_fighter_ship, draw_fighter_ship_fallback
+from gravity_ho_matey.render.weapon_heat_viz import draw_weapon_heat_on_ship
 
 
 def draw_gravity_heatmap(
@@ -238,6 +239,8 @@ def draw_ship(
     scale: float = 1.0,
     rig: LightRig | None = None,
     powerup_stacks: PowerUpStacks | None = None,
+    weapon_heat: float = 0.0,
+    weapon_overheat_timer: float = 0.0,
 ) -> None:
     if invuln > 0.0 and int(elapsed * 14) % 2 == 0:
         ring_r = 22 * scale
@@ -256,6 +259,13 @@ def draw_ship(
         )
     else:
         draw_fighter_ship_fallback(canvas, pos, angle, scale=scale)
+    draw_weapon_heat_on_ship(
+        canvas,
+        pos,
+        scale=scale,
+        weapon_heat=weapon_heat,
+        weapon_overheat_timer=weapon_overheat_timer,
+    )
     _ = boost_energy
 
 

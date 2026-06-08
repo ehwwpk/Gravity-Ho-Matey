@@ -11,7 +11,11 @@ from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.holo_shop_overlay import HoloShopOverlay
 from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_level_row, draw_menu_button, draw_wrapped_text
 from gravity_ho_matey.render.shop_tree_view import ShopTreeView
-from gravity_ho_matey.render.title_home_layout import compute_codex_layout, compute_welcome_home_layout
+from gravity_ho_matey.render.title_home_layout import (
+    compute_codex_layout,
+    compute_welcome_home_layout,
+    compute_welcome_left_layout,
+)
 from gravity_ho_matey.render.title_home_viz import (
     draw_hangar_bay,
     draw_title_starfield,
@@ -72,11 +76,10 @@ TITLE_PAGE_ORDER: tuple[TitlePage, ...] = (
 )
 from gravity_ho_matey.settings import DEV_UNLOCK_ALL_LEVELS
 
-_PAGE_RAIL_H = 42.0
+_PAGE_RAIL_H = 36.0
 _PAGE_RAIL_GAP = 6.0
 _BODY_SHOP_GAP = 8.0
 _SHOP_STRIP_H = 34.0
-_WELCOME_BAZAAR_H = 112.0
 
 _PAGE_LABELS: dict[TitlePage, str] = {
     TitlePage.WELCOME: "WELCOME",
@@ -106,6 +109,19 @@ class TitleScreenOverlay:
         self._shop = HoloShopOverlay()
         self.deploy_layout: DeployListLayout | None = None
 
+    @classmethod
+    def chrome_layout(cls) -> TitleChromeLayout:
+        """Shared vertical zones for draw + title-scene hit testing."""
+        return title_chrome_layout(
+            screen_h=float(cls.HEIGHT),
+            top_bar_h=float(cls.TOP_BAR_H),
+            footer_h=float(cls.FOOTER_H),
+            rail_h=float(cls.PAGE_RAIL_H),
+            shop_h=float(cls.SHOP_STRIP_H),
+            margin_gap=_PAGE_RAIL_GAP,
+            body_pad=_BODY_SHOP_GAP,
+        )
+
     def draw(
         self,
         canvas: tk.Canvas,
@@ -132,16 +148,8 @@ class TitleScreenOverlay:
         accent = palette.HUD_ACCENT
         dim = palette.HUD_DIM
         frame = palette.HUD_FRAME
-        shop_strip = 0.0 if page is TitlePage.WELCOME else float(_SHOP_STRIP_H)
-        chrome = title_chrome_layout(
-            screen_h=float(self.HEIGHT),
-            top_bar_h=float(self.TOP_BAR_H),
-            footer_h=float(self.FOOTER_H),
-            rail_h=float(_PAGE_RAIL_H),
-            shop_h=shop_strip,
-            margin_gap=_PAGE_RAIL_GAP,
-            body_pad=_BODY_SHOP_GAP,
-        )
+        shop_strip = float(_SHOP_STRIP_H)
+        chrome = self.chrome_layout()
         body_top = chrome.body_top
 
         canvas.create_rectangle(0, 0, self.WIDTH, self.HEIGHT, fill=palette.SOLAR_BG, outline="")
@@ -180,7 +188,7 @@ class TitleScreenOverlay:
                 elapsed=elapsed,
             )
 
-        if page is not TitlePage.WELCOME and shop_strip > 0.0:
+        if shop_strip > 0.0:
             self._shop.draw_compact_bazaar_strip(
                 canvas,
                 x=self.MARGIN,
@@ -397,84 +405,40 @@ class TitleScreenOverlay:
     ) -> None:
         layout = compute_welcome_home_layout(chrome, screen_w=float(self.WIDTH))
         codex_state = codex or TitleCodexState()
-        codex_layout = compute_codex_layout(layout)
         entry = codex_state.entry()
+        codex_layout = compute_codex_layout(layout, entry)
+        left = compute_welcome_left_layout(layout.panel, layout.left_x, layout.left_w)
         p = layout.panel
         hp.draw_panel(canvas, p.x, p.y, p.w, p.h, frame=frame, accent=accent, fill=palette.HUD_BG)
         draw_holo_corners(canvas, p.x, p.y, p.w, p.h, accent=accent, elapsed=elapsed)
 
-        lx = layout.left_x
-        left_w = layout.left_w
-        ly = p.y + 20.0
-        bazaar_h = _WELCOME_BAZAAR_H
-        bazaar_y = p.y + p.h - bazaar_h - 14.0
+        canvas.create_line(left.x - 4, p.y + 16, left.x - 4, p.y + p.h - 16, fill=frame, width=1)
 
-        canvas.create_line(lx - 4, p.y + 16, lx - 4, bazaar_y - 8, fill=frame, width=1)
-
-        canvas.create_text(lx, ly, anchor="w", text="GRAVITY HO,", fill=palette.TEXT, font=("Courier New", 28, "bold"))
-        canvas.create_text(lx, ly + 34, anchor="w", text="MATEY!", fill=accent, font=("Courier New", 28, "bold"))
         draw_wrapped_text(
             canvas,
-            lx,
-            ly + 76,
+            left.x,
+            left.pitch_y,
             "Chart cursed sectors, loot patrol skiffs, and sling-shot past the maw.",
-            max_width=left_w - 8,
+            max_width=left.w - 8,
             line_height=14.0,
             color=dim,
             font=self.FONT_SUBTITLE,
             max_lines=2,
         )
 
-        btn_w = left_w - 4.0
-        btn_h = 44.0
-        btn_x = lx
-        btn_y = ly + 108
-        self.hits.add("goto_deploy", btn_x, btn_y, btn_w, btn_h)
+        self.hits.add("goto_deploy", left.btn_x, left.btn_y, left.btn_w, left.btn_h)
         draw_menu_button(
             canvas,
-            btn_x,
-            btn_y,
-            btn_w,
-            btn_h,
+            left.btn_x,
+            left.btn_y,
+            left.btn_w,
+            left.btn_h,
             "SELECT LEVEL →",
             accent=accent,
             dim=dim,
             frame=frame,
             hover=hover_id == "goto_deploy",
             selected=True,
-        )
-
-        hints_y = btn_y + btn_h + 16
-        canvas.create_text(
-            lx,
-            hints_y,
-            anchor="w",
-            text="↑ ↓ browse field codex",
-            fill=dim,
-            font=hp.FONT_SMALL,
-        )
-        canvas.create_text(
-            lx,
-            hints_y + 16,
-            anchor="w",
-            text="← → briefing tabs · Enter deploys",
-            fill=dim,
-            font=hp.FONT_SMALL,
-        )
-
-        self._shop.draw_welcome_bazaar_card(
-            canvas,
-            x=lx,
-            y=bazaar_y,
-            w=btn_w,
-            h=bazaar_h,
-            campaign=campaign,
-            hits=self.hits,
-            accent=accent,
-            dim=dim,
-            frame=frame,
-            hover_id=hover_id,
-            elapsed=elapsed,
         )
 
         draw_hangar_bay(
@@ -552,7 +516,7 @@ class TitleScreenOverlay:
         if page is TitlePage.DEPLOY:
             center = "Pick a chart · dossier updates on focus · Enter launches · B = Bazaar"
         elif page is TitlePage.WELCOME:
-            center = "Field codex · deploy from Select Level or last tab"
+            center = "↑ ↓ field codex · ← → briefing tabs · Enter deploys · B bazaar"
         else:
             center = "Briefing tabs below · B opens Holo Bazaar on any page"
         draw_fitted_text(

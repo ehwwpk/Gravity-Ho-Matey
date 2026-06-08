@@ -419,6 +419,8 @@ class TacticalViewRenderer:
             scale=1.08 * camera.tactical_scale / 1.1,
             rig=rig,
             powerup_stacks=powerup_stacks,
+            weapon_heat=world.ship.weapon_heat,
+            weapon_overheat_timer=world.ship.weapon_overheat_timer,
         )
         from gravity_ho_matey.render.chase_helm import draw_tactical_flight_instruments
 
@@ -1145,6 +1147,8 @@ class PerspectiveViewRenderer:
             scale=CHASE_SHIP_SCALE,
             rig=rig,
             powerup_stacks=powerup_stacks,
+            weapon_heat=world.ship.weapon_heat,
+            weapon_overheat_timer=world.ship.weapon_overheat_timer,
         )
         draw_xwing_cockpit_hud(
             canvas,

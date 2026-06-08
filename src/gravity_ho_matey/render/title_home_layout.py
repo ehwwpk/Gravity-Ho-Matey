@@ -4,17 +4,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from gravity_ho_matey.render.title_codex import CODEX_ENTRIES, CodexEntry
 from gravity_ho_matey.render.title_deploy_list import TitleChromeLayout
 
 BODY_MARGIN = 16.0
-WELCOME_LEFT_FRAC = 0.38
-HANGAR_DECK_FRAC = 0.84
-SHIP_HANGAR_X_FRAC = 0.50
-SHIP_DECK_LIFT = 18.0
-CODEX_PODIUM_Y_FRAC = 0.36
-CODEX_INFO_H_FRAC = 0.30
+WELCOME_LEFT_FRAC = 0.42
+HANGAR_DECK_FRAC = 0.92
+HANGAR_HEADER_H = 28.0
+HANGAR_DECK_BAND_H = 22.0
+CODEX_DOTS_GAP = 8.0
+CODEX_INFO_PAD = 10.0
+CODEX_INFO_TITLE_H = 28.0
+CODEX_INFO_META_H = 16.0
+CODEX_INFO_BODY_LINE_H = 13.0
+CODEX_INFO_MIN_H = 68.0
+CODEX_INFO_MAX_LINES = 3
 CODEX_NAV_W = 28.0
 CODEX_NAV_H = 30.0
+SHIP_HANGAR_X_FRAC = 0.50
+SHIP_DECK_LIFT = 18.0
+
+WELCOME_BTN_H = 44.0
+WELCOME_PITCH_LINE_H = 14.0
+WELCOME_PITCH_LINES = 2
+WELCOME_BLOCK_GAP = 14.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +44,9 @@ class CodexLayout:
     viewport_y: float
     viewport_w: float
     viewport_h: float
+    header_bottom: float
+    preview_top: float
+    preview_bottom: float
     podium_cx: float
     podium_cy: float
     deck_y: float
@@ -50,6 +66,17 @@ class CodexLayout:
 
 
 @dataclass(frozen=True, slots=True)
+class WelcomeLeftLayout:
+    x: float
+    w: float
+    pitch_y: float
+    btn_x: float
+    btn_y: float
+    btn_w: float
+    btn_h: float
+
+
+@dataclass(frozen=True, slots=True)
 class WelcomeHomeLayout:
     panel: BodyPanelLayout
     left_x: float
@@ -61,6 +88,23 @@ class WelcomeHomeLayout:
     deck_y: float
     ship_x: float
     ship_y: float
+
+
+def estimate_codex_info_height(
+    blurb: str,
+    info_w: float,
+    *,
+    min_h: float = CODEX_INFO_MIN_H,
+    max_lines: int = CODEX_INFO_MAX_LINES,
+) -> float:
+    chars_per_line = max(20, int(info_w / 6.5))
+    lines = min(max_lines, max(1, (len(blurb) + chars_per_line - 1) // chars_per_line))
+    body_h = lines * CODEX_INFO_BODY_LINE_H
+    return max(min_h, CODEX_INFO_TITLE_H + CODEX_INFO_META_H + body_h + CODEX_INFO_PAD)
+
+
+def max_codex_info_height(info_w: float) -> float:
+    return max(estimate_codex_info_height(entry.blurb, info_w) for entry in CODEX_ENTRIES)
 
 
 def compute_body_panel(
@@ -103,31 +147,68 @@ def compute_welcome_home_layout(
     )
 
 
-def compute_codex_layout(layout: WelcomeHomeLayout) -> CodexLayout:
+def compute_welcome_left_layout(
+    panel: BodyPanelLayout,
+    left_x: float,
+    left_w: float,
+) -> WelcomeLeftLayout:
+    """Vertically balanced hero block — pitch + deploy CTA, no dead middle gap."""
+    pitch_block_h = WELCOME_PITCH_LINE_H * WELCOME_PITCH_LINES
+    block_h = pitch_block_h + WELCOME_BLOCK_GAP + WELCOME_BTN_H
+    inset = 16.0
+    available_top = panel.y + inset
+    available_h = max(block_h, panel.h - inset * 2.0)
+    block_top = available_top + max(0.0, (available_h - block_h) * 0.34)
+    btn_w = left_w - 4.0
+    btn_y = block_top + pitch_block_h + WELCOME_BLOCK_GAP
+    return WelcomeLeftLayout(
+        x=left_x,
+        w=left_w,
+        pitch_y=block_top,
+        btn_x=left_x,
+        btn_y=btn_y,
+        btn_w=btn_w,
+        btn_h=WELCOME_BTN_H,
+    )
+
+
+def compute_codex_layout(
+    layout: WelcomeHomeLayout,
+    entry: CodexEntry | None = None,
+) -> CodexLayout:
     pad = 12.0
     hy = layout.panel.y + pad
     hx = layout.hangar_x
     hw = layout.hangar_w
     hh = layout.hangar_h
+    header_bottom = hy + HANGAR_HEADER_H
     deck_y = layout.deck_y
-    info_h = max(88.0, hh * CODEX_INFO_H_FRAC)
-    info_y = deck_y - info_h - 8.0
+    info_w = max(120.0, hw - 20.0)
+    blurb = entry.blurb if entry is not None else max(CODEX_ENTRIES, key=lambda e: len(e.blurb)).blurb
+    info_h = estimate_codex_info_height(blurb, info_w)
+    info_y = deck_y - info_h - CODEX_DOTS_GAP
+    dots_y = info_y - CODEX_DOTS_GAP
+    preview_top = header_bottom
+    preview_bottom = max(preview_top + 48.0, dots_y - 6.0)
     podium_cx = hx + hw * 0.5
-    podium_cy = hy + hh * CODEX_PODIUM_Y_FRAC
+    podium_cy = preview_top + (preview_bottom - preview_top) * 0.52
     nav_y = podium_cy - CODEX_NAV_H * 0.5
     return CodexLayout(
         viewport_x=hx,
         viewport_y=hy,
         viewport_w=hw,
         viewport_h=hh,
+        header_bottom=header_bottom,
+        preview_top=preview_top,
+        preview_bottom=preview_bottom,
         podium_cx=podium_cx,
         podium_cy=podium_cy,
         deck_y=deck_y,
         info_x=hx + 10.0,
         info_y=info_y,
-        info_w=max(120.0, hw - 20.0),
+        info_w=info_w,
         info_h=info_h,
-        dots_y=info_y - 10.0,
+        dots_y=dots_y,
         prev_x=hx + 8.0,
         prev_y=nav_y,
         prev_w=CODEX_NAV_W,

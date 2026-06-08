@@ -62,6 +62,13 @@ from gravity_ho_matey.gameplay.asteroid_spatial import AsteroidSpatialGrid
 from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot, build_asteroid_threat_snapshots
 from gravity_ho_matey.gameplay.weapon_combat import HitDisposition, apply_explosive_burst, resolve_projectile_after_hit, spawn_weapon_hit_fx
 from gravity_ho_matey.gameplay.weapon_fire import player_fire_cooldown, spawn_player_shots
+from gravity_ho_matey.gameplay.weapon_heat import (
+    apply_heat_on_fire,
+    player_heat_fire_cooldown_multiplier,
+    player_weapon_overheated,
+    tick_player_weapon_heat,
+)
+from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 
 EnemyUnit = PatrolEnemy | SquidEnemy
@@ -387,8 +394,9 @@ class GameWorld:
         self.ship.vel = self.ship.vel.clamped_length(speed_cap)
         self.ship.pos = self.ship.pos + self.ship.vel * dt
         self.ship.cooldown = max(0.0, self.ship.cooldown - dt)
+        tick_player_weapon_heat(self.ship, dt, trigger_held=intent.fire)
 
-        if intent.fire and self.ship.cooldown <= 0.0:
+        if intent.fire and self.ship.cooldown <= 0.0 and not player_weapon_overheated(self.ship):
             self.fire_projectile()
 
     def fire_projectile(self) -> None:
@@ -402,11 +410,19 @@ class GameWorld:
             advanced=self.player_weapon_advanced,
         )
         self.projectiles.extend(shots)
-        self.ship.cooldown = player_fire_cooldown(
+        rapid_fire = self.ship.fire_cooldown_multiplier < 0.99
+        base_cooldown = player_fire_cooldown(
             self.config.ship_fire_cooldown,
             self.ship.fire_cooldown_multiplier,
             self.player_weapon_track,
             advanced=self.player_weapon_advanced,
+        )
+        self.ship.cooldown = base_cooldown * player_heat_fire_cooldown_multiplier(self.ship.weapon_heat)
+        apply_heat_on_fire(
+            self.ship,
+            self.player_weapon_track,
+            advanced=self.player_weapon_advanced,
+            rapid_fire=rapid_fire,
         )
 
     def _apply_asteroid_combat_result(self, result: AsteroidCombatResult) -> None:

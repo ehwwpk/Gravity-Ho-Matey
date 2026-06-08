@@ -14,7 +14,7 @@ from gravity_ho_matey.render.world_draw import gravity_field_color
 from gravity_ho_matey.render.asteroid_viz import collect_chase_asteroid_sprites
 from gravity_ho_matey.render.field_viz import gravity_emphasis
 from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
-from gravity_ho_matey.render.view_renderers import PerspectiveViewRenderer
+from gravity_ho_matey.render.view_renderers import PerspectiveViewRenderer, TacticalViewRenderer
 
 
 def _luminance(hex_color: str) -> float:
@@ -462,6 +462,67 @@ class ChaseRendererSmokeTests(unittest.TestCase):
         PerspectiveViewRenderer().draw(canvas, world, camera, field, hud_top=54)
         self.assertGreater(len(canvas.find_all()), 20)
         root.destroy()
+
+
+class WeaponHeatMultiPerspectiveTests(unittest.TestCase):
+    def _field(self, world):
+        return GravityField.bake(
+            world.wells,
+            world_width=world.config.width,
+            world_height=world.config.height,
+            cols=16,
+            rows=16,
+            gravity_scale=world.config.gravity_scale,
+        )
+
+    def test_command_hud_shows_barrel_in_both_camera_modes(self) -> None:
+        from gravity_ho_matey.gameplay.campaign import CampaignState
+
+        world = build_cove_run_level()
+        world.ship.weapon_heat = 0.72
+        overlay = SciFiHudOverlay()
+        root, canvas = _tk_canvas()
+        for mode in (CameraMode.TACTICAL, CameraMode.CHASE):
+            canvas.delete("all")
+            overlay.draw(canvas, world, CampaignState.new(), camera_mode=mode)
+            texts = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
+            joined = " ".join(str(t) for t in texts if t)
+            self.assertIn("BARREL", joined, msg=f"missing barrel badge for {mode}")
+            self.assertIn("72%", joined, msg=f"missing heat pct for {mode}")
+        root.destroy()
+
+    def test_tactical_and_chase_renderers_draw_weapon_heat(self) -> None:
+        world = build_cove_run_level()
+        world.ship.weapon_overheat_timer = 1.2
+        field = self._field(world)
+        root, canvas = _tk_canvas()
+        tactical = TacticalViewRenderer()
+        chase = PerspectiveViewRenderer()
+        tactical_cam = ViewCamera(mode=CameraMode.TACTICAL)
+        chase_cam = ViewCamera(mode=CameraMode.CHASE)
+        tactical_cam.set_play_layout(54.0)
+        chase_cam.set_play_layout(54.0)
+        tactical.draw(canvas, world, tactical_cam, field, hud_top=54)
+        self.assertGreater(len(canvas.find_all()), 20)
+        canvas.delete("all")
+        chase.draw(canvas, world, chase_cam, field, hud_top=54)
+        texts = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
+        joined = " ".join(str(t) for t in texts if t)
+        self.assertIn("COOLING", joined)
+        self.assertGreater(len(canvas.find_all()), 20)
+        root.destroy()
+
+    def test_camera_toggle_preserves_weapon_heat(self) -> None:
+        from gravity_ho_matey.scenes.play import PlayScene
+        from gravity_ho_matey.gameplay.campaign import CampaignState
+
+        scene = PlayScene("cove", CampaignState.new())
+        scene.world.ship.weapon_heat = 0.61
+        scene.world.ship.weapon_overheat_timer = 0.0
+        scene.camera.cycle_mode()
+        scene.camera.cycle_mode()
+        self.assertAlmostEqual(scene.world.ship.weapon_heat, 0.61)
+        self.assertAlmostEqual(scene.world.ship.weapon_overheat_timer, 0.0)
 
 
 class ChaseGravityFieldTests(unittest.TestCase):

@@ -23,7 +23,7 @@ class PowerUpKind(Enum):
 
 POWERUP_LABELS: dict[PowerUpKind, str] = {
     PowerUpKind.THRUST_BOOST: "Plunder Thrusters — +6% acceleration per tier",
-    PowerUpKind.RAPID_FIRE: "Gatling Rigging — modest fire-rate boost (one install)",
+    PowerUpKind.RAPID_FIRE: "Gatling Rigging — modest fire-rate boost, runs barrels hotter",
     PowerUpKind.BOOST_TAP: "Shift Boost Coil — +8% shift-burst per tier",
     PowerUpKind.RUBBER_HULL: "Rubber Hull — 10 asteroid bounces, no chip damage",
     PowerUpKind.DRONE_WINGMAN: "Guardian Drone — escorts next sector, 5 HP, overheats",

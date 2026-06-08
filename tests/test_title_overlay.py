@@ -4,6 +4,11 @@ from unittest.mock import patch
 
 from gravity_ho_matey.gameplay.progress import is_level_selectable, record_level_cleared, reset_progress
 from gravity_ho_matey.gameplay.campaign import CampaignState
+from gravity_ho_matey.render.title_home_layout import (
+    compute_codex_layout,
+    compute_welcome_home_layout,
+    compute_welcome_left_layout,
+)
 from gravity_ho_matey.render.title_overlay import TITLE_PAGE_ORDER, TitlePage, TitleScreenOverlay
 from gravity_ho_matey.scenes.title import TitleScene
 
@@ -182,7 +187,12 @@ class TitleSceneTests(unittest.TestCase):
                 campaign=CampaignState.new(),
                 solar_unlocked=True,
             )
-            self.assertEqual(overlay.hits.hit(120, 200), "goto_deploy")
+            chrome = TitleScreenOverlay.chrome_layout()
+            welcome = compute_welcome_home_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH))
+            left = compute_welcome_left_layout(welcome.panel, welcome.left_x, welcome.left_w)
+            hit_x = left.btn_x + left.btn_w * 0.5
+            hit_y = left.btn_y + left.btn_h * 0.5
+            self.assertEqual(overlay.hits.hit(hit_x, hit_y), "goto_deploy")
         finally:
             root.destroy()
 

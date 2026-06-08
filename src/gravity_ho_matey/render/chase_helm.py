@@ -98,6 +98,17 @@ def draw_tactical_flight_instruments(
         accent=accent,
         dim=dim,
     )
+    from gravity_ho_matey.render.weapon_heat_viz import draw_weapon_heat_tactical_gauge
+
+    if world.ship.weapon_heat > 0.08 or world.ship.weapon_overheat_timer > 0.0:
+        draw_weapon_heat_tactical_gauge(
+            canvas,
+            12.0,
+            play_bottom - 28.0,
+            world.ship,
+            accent=accent,
+            dim=dim,
+        )
 
 def draw_xwing_cockpit_hud(
     canvas: tk.Canvas,
@@ -125,6 +136,9 @@ def draw_xwing_cockpit_hud(
     _draw_banked_horizon(canvas, horizon, vw, bank, turn_rate=camera.turn_rate, accent=accent, dim=dim)
     _draw_canopy_frame(canvas, vw, vh, play_top, accent=accent, dim=dim)
     _draw_nose_reticle(canvas, anchor_x, anchor_y, accent=accent)
+    from gravity_ho_matey.render.weapon_heat_viz import draw_weapon_heat_chase_reticle
+
+    draw_weapon_heat_chase_reticle(canvas, anchor_x, anchor_y, world.ship)
     _draw_speed_instruments(
         canvas,
         24,

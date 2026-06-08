@@ -235,7 +235,6 @@ class TitleScene(Scene):
         from gravity_ho_matey.render.title_deploy_list import (
             compute_deploy_list_layout,
             scroll_wheel_delta,
-            title_chrome_layout,
             viewport_contains,
         )
         from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
@@ -243,35 +242,21 @@ class TitleScene(Scene):
         self._pointer = (x, y)
 
         if self.page is TitlePage.WELCOME and not self.shop_open and delta != 0:
-            from gravity_ho_matey.render.title_deploy_list import title_chrome_layout
             from gravity_ho_matey.render.title_home_layout import (
                 codex_viewport_contains,
                 compute_codex_layout,
                 compute_welcome_home_layout,
             )
-            from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
 
-            chrome = title_chrome_layout(
-                screen_h=float(TitleScreenOverlay.HEIGHT),
-                top_bar_h=float(TitleScreenOverlay.TOP_BAR_H),
-                footer_h=float(TitleScreenOverlay.FOOTER_H),
-                rail_h=24.0,
-                shop_h=float(TitleScreenOverlay.SHOP_CTA_H),
-            )
+            chrome = TitleScreenOverlay.chrome_layout()
             welcome = compute_welcome_home_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH))
-            codex_layout = compute_codex_layout(welcome)
+            codex_layout = compute_codex_layout(welcome, self.codex.entry())
             if codex_viewport_contains(codex_layout, x, y):
                 self.codex.step(1 if delta > 0 else -1, self.elapsed)
                 return
 
         if self.page is TitlePage.DEPLOY and not self.shop_open and delta != 0:
-            chrome = title_chrome_layout(
-                screen_h=float(TitleScreenOverlay.HEIGHT),
-                top_bar_h=float(TitleScreenOverlay.TOP_BAR_H),
-                footer_h=float(TitleScreenOverlay.FOOTER_H),
-                rail_h=24.0,
-                shop_h=float(TitleScreenOverlay.SHOP_CTA_H),
-            )
+            chrome = TitleScreenOverlay.chrome_layout()
             layout = compute_deploy_list_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH))
             if viewport_contains(layout, x, y):
                 self.deploy_scroll = scroll_wheel_delta(self.deploy_scroll, layout, delta)
@@ -388,16 +373,10 @@ class TitleScene(Scene):
 
 
     def _deploy_layout(self):
-        from gravity_ho_matey.render.title_deploy_list import compute_deploy_split_layout, title_chrome_layout
+        from gravity_ho_matey.render.title_deploy_list import compute_deploy_split_layout
         from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
 
-        chrome = title_chrome_layout(
-            screen_h=float(TitleScreenOverlay.HEIGHT),
-            top_bar_h=float(TitleScreenOverlay.TOP_BAR_H),
-            footer_h=float(TitleScreenOverlay.FOOTER_H),
-            rail_h=float(TitleScreenOverlay.PAGE_RAIL_H),
-            shop_h=float(TitleScreenOverlay.SHOP_STRIP_H),
-        )
+        chrome = TitleScreenOverlay.chrome_layout()
         return compute_deploy_split_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH)).list
 
     def _sync_deploy_scroll(self) -> None:

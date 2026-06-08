@@ -2,23 +2,18 @@ from __future__ import annotations
 
 import unittest
 
-from gravity_ho_matey.render.title_deploy_list import title_chrome_layout
 from gravity_ho_matey.render.title_home_layout import (
     BODY_MARGIN,
     compute_body_panel,
     compute_welcome_home_layout,
+    compute_welcome_left_layout,
 )
+from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
 
 
 class TitleHomeLayoutTests(unittest.TestCase):
     def _chrome(self):
-        return title_chrome_layout(
-            screen_h=640.0,
-            top_bar_h=54.0,
-            footer_h=52.0,
-            rail_h=24.0,
-            shop_h=36.0,
-        )
+        return TitleScreenOverlay.chrome_layout()
 
     def test_body_panel_fills_chrome_body(self) -> None:
         chrome = self._chrome()
@@ -32,8 +27,14 @@ class TitleHomeLayoutTests(unittest.TestCase):
         chrome = self._chrome()
         layout = compute_welcome_home_layout(chrome, screen_w=960.0)
         self.assertGreater(layout.hangar_w, layout.left_w)
-        self.assertGreater(layout.ship_y, layout.panel.y + layout.panel.h * 0.5)
-        self.assertGreater(layout.deck_y, layout.ship_y)
+        self.assertGreater(layout.deck_y, layout.panel.y + layout.panel.h * 0.75)
+
+    def test_welcome_left_block_fits_inside_panel(self) -> None:
+        chrome = self._chrome()
+        layout = compute_welcome_home_layout(chrome, screen_w=960.0)
+        left = compute_welcome_left_layout(layout.panel, layout.left_x, layout.left_w)
+        self.assertGreaterEqual(left.pitch_y, layout.panel.y)
+        self.assertLessEqual(left.btn_y + left.btn_h, layout.panel.y + layout.panel.h)
 
     def test_welcome_ship_sits_in_hangar_column(self) -> None:
         chrome = self._chrome()

@@ -5,7 +5,6 @@ import tkinter as tk
 
 from gravity_ho_matey.render.title_codex import CODEX_ENTRIES, TitleCodexState
 from gravity_ho_matey.render.title_codex_viz import draw_codex_preview, turntable_scale_x
-from gravity_ho_matey.render.title_deploy_list import title_chrome_layout
 from gravity_ho_matey.render.title_home_layout import (
     codex_viewport_contains,
     compute_codex_layout,
@@ -44,13 +43,7 @@ class TitleCodexStateTests(unittest.TestCase):
 
 class TitleCodexLayoutTests(unittest.TestCase):
     def _layout(self):
-        chrome = title_chrome_layout(
-            screen_h=640.0,
-            top_bar_h=54.0,
-            footer_h=52.0,
-            rail_h=24.0,
-            shop_h=36.0,
-        )
+        chrome = TitleScreenOverlay.chrome_layout()
         welcome = compute_welcome_home_layout(chrome, screen_w=960.0)
         return compute_codex_layout(welcome)
 
@@ -98,7 +91,6 @@ class TitleCodexDrawTests(unittest.TestCase):
 
 class TitleCodexSceneTests(unittest.TestCase):
     def test_wheel_over_hangar_steps_codex(self) -> None:
-        from gravity_ho_matey.render.title_deploy_list import title_chrome_layout
         from gravity_ho_matey.render.title_home_layout import compute_codex_layout, compute_welcome_home_layout
         from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
 
@@ -106,14 +98,11 @@ class TitleCodexSceneTests(unittest.TestCase):
             renderer = type("_R", (), {"title_hit_test": lambda _s, _x, _y: None})()
 
         scene = TitleScene()
-        chrome = title_chrome_layout(
-            screen_h=float(TitleScreenOverlay.HEIGHT),
-            top_bar_h=float(TitleScreenOverlay.TOP_BAR_H),
-            footer_h=float(TitleScreenOverlay.FOOTER_H),
-            rail_h=24.0,
-            shop_h=float(TitleScreenOverlay.SHOP_CTA_H),
+        chrome = TitleScreenOverlay.chrome_layout()
+        layout = compute_codex_layout(
+            compute_welcome_home_layout(chrome, screen_w=960.0),
+            scene.codex.entry(),
         )
-        layout = compute_codex_layout(compute_welcome_home_layout(chrome, screen_w=960.0))
         cx = layout.viewport_x + layout.viewport_w * 0.5
         cy = layout.viewport_y + layout.viewport_h * 0.5
         scene.on_wheel(_Host(), cx, cy, 1)

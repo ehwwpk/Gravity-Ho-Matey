@@ -9,6 +9,7 @@ from gravity_ho_matey.gameplay.drone_session import deploy_drone_wingman
 from gravity_ho_matey.gameplay.nifflerp_session import deploy_nifflerp
 from gravity_ho_matey.gameplay.entities import GameStatus
 from gravity_ho_matey.gameplay.ship_modifiers import apply_powerups_to_ship
+from gravity_ho_matey.gameplay.weapon_heat import reset_player_weapon_heat
 from gravity_ho_matey.gameplay.world import GameWorld
 
 INVULN_SECONDS = 1.0
@@ -72,6 +73,7 @@ def respawn_ship_at_spawn(world: GameWorld) -> None:
     world.ship.vel = Vec2()
     world.ship.angle = world.spawn_angle
     world.ship.cooldown = 0.0
+    reset_player_weapon_heat(world.ship)
     world.ship.boost_flash = 0.0
     world.ship.boost_jolt = 0.0
     world.invuln_remaining = INVULN_SECONDS

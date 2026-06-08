@@ -50,7 +50,7 @@ def draw_codex_pedestal(
 ) -> None:
     pulse = 0.5 + 0.5 * math.sin(elapsed * 2.8)
     cx, cy = layout.podium_cx, layout.podium_cy
-    ring_rx = min(88.0, layout.viewport_w * 0.26)
+    ring_rx = min(102.0, layout.viewport_w * 0.30)
     ring_ry = 16.0
     deck_y = layout.deck_y
 

@@ -30,6 +30,8 @@ class Ship:
     boost_tap_multiplier: float = 1.0
     fire_cooldown_multiplier: float = 1.0
     turn_rate_multiplier: float = 1.0
+    weapon_heat: float = 0.0
+    weapon_overheat_timer: float = 0.0
 
 
 @dataclass(slots=True)

@@ -63,8 +63,8 @@ def draw_tactical_projectile(
         canvas.create_oval(x - r * 0.35, y - r * 0.35, x + r * 0.35, y + r * 0.35, fill=core, outline="")
         if speed > 1.0:
             tail_len = 22
-            tail = Vec2(x, y) - vel.normalized() * tail_len
-            canvas.create_line(tail.x, tail.y, x, y, fill=tail, width=3)
+            tail_pos = Vec2(x, y) - vel.normalized() * tail_len
+            canvas.create_line(tail_pos.x, tail_pos.y, x, y, fill=tail, width=3)
             for i in range(3):
                 frac = (i + 1) / 4.0
                 ex = x - vel.normalized().x * tail_len * frac

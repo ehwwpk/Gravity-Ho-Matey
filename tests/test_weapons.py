@@ -26,6 +26,16 @@ from gravity_ho_matey.gameplay.weapon_config import (
     WEAPON_DOCTRINE_PRICE,
 )
 from gravity_ho_matey.gameplay.weapon_fire import player_fire_cooldown, spawn_player_shots
+from gravity_ho_matey.gameplay.weapon_heat import (
+    apply_heat_on_fire,
+    heat_escalation_multiplier,
+    heat_per_shot,
+    player_heat_decay_rate,
+    player_heat_fire_cooldown_multiplier,
+    player_weapon_overheated,
+    reset_player_weapon_heat,
+    tick_player_weapon_heat,
+)
 from gravity_ho_matey.gameplay.weapon_combat import resolve_projectile_after_hit
 from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 from gravity_ho_matey.gameplay.explosions import ExplosionKind
@@ -238,6 +248,114 @@ class WeaponCombatTests(unittest.TestCase):
         self.assertEqual(laser.pierce_remaining, 1)
         explosive = Projectile(pos=Vec2(), vel=Vec2(), explosive_radius=40.0)
         self.assertEqual(resolve_projectile_after_hit(explosive, hit=True), "consume")
+
+
+class PlayerWeaponHeatTests(unittest.TestCase):
+    def test_heat_builds_and_soft_throttles_cooldown(self) -> None:
+        ship = Ship(pos=Vec2(0, 0))
+        apply_heat_on_fire(ship, None)
+        self.assertGreater(ship.weapon_heat, 0.0)
+        self.assertLess(player_heat_fire_cooldown_multiplier(0.0), player_heat_fire_cooldown_multiplier(0.75))
+        self.assertGreaterEqual(player_heat_fire_cooldown_multiplier(0.82), 6.5)
+        self.assertGreaterEqual(player_heat_fire_cooldown_multiplier(0.88), 8.8)
+
+    def test_escalation_climbs_while_already_hot(self) -> None:
+        ship = Ship(pos=Vec2(0, 0))
+        ship.weapon_heat = 0.72
+        before = ship.weapon_heat
+        apply_heat_on_fire(ship, None)
+        low_gain = ship.weapon_heat - before
+        ship.weapon_heat = 0.72
+        escalation = heat_escalation_multiplier(0.72)
+        self.assertGreater(escalation, 1.15)
+        self.assertAlmostEqual(low_gain, heat_per_shot(None) * escalation, places=5)
+
+    def test_high_heat_cools_faster_than_moderate_heat(self) -> None:
+        hot = Ship(pos=Vec2(0, 0))
+        warm = Ship(pos=Vec2(0, 0))
+        hot.weapon_heat = 0.90
+        warm.weapon_heat = 0.70
+        self.assertGreater(player_heat_decay_rate(0.90), player_heat_decay_rate(0.70))
+        tick_player_weapon_heat(hot, 0.25, trigger_held=False)
+        tick_player_weapon_heat(warm, 0.25, trigger_held=False)
+        self.assertGreater(0.90 - hot.weapon_heat, 0.70 - warm.weapon_heat)
+
+    def test_overheat_lockout_and_recovery(self) -> None:
+        ship = Ship(pos=Vec2(0, 0))
+        ship.weapon_heat = 1.0
+        apply_heat_on_fire(ship, None)
+        self.assertTrue(player_weapon_overheated(ship))
+        tick_player_weapon_heat(ship, 10.0, trigger_held=False)
+        self.assertFalse(player_weapon_overheated(ship))
+        self.assertAlmostEqual(ship.weapon_heat, 0.0)
+
+    def test_heat_decays_when_idle(self) -> None:
+        ship = Ship(pos=Vec2(0, 0))
+        ship.weapon_heat = 0.6
+        tick_player_weapon_heat(ship, 0.5, trigger_held=False)
+        self.assertLess(ship.weapon_heat, 0.6)
+
+    def test_sustained_hold_reaches_high_heat_over_seconds(self) -> None:
+        from gravity_ho_matey.core.vector import Vec2
+        from gravity_ho_matey.gameplay.weapon_heat import player_heat_fire_cooldown_multiplier
+
+        ship = Ship(pos=Vec2(0, 0))
+        t = 0.0
+        cooldown = 0.0
+        dt = 0.016
+        marks: dict[float, float] = {}
+        while t < 4.0 and ship.weapon_overheat_timer <= 0.0:
+            tick_player_weapon_heat(ship, dt, trigger_held=True)
+            cooldown = max(0.0, cooldown - dt)
+            if cooldown <= 0.0 and ship.weapon_overheat_timer <= 0.0:
+                apply_heat_on_fire(ship, None)
+                cooldown = 0.18 * player_heat_fire_cooldown_multiplier(ship.weapon_heat)
+            for mark in (1.0, 1.5, 3.0):
+                if abs(t - mark) < dt:
+                    marks[mark] = ship.weapon_heat
+            t += dt
+        self.assertGreater(marks.get(1.0, 0.0), 0.20)
+        self.assertLess(marks.get(1.0, 1.0), 0.32)
+        self.assertGreaterEqual(marks.get(1.5, 0.0), 0.28)
+        self.assertLessEqual(marks.get(1.5, 0.0), 0.42)
+        self.assertGreater(marks.get(3.0, 0.0), 0.58)
+        self.assertLess(marks.get(3.0, 1.0), 0.78)
+
+    def test_trigger_held_prevents_decay_between_slow_shots(self) -> None:
+        ship = Ship(pos=Vec2(0, 0))
+        ship.weapon_heat = 0.55
+        tick_player_weapon_heat(ship, 0.35, trigger_held=True)
+        self.assertGreater(ship.weapon_heat, 0.55)
+
+    def test_shotgun_builds_more_heat_than_laser(self) -> None:
+        laser = heat_per_shot(WeaponTrack.LASER)
+        shotgun = heat_per_shot(WeaponTrack.SHOTGUN)
+        self.assertGreater(shotgun, laser)
+
+    def test_world_blocks_fire_while_overheated(self) -> None:
+        from gravity_ho_matey.gameplay.world import ControlIntent, GameWorld
+
+        world = GameWorld(
+            config=WorldConfig(width=800, height=600),
+            ship=Ship(pos=Vec2(100, 100)),
+            asteroids=[],
+            wells=[],
+            beacons=[],
+            finish_gate=FinishGate(Rect(0, 0, 10, 10)),
+        )
+        world.ship.weapon_overheat_timer = 1.0
+        world.ship.cooldown = 0.0
+        before = len(world.projectiles)
+        world._update_ship(0.016, ControlIntent(fire=True))
+        self.assertEqual(len(world.projectiles), before)
+
+    def test_reset_clears_weapon_heat(self) -> None:
+        ship = Ship(pos=Vec2(0, 0))
+        ship.weapon_heat = 0.8
+        ship.weapon_overheat_timer = 1.2
+        reset_player_weapon_heat(ship)
+        self.assertAlmostEqual(ship.weapon_heat, 0.0)
+        self.assertAlmostEqual(ship.weapon_overheat_timer, 0.0)
 
 
 if __name__ == "__main__":

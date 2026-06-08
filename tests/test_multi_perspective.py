@@ -45,6 +45,14 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         after = (scene.world.ship.pos.x, scene.world.ship.pos.y, scene.world.ship.vel.x, scene.world.ship.angle)
         self.assertEqual(before, after)
 
+    def test_camera_toggle_preserves_weapon_heat(self) -> None:
+        scene = PlayScene("cove", CampaignState.new())
+        scene.world.ship.weapon_heat = 0.55
+        scene.world.ship.weapon_overheat_timer = 0.4
+        scene.camera.cycle_mode()
+        self.assertAlmostEqual(scene.world.ship.weapon_heat, 0.55)
+        self.assertAlmostEqual(scene.world.ship.weapon_overheat_timer, 0.4)
+
     def test_cove_play_scene_snaps_tactical_camera_on_start(self) -> None:
         scene = PlayScene("cove", CampaignState.new())
         scene.world.ship.pos = Vec2(880, 550)
