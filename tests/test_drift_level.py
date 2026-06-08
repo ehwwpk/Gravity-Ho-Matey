@@ -40,7 +40,7 @@ class DriftLevelTests(unittest.TestCase):
         self.assertEqual(world.config.width, 4800)
         self.assertTrue(world.config.open_bounds)
         self.assertFalse(world.config.radiation_enabled)
-        self.assertEqual(world.config.max_asteroids, 140)
+        self.assertEqual(world.config.max_asteroids, 200)
         self.assertEqual(len(world.beacons), 0)
         self.assertTrue(world.finish_unlocked)
         expected_rocks = sum(spec[1] for spec in RING_SPECS)

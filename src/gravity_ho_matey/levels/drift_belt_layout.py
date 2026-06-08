@@ -14,14 +14,16 @@ SPAWN_CLEAR_RADIUS = 180.0
 FINISH_PAST_FINAL_SEC = 1.5
 FINISH_PAST_FINAL = FINISH_PAST_FINAL_SEC * BELT_CRUISE_SPEED
 
+# (radius wu, rock count, size mix). Outer rings get extra count — circumference grows but
+# belts looked too thin past ~880 wu without affecting inner lanes or spawn bubble.
 RING_SPECS: tuple[tuple[float, int, tuple[str, ...]], ...] = (
     (220.0, 12, ("pebble", "pebble", "rock")),
     (440.0, 14, ("pebble", "rock", "rock")),
     (660.0, 16, ("rock", "rock", "pebble", "rock")),
     (880.0, 16, ("rock", "rock", "boulder", "pebble")),
-    (1100.0, 22, ("rock", "boulder", "rock", "pebble")),
-    (1320.0, 20, ("boulder", "rock", "rock", "pebble")),
-    (1980.0, 22, ("pebble", "rock", "rock", "rock", "boulder", "rock")),
+    (1100.0, 36, ("rock", "boulder", "rock", "pebble")),
+    (1320.0, 42, ("boulder", "rock", "rock", "pebble")),
+    (1980.0, 46, ("pebble", "rock", "rock", "rock", "boulder", "rock")),
 )
 
 FINAL_RING_RADIUS = RING_SPECS[-1][0]

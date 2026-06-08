@@ -53,7 +53,7 @@ def open_sector_config(
         open_bounds=True,
         radiation_enabled=False,
         chart_margin_frac=0.48,
-        max_asteroids=140,
+        max_asteroids=200,
         gravity_scale=0.48,
         turn_rate=5.1,
         thrust=252.0,

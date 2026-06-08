@@ -8,6 +8,8 @@ WAVE_NUDGE_SECONDS = 1.0
 INBOUND_HINT_SECONDS = 6.0
 # Min seconds after a wave spawns before clear-to-advance can trigger the next wave.
 CLEAR_BREATHER = 3.0
+# After the last hostile dies, wait this long before early-advance spawns the next wave.
+CLEAR_ADVANCE_BUFFER = 1.0
 # Max alive hostiles before the next wave is withheld (anti-stack).
 WAVE_STACK_CAP = 10
 
@@ -41,6 +43,7 @@ class WaveMissionPresentation:
     inbound_wave: int = 0
     inbound_seconds: float = 0.0
     wave_spawned_at: dict[int, float] = field(default_factory=dict)
+    wave_all_clear_since: float | None = None
 
     @property
     def all_waves_fired(self) -> bool:
@@ -78,10 +81,16 @@ class WaveMissionPresentation:
         next_index = self.waves_spawned
         clock_ready = elapsed >= self.wave_times[next_index]
         clear_ready = False
-        if self.waves_spawned > 0 and hostiles_alive == 0:
+        if hostiles_alive > 0:
+            self.wave_all_clear_since = None
+        elif self.waves_spawned > 0:
+            if self.wave_all_clear_since is None:
+                self.wave_all_clear_since = elapsed
             last_wave = self.waves_spawned
             spawned_at = self.wave_spawned_at.get(last_wave, 0.0)
-            clear_ready = elapsed >= spawned_at + CLEAR_BREATHER
+            breather_ok = elapsed >= spawned_at + CLEAR_BREATHER
+            buffer_ok = elapsed >= self.wave_all_clear_since + CLEAR_ADVANCE_BUFFER
+            clear_ready = breather_ok and buffer_ok
 
         if not clock_ready and not clear_ready:
             return None
@@ -89,6 +98,7 @@ class WaveMissionPresentation:
         next_wave = self.waves_spawned + 1
         self.waves_spawned = next_wave
         self.wave_spawned_at[next_wave] = elapsed
+        self.wave_all_clear_since = None
         self._trigger_nudge(next_wave)
         return next_wave
 

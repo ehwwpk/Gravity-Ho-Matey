@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from gravity_ho_matey.gameplay.wave_mission import (
+    CLEAR_ADVANCE_BUFFER,
     CLEAR_BREATHER,
     INBOUND_HINT_SECONDS,
     WAVE_NUDGE_SECONDS,
@@ -68,11 +69,27 @@ class WaveMissionPresentationTests(unittest.TestCase):
         assert copy is not None
         self.assertEqual(copy.subtitle, "squids + corsairs")
 
-    def test_clear_to_advance_after_breather(self) -> None:
+    def test_clear_to_advance_after_breather_and_clear_buffer(self) -> None:
         director = WaveMissionPresentation()
         director.poll_spawn(0.0, hostiles_alive=0)
-        self.assertIsNone(director.poll_spawn(2.0, hostiles_alive=0))
-        wave = director.poll_spawn(3.0, hostiles_alive=0)
+        self.assertIsNone(director.poll_spawn(2.0, hostiles_alive=2))
+        self.assertIsNone(director.poll_spawn(3.0, hostiles_alive=0))
+        wave = director.poll_spawn(3.0 + CLEAR_ADVANCE_BUFFER, hostiles_alive=0)
+        self.assertEqual(wave, 2)
+
+    def test_clear_to_advance_waits_one_second_after_last_kill(self) -> None:
+        director = WaveMissionPresentation()
+        director.poll_spawn(0.0, hostiles_alive=0)
+        self.assertIsNone(director.poll_spawn(12.0, hostiles_alive=2))
+        self.assertIsNone(director.poll_spawn(12.0, hostiles_alive=0))
+        self.assertIsNone(director.poll_spawn(12.0 + CLEAR_ADVANCE_BUFFER * 0.5, hostiles_alive=0))
+        wave = director.poll_spawn(12.0 + CLEAR_ADVANCE_BUFFER, hostiles_alive=0)
+        self.assertEqual(wave, 2)
+
+    def test_timer_spawn_does_not_wait_for_clear_buffer(self) -> None:
+        director = WaveMissionPresentation()
+        director.poll_spawn(0.0, hostiles_alive=0)
+        wave = director.poll_spawn(20.0, hostiles_alive=4)
         self.assertEqual(wave, 2)
 
     def test_stack_cap_blocks_next_wave(self) -> None:
