@@ -19,6 +19,7 @@ from gravity_ho_matey.gameplay.weapon_config import (
     EXPLOSIVE_SPEED_MULT,
     LASER_ADV_PIERCE_COUNT,
     LASER_PIERCE_COUNT,
+    PLAYER_WEAPON_HEAT_GAIN_MULT,
     SHOTGUN_ADV_PELLET_COUNT,
     SHOTGUN_ADV_SIDE_SPREAD_RAD,
     SHOTGUN_PELLET_COUNT,
@@ -268,7 +269,11 @@ class PlayerWeaponHeatTests(unittest.TestCase):
         ship.weapon_heat = 0.72
         escalation = heat_escalation_multiplier(0.72)
         self.assertGreater(escalation, 1.15)
-        self.assertAlmostEqual(low_gain, heat_per_shot(None) * escalation, places=5)
+        self.assertAlmostEqual(
+            low_gain,
+            heat_per_shot(None) * escalation * PLAYER_WEAPON_HEAT_GAIN_MULT,
+            places=5,
+        )
 
     def test_high_heat_cools_faster_than_moderate_heat(self) -> None:
         hot = Ship(pos=Vec2(0, 0))
@@ -314,12 +319,12 @@ class PlayerWeaponHeatTests(unittest.TestCase):
                 if abs(t - mark) < dt:
                     marks[mark] = ship.weapon_heat
             t += dt
-        self.assertGreater(marks.get(1.0, 0.0), 0.20)
-        self.assertLess(marks.get(1.0, 1.0), 0.32)
-        self.assertGreaterEqual(marks.get(1.5, 0.0), 0.28)
-        self.assertLessEqual(marks.get(1.5, 0.0), 0.42)
-        self.assertGreater(marks.get(3.0, 0.0), 0.58)
-        self.assertLess(marks.get(3.0, 1.0), 0.78)
+        self.assertGreater(marks.get(1.0, 0.0), 0.14)
+        self.assertLess(marks.get(1.0, 1.0), 0.24)
+        self.assertGreaterEqual(marks.get(1.5, 0.0), 0.20)
+        self.assertLessEqual(marks.get(1.5, 0.0), 0.35)
+        self.assertGreater(marks.get(3.0, 0.0), 0.42)
+        self.assertLess(marks.get(3.0, 1.0), 0.62)
 
     def test_trigger_held_prevents_decay_between_slow_shots(self) -> None:
         ship = Ship(pos=Vec2(0, 0))

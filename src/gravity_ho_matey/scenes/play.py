@@ -200,6 +200,11 @@ class PlayScene(Scene):
                         f"SQUID CLING — {result.hull_chunks} CHUNK"
                         f"{'S' if result.hull_chunks != 1 else ''} LEFT"
                     )
+                elif damage.source is DamageSource.SPACE_JUNK:
+                    self.hud_alert = (
+                        f"SALVAGE STRIKE — {result.hull_chunks} CHUNK"
+                        f"{'S' if result.hull_chunks != 1 else ''} LEFT"
+                    )
                 else:
                     self.hud_alert = (
                         f"HULL STRUCK — {result.hull_chunks} CHUNK"

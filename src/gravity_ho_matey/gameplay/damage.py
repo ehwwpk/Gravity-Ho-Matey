@@ -18,6 +18,7 @@ class DamageSource(Enum):
     SQUID_CLING = auto()
     GRAVITY_MAW = auto()
     MISSION_FAIL = auto()
+    SPACE_JUNK = auto()
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,7 @@ DAMAGE_RULES: dict[DamageSource, DamageSpec] = {
     DamageSource.SQUID_CLING: DamageSpec(DamageSeverity.CHIP, 1),
     DamageSource.GRAVITY_MAW: DamageSpec(DamageSeverity.LETHAL, 3),
     DamageSource.MISSION_FAIL: DamageSpec(DamageSeverity.LETHAL, 1),
+    DamageSource.SPACE_JUNK: DamageSpec(DamageSeverity.CHIP, 1),
 }
 
 
@@ -74,6 +76,8 @@ def default_reason(source: DamageSource, level_theme: str = "cove") -> str:
         return "Patrol battery scored a direct hit."
     if source is DamageSource.GRAVITY_MAW:
         return "Consumed by a gravity maw."
+    if source is DamageSource.SPACE_JUNK:
+        return "Ripped open on salvage plating." if not solar else "Hull torn on orbital scrap."
     if source is DamageSource.MISSION_FAIL:
         return "Relay lost — sector overrun."
     return "Hull failure."

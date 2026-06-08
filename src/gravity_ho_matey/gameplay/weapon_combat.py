@@ -18,6 +18,19 @@ if TYPE_CHECKING:
 HitDisposition = Literal["none", "consume", "pierce"]
 
 
+def handle_junk_impact(world: GameWorld, projectile: Projectile, hit_pos: Vec2) -> None:
+    """Hard stop on scrap metal — geometry never changes; pierce does not continue."""
+    if projectile.explosive_radius > 0.0:
+        apply_explosive_burst(
+            world,
+            hit_pos,
+            projectile.explosive_radius,
+            drop_loot=not projectile.from_ally,
+        )
+    else:
+        world.explosions.spawn(ExplosionKind.JUNK_IMPACT, hit_pos, scale=0.85)
+
+
 def spawn_weapon_hit_fx(world: GameWorld, hit_pos: Vec2, projectile: Projectile, *, piercing: bool) -> None:
     """Doctrine-colored impact flash at projectile hit."""
     if projectile.hostile:

@@ -1,8 +1,10 @@
 from gravity_ho_matey.gameplay.chart_bounds import (
     CHART_BOUNDS_MARGIN_FRAC,
+    CHART_L12_EXTRA_MARGIN_WU,
     CHART_RIM_EXPAND_L12,
     CHART_SECTOR_MARGIN_FRAC,
     COVE_CHART_MARGIN_FRAC,
+    SOLAR_CHART_EXTRA_MARGIN_WU,
 )
 from gravity_ho_matey.levels.level_registry import LEVEL_BUILDERS, build_level
 
@@ -150,6 +152,9 @@ def test_chart_sectors_use_expanded_margin_on_levels_one_and_two() -> None:
     solar = build_level("solar")
     drift = build_level("drift")
     assert cove.config.chart_margin_frac == COVE_CHART_MARGIN_FRAC
+    assert cove.config.chart_extra_margin_wu == CHART_L12_EXTRA_MARGIN_WU
+    assert solar.config.chart_extra_margin_wu == SOLAR_CHART_EXTRA_MARGIN_WU
+    assert solar.config.chart_extra_margin_wu > CHART_L12_EXTRA_MARGIN_WU
     assert solar.config.chart_margin_frac == CHART_SECTOR_MARGIN_FRAC
     assert drift.config.chart_margin_frac != CHART_SECTOR_MARGIN_FRAC
     sector_base = CHART_BOUNDS_MARGIN_FRAC * 1.10
@@ -176,6 +181,32 @@ def test_l12_play_chart_expanded_vs_original_base() -> None:
         assert y1 > oy1
         assert ox0 - x0 >= 10.0
         assert x1 - ox1 >= 10.0
+
+
+def test_cove_kraken_lane_has_ship_lengths_before_top_oob() -> None:
+    """L1 chart must extend ~4 ship-lengths beyond frac margin — room to fight rim wells."""
+    from gravity_ho_matey.core.vector import Vec2
+    from gravity_ho_matey.gameplay.chart_bounds import (
+        CHART_L12_EXTRA_MARGIN_WU,
+        chart_limits,
+        chart_limits_for_margin_frac,
+        ship_in_chart,
+    )
+
+    world = build_level("cove")
+    kraken = next(w for w in world.wells if w.label == "Kraken Moon")
+    x0, y0, x1, y1 = chart_limits(world.config)
+    frac_only_x0, frac_only_y0, frac_only_x1, frac_only_y1 = chart_limits_for_margin_frac(
+        world.config,
+        world.config.chart_margin_frac,
+    )
+    assert x0 <= frac_only_x0 - CHART_L12_EXTRA_MARGIN_WU + 0.01
+    assert y0 <= frac_only_y0 - CHART_L12_EXTRA_MARGIN_WU + 0.01
+    assert x1 >= frac_only_x1 + CHART_L12_EXTRA_MARGIN_WU - 0.01
+    assert y1 >= frac_only_y1 + CHART_L12_EXTRA_MARGIN_WU - 0.01
+    # Slingshot lane above Kraken Moon — was OOB under frac-only margin.
+    assert ship_in_chart(Vec2(kraken.pos.x, frac_only_y0 - 10.0), world.config)
+    assert ship_in_chart(Vec2(kraken.pos.x, kraken.pos.y - 80.0), world.config)
 
 
 def test_level_registry_matches_builders() -> None:

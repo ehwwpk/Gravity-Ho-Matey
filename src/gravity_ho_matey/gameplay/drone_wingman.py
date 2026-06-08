@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.drone_config import (
@@ -44,6 +45,10 @@ from gravity_ho_matey.gameplay.friendly_fighter import ThreatTarget, _angle_delt
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
 from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
+
+if TYPE_CHECKING:
+    from gravity_ho_matey.gameplay.entities import SpaceJunk
+    from gravity_ho_matey.gameplay.space_junk_spatial import JunkSpatialGrid
 
 _ASTEROID_SELF_BIAS = 140.0
 _ASTEROID_PLAYER_BIAS = 48.0
@@ -229,11 +234,28 @@ class DroneWingman:
         asteroids: list[Asteroid] | None = None,
         enemies: list | None = None,
         hostile_projectiles: list[Projectile] | None = None,
+        space_junk: list[SpaceJunk] | None = None,
+        junk_spatial: JunkSpatialGrid | None = None,
     ) -> None:
         if not self.alive:
             return
 
         avoid_rock, rock_urgency = self._asteroid_avoidance(asteroids or ())
+        if space_junk and junk_spatial is not None:
+            from gravity_ho_matey.gameplay.space_junk import junk_avoidance_push
+
+            jpush, jurgency = junk_avoidance_push(
+                self.pos,
+                self.vel,
+                self.radius,
+                space_junk,
+                junk_spatial,
+                avoid_radius=DRONE_ASTEROID_AVOID_RADIUS,
+                panic_gap=DRONE_ASTEROID_PANIC_GAP,
+                thrust=DRONE_ASTEROID_AVOID_THRUST,
+            )
+            avoid_rock += jpush
+            rock_urgency = max(rock_urgency, jurgency)
         avoid_enemy, enemy_urgency = self._enemy_avoidance(enemies or ())
         dodge_bolt, bolt_urgency = self._projectile_dodge(hostile_projectiles or ())
 

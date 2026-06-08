@@ -44,7 +44,7 @@ class TitleInfoPageTests(unittest.TestCase):
         self.assertIn("Holo Bazaar", joined)
         root.destroy()
 
-    def test_combat_page_shows_threat_cards(self) -> None:
+    def test_combat_page_shows_weapon_doctrines(self) -> None:
         root, canvas = _canvas()
         chrome = title_chrome_layout(
             screen_h=640.0, top_bar_h=54.0, footer_h=52.0, rail_h=24.0, shop_h=36.0,
@@ -53,8 +53,13 @@ class TitleInfoPageTests(unittest.TestCase):
         joined = " ".join(
             str(canvas.itemcget(i, "text")) for i in canvas.find_all() if canvas.type(i) == "text" and canvas.itemcget(i, "text")
         )
-        self.assertIn("Singularity maw", joined)
-        self.assertIn("Void squid", joined)
+        self.assertIn("WEAPON DOCTRINES", joined)
+        self.assertIn("LANCE", joined)
+        self.assertIn("SCATTER", joined)
+        self.assertIn("NOVA", joined)
+        self.assertIn("Prismatic Lance", joined)
+        self.assertIn("Triple Tap", joined)
+        self.assertIn("Supernova", joined)
         root.destroy()
 
     def test_deploy_split_layout_has_preview_pane(self) -> None:

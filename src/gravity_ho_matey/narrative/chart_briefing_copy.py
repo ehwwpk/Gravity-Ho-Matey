@@ -5,6 +5,8 @@ from __future__ import annotations
 # Each row is (section_label, line). Empty label = continuation under prior section.
 BriefingRow = tuple[str, str]
 
+JUNK_CORRIDOR_HAZARDS: BriefingRow = ("HAZARDS", "Indestructible scrap walls — fly the gaps.")
+
 # Standard section labels — same structure game-wide; renderer groups by label.
 LEVEL_BRIEFING: dict[str, tuple[BriefingRow, ...]] = {
     "cove": (

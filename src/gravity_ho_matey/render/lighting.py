@@ -131,6 +131,26 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             crater_pit=palette.ASTEROID_CRATER,
             crater_rim_hi=palette.HOLO_ASTEROID_REGOLITH,
         )
+    if kind == "space_junk":
+        if view == "chase":
+            return MaterialTones(
+                highlight=palette.JUNK_HULL_LIT,
+                mid=palette.JUNK_HULL,
+                shadow=palette.JUNK_HULL_DARK,
+                deep=palette.JUNK_EDGE,
+                rim=palette.JUNK_EDGE,
+                crater_pit=palette.JUNK_RUST,
+                crater_rim_hi=palette.JUNK_RIVET,
+            )
+        return MaterialTones(
+            highlight=palette.JUNK_HULL_LIT,
+            mid=palette.JUNK_HULL,
+            shadow=palette.JUNK_HULL_DARK,
+            deep=palette.JUNK_EDGE,
+            rim=palette.JUNK_EDGE,
+            crater_pit=palette.JUNK_RUST,
+            crater_rim_hi=palette.JUNK_RIVET,
+        )
     if kind == "well_black_hole":
         return MaterialTones(
             highlight=palette.BLACK_HOLE_RING,

@@ -2,7 +2,7 @@
 
 **Gravity Ho, Matey!** — wild, silly, out-there planning for **Holo Bazaar expansions**, **field objects**, **friendlies**, **hostiles**, and **mega-structures** (building-scale, not “another skiff with +1 gun”).
 
-Brainstorm only. Cross-ref: [LEVELS_6_10_MEGA_BRAINSTORM.md](LEVELS_6_10_MEGA_BRAINSTORM.md) for campaign acts, sector map, and unit lifecycle tables already sketched there. **This doc goes weirder** and focuses on *feel* — things that read as places and personalities, not stat stickers.
+Brainstorm only — field objects, shop branches, and megastructures. Focuses on *feel*: things that read as places and personalities, not stat stickers.
 
 ---
 

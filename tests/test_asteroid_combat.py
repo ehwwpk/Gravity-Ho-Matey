@@ -143,6 +143,11 @@ class AsteroidCombatUnitTests(unittest.TestCase):
         self.assertEqual(result.fx[-1].kind, ExplosionKind.ASTEROID_BREAKUP)
         child_mass = sum(child.mass for child in result.asteroids_added)
         self.assertAlmostEqual(child_mass / parent_mass, 0.5, delta=0.08)
+        parent_radius = asteroid.approximate_radius()
+        for child in result.asteroids_added:
+            dist = (child.pos - Vec2(80, 80)).length()
+            self.assertLessEqual(dist, parent_radius * 0.08 + 0.5)
+            self.assertGreaterEqual((child.vel - asteroid.vel).length(), 50.0)
 
     def test_small_rock_vaporizes_without_fragments(self) -> None:
         asteroid = make_asteroid(Vec2(80, 80), seed=401003, size_class="rock", drift_kind="slow", velocity=Vec2())
@@ -189,6 +194,8 @@ class AsteroidCombatUnitTests(unittest.TestCase):
             self.assertEqual(child.tier, AsteroidTier.SMALL)
             self.assertEqual(child.generation, 1)
             self.assertIsNone(child.ring_anchor)
+            dist = (child.pos - Vec2(100, 100)).length()
+            self.assertLessEqual(dist, asteroid.approximate_radius() * 0.08 + 0.5)
 
     def test_generation_cap_vaporizes_instead_of_splitting(self) -> None:
         asteroid = make_asteroid(Vec2(100, 100), seed=601, size_class="boulder", drift_kind="slow", velocity=Vec2())
@@ -240,25 +247,67 @@ class AsteroidCombatWorldTests(unittest.TestCase):
             finish_gate=FinishGate(Rect(150, 150, 25, 25)),
         )
 
+    def test_fragments_always_integrate_after_breakup(self) -> None:
+        asteroid = make_asteroid(Vec2(100, 100), seed=601, size_class="boulder", drift_kind="slow", velocity=Vec2())
+        asteroid.free_bounds = True
+        while asteroid.hits_remaining > 1:
+            apply_projectile_hit(
+                asteroid,
+                Vec2(100, 100),
+                Vec2(300, 0),
+                world_asteroid_count=1,
+            )
+        result = apply_projectile_hit(
+            asteroid,
+            Vec2(100, 100),
+            Vec2(300, 0),
+            world_asteroid_count=1,
+        )
+        self.assertGreater(len(result.asteroids_added), 0)
+        for child in result.asteroids_added:
+            self.assertFalse(child.free_bounds)
+            self.assertGreaterEqual((child.vel - asteroid.vel).length(), 50.0)
+
+    def test_free_bounds_parent_fragments_move_in_world(self) -> None:
+        asteroid = make_asteroid(Vec2(50, 50), seed=401001, size_class="rock", drift_kind="slow", velocity=Vec2())
+        asteroid.free_bounds = True
+        parent_pos = Vec2(asteroid.pos.x, asteroid.pos.y)
+        world = self._world_with_asteroid(asteroid)
+        for _ in range(asteroid.hits_max):
+            world.projectiles = [Projectile(pos=Vec2(20, 50), vel=Vec2(400, 0))]
+            world._frame_dt = 1 / 60
+            world._update_projectiles(1 / 60)
+        self.assertGreater(len(world.asteroids), 1)
+        for child in world.asteroids:
+            self.assertFalse(child.free_bounds)
+            self.assertGreater((child.pos - parent_pos).length(), 0.5)
+
     def test_projectile_destroys_small_asteroid(self) -> None:
         asteroid = make_asteroid(Vec2(50, 50), seed=301, size_class="pebble", drift_kind="slow", velocity=Vec2())
         hits_needed = asteroid.hits_max
         world = self._world_with_asteroid(asteroid)
         for _ in range(hits_needed):
             world.projectiles = [Projectile(pos=Vec2(20, 50), vel=Vec2(400, 0))]
+            world._frame_dt = 0.05
             world._update_projectiles(0.05)
         self.assertEqual(len(world.asteroids), 0)
 
     def test_rock_splits_after_enough_hits_when_medium(self) -> None:
         asteroid = make_asteroid(Vec2(50, 50), seed=401001, size_class="rock", drift_kind="slow", velocity=Vec2())
         self.assertEqual(asteroid.tier, AsteroidTier.MEDIUM)
+        parent_pos = Vec2(asteroid.pos.x, asteroid.pos.y)
+        parent_radius = asteroid.approximate_radius()
         hits_needed = asteroid.hits_max
         world = self._world_with_asteroid(asteroid)
         for _ in range(hits_needed):
             world.projectiles = [Projectile(pos=Vec2(20, 50), vel=Vec2(400, 0))]
+            world._frame_dt = 0.05
             world._update_projectiles(0.05)
         self.assertGreater(len(world.asteroids), 1)
         self.assertLessEqual(len(world.asteroids), 3)
+        for child in world.asteroids:
+            self.assertGreater((child.pos - parent_pos).length(), 1.0)
+            self.assertLessEqual((child.pos - parent_pos).length(), parent_radius * 0.08 + 6.0)
 
     def test_small_rock_vaporizes_in_world(self) -> None:
         asteroid = make_asteroid(Vec2(50, 50), seed=401003, size_class="rock", drift_kind="slow", velocity=Vec2())
@@ -267,6 +316,7 @@ class AsteroidCombatWorldTests(unittest.TestCase):
         world = self._world_with_asteroid(asteroid)
         for _ in range(hits_needed):
             world.projectiles = [Projectile(pos=Vec2(20, 50), vel=Vec2(400, 0))]
+            world._frame_dt = 0.05
             world._update_projectiles(0.05)
         self.assertEqual(len(world.asteroids), 0)
 
@@ -276,6 +326,7 @@ class AsteroidCombatWorldTests(unittest.TestCase):
         world = self._world_with_asteroid(asteroid)
         for _ in range(hits_needed):
             world.projectiles = [Projectile(pos=Vec2(20, 50), vel=Vec2(400, 0))]
+            world._frame_dt = 0.05
             world._update_projectiles(0.05)
         self.assertGreater(len(world.asteroids), 1)
         self.assertLessEqual(len(world.asteroids), 4)

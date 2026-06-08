@@ -101,7 +101,7 @@ def spawn_fragment(
     return Asteroid(
         pos=Vec2(center.x, center.y),
         vel=velocity,
-        angle=rng.random() * math.tau,
+        angle=parent.angle + (rng.random() - 0.5) * 0.35,
         spin=spin,
         local_verts=local_verts,
         size_class=size_class,
@@ -115,6 +115,7 @@ def spawn_fragment(
         hits_remaining=hits_max,
         mass=0.0,
         generation=parent.generation + 1,
+        free_bounds=False,
     )
 
 
@@ -257,6 +258,7 @@ def integrate_asteroid(
     gravity_scale: float,
     world_width: float,
     world_height: float,
+    wall_bounce: bool = True,
 ) -> None:
     if asteroid.drift_kind == "ring" and asteroid.ring_anchor is not None:
         offset = asteroid.pos - asteroid.ring_anchor
@@ -276,7 +278,7 @@ def integrate_asteroid(
     asteroid.pos = asteroid.pos + asteroid.vel * dt
     asteroid.angle += asteroid.spin * dt
 
-    if asteroid.free_bounds:
+    if asteroid.free_bounds or not wall_bounce:
         return
 
     radius = asteroid.approximate_radius()

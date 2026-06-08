@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
@@ -41,6 +42,10 @@ from gravity_ho_matey.gameplay.nifflerp_config import (
     NIFFLERP_WELL_ESCAPE_SCALE,
 )
 from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
+
+if TYPE_CHECKING:
+    from gravity_ho_matey.gameplay.entities import SpaceJunk
+    from gravity_ho_matey.gameplay.space_junk_spatial import JunkSpatialGrid
 
 
 def _closing_speed(pos_a: Vec2, vel_a: Vec2, pos_b: Vec2, vel_b: Vec2) -> float:
@@ -149,11 +154,28 @@ class Nifflerp:
         asteroids: list[Asteroid],
         enemies: list,
         hostile_projectiles: list[Projectile],
+        space_junk: list[SpaceJunk] | None = None,
+        junk_spatial: JunkSpatialGrid | None = None,
     ) -> None:
         if not self.alive:
             return
 
         avoid_rock, rock_urgency = self._asteroid_avoidance(asteroids)
+        if space_junk and junk_spatial is not None:
+            from gravity_ho_matey.gameplay.space_junk import junk_avoidance_push
+
+            jpush, jurgency = junk_avoidance_push(
+                self.pos,
+                self.vel,
+                self.radius,
+                space_junk,
+                junk_spatial,
+                avoid_radius=NIFFLERP_ASTEROID_AVOID_RADIUS,
+                panic_gap=NIFFLERP_ASTEROID_PANIC_GAP,
+                thrust=NIFFLERP_ASTEROID_AVOID_THRUST,
+            )
+            avoid_rock += jpush
+            rock_urgency = max(rock_urgency, jurgency)
         avoid_enemy, enemy_urgency, squid_urgency = self._enemy_avoidance(enemies)
         dodge_bolt, bolt_urgency = self._projectile_dodge(hostile_projectiles)
         dodge_urgency = max(rock_urgency, enemy_urgency * 1.12, bolt_urgency)

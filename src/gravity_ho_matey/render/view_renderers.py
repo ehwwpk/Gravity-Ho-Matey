@@ -152,6 +152,28 @@ class TacticalViewRenderer:
                     rig=rig,
                     elapsed=world.elapsed,
                 )
+        if world.space_junk:
+            from gravity_ho_matey.render.space_junk_viz import draw_tactical_junk, junk_in_play_view
+
+            junk_theme = world.config.level_theme
+            for junk in world.space_junk:
+                if not junk_in_play_view(
+                    junk,
+                    ship_pos,
+                    viewport_width=float(vw),
+                    viewport_height=float(vh - hud_top),
+                ):
+                    continue
+                draw_tactical_junk(
+                    canvas,
+                    junk,
+                    camera=camera,
+                    ship_pos=ship_pos,
+                    hud_top=hud_top,
+                    rig=rig,
+                    ship_angle=world.ship.angle,
+                    theme=junk_theme,
+                )
         for asteroid in world.asteroids:
             if not asteroid_in_play_view(
                 asteroid,
@@ -719,6 +741,23 @@ class PerspectiveViewRenderer:
 
         chase_threat_r = ORBITAL_ASTEROID_THREAT_RADIUS if brood_orbital_chase or brood_on_surface else 0.0
         chase_scree_material = "brood_regolith" if brood_on_surface else "asteroid"
+        if world.space_junk:
+            from gravity_ho_matey.render.space_junk_viz import draw_chase_junk, junk_in_chase_view
+
+            chase_junk_theme = world.config.level_theme
+            for junk in world.space_junk:
+                if not junk_in_chase_view(junk, ship_pos, ship_angle):
+                    continue
+                draw_chase_junk(
+                    canvas,
+                    junk,
+                    camera=camera,
+                    ship_pos=ship_pos,
+                    ship_angle=ship_angle,
+                    rig=rig,
+                    theme=chase_junk_theme,
+                    elapsed=elapsed,
+                )
         asteroid_sprites = collect_chase_asteroid_sprites(
             world.asteroids,
             camera,

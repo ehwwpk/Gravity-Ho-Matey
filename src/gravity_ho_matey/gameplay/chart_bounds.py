@@ -11,12 +11,23 @@ CHART_BOUNDS_TOAST_SECONDS = 1.6
 CHART_BOUNDS_MARGIN_FRAC = 0.05
 # Levels 1–2 (Cove, Solar): +10% outward breathing room beyond base margin.
 _CHART_SECTOR_BASE_FRAC = CHART_BOUNDS_MARGIN_FRAC * 1.10
-# Playtest widen L1/L2 — chart rim expanded vs pre-playtest base (wells/rocks/beacons stay put).
-# Stacked: sector base +10%, then +12.5%, then +10% playtest follow-up ≈ +37% total vs first L1/L2 margins.
-CHART_RIM_EXPAND_L12 = 1.2375
+# Playtest widen L1/L2 — chart rim expanded outward from level width/height (wells/rocks/beacons stay put).
+# Stacked: sector +10%, prior playtest rim stack (1.2375×), then +15% inbounds follow-up below.
+_CHART_RIM_EXPAND_PLAYTEST = 1.2375
+CHART_L12_INBOUNDS_EXPAND_MULT = 1.15
+CHART_RIM_EXPAND_L12 = _CHART_RIM_EXPAND_PLAYTEST * CHART_L12_INBOUNDS_EXPAND_MULT
 CHART_SECTOR_MARGIN_FRAC = _CHART_SECTOR_BASE_FRAC * CHART_RIM_EXPAND_L12
 # Level 1 Cove — sector base + another 5% per side, then L12 expand (void hazards follow same margin).
 COVE_CHART_MARGIN_FRAC = (_CHART_SECTOR_BASE_FRAC + CHART_BOUNDS_MARGIN_FRAC) * CHART_RIM_EXPAND_L12
+
+# Playable chart pad beyond the canvas edge (world units per side). Applied in chart_margin_xy only
+# for L1/L2 — pushes the *inbounds* rim (radiation, HUD, void ring) outward; wells/beacons stay put.
+CHART_SHIP_LENGTH_WU = 24.0  # ~2× default ship radius — margin ruler in ship-lengths
+CHART_L12_EXTRA_SHIP_LENGTHS = 4.0
+CHART_L12_EXTRA_MARGIN_WU = CHART_SHIP_LENGTH_WU * CHART_L12_EXTRA_SHIP_LENGTHS
+# L2 strip — +2 ship-lengths beyond L1 sector pad (L1 also has COVE_CHART_MARGIN_FRAC bump).
+SOLAR_CHART_EXTRA_SHIP_LENGTHS = CHART_L12_EXTRA_SHIP_LENGTHS + 2.0
+SOLAR_CHART_EXTRA_MARGIN_WU = CHART_SHIP_LENGTH_WU * SOLAR_CHART_EXTRA_SHIP_LENGTHS
 
 # Camera: ramp free-follow over this distance past the chart rim (world units).
 OOB_CAMERA_BLEND_FULL_DIST = 90.0
@@ -44,7 +55,8 @@ class ChartBoundsToast(Enum):
 
 def chart_margin_xy(config: WorldConfig) -> tuple[float, float]:
     frac = config.chart_margin_frac
-    return config.width * frac, config.height * frac
+    extra = config.chart_extra_margin_wu
+    return config.width * frac + extra, config.height * frac + extra
 
 
 def chart_limits(config: WorldConfig) -> tuple[float, float, float, float]:

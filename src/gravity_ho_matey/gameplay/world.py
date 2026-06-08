@@ -21,11 +21,13 @@ from gravity_ho_matey.gameplay.asteroid_motion import integrate_asteroid, integr
 from gravity_ho_matey.gameplay.entities import (
     Asteroid,
     Beacon,
+    ContactPolicy,
     FinishGate,
     GameStatus,
     GravityWell,
     Projectile,
     Ship,
+    SpaceJunk,
     WorldConfig,
 )
 from gravity_ho_matey.core.geometry import Rect, circle_intersects_convex_polygon
@@ -47,7 +49,7 @@ from gravity_ho_matey.gameplay.nifflerp_config import NIFFLERP_ASTEROID_QUERY_RA
 from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
 from gravity_ho_matey.gameplay.space_station import SpaceStation
 from gravity_ho_matey.gameplay.tractor_beam import TractorBeamState
-from gravity_ho_matey.gameplay.squid_pod import SquidPod
+from gravity_ho_matey.gameplay.squid_pod import PodPhase, SquidPod
 from gravity_ho_matey.gameplay.wave_director import WaveDirector
 from gravity_ho_matey.gameplay.egg_pod_objective import EggPodObjective
 from gravity_ho_matey.gameplay.brood_moon_mission import BroodMoonState, BroodPhase
@@ -59,8 +61,16 @@ from gravity_ho_matey.gameplay.brood_moon_controller import (
 from gravity_ho_matey.levels.guard_layout import GuardLayout
 from gravity_ho_matey.levels.guard_waves import wave_spawn_for
 from gravity_ho_matey.gameplay.asteroid_spatial import AsteroidSpatialGrid
+from gravity_ho_matey.gameplay.space_junk import apply_junk_separation, apply_unit_junk_separation, junk_hit_at, resolve_junk_bounce
+from gravity_ho_matey.gameplay.space_junk_spatial import JunkSpatialGrid
 from gravity_ho_matey.gameplay.threat_snapshot import AsteroidThreatSnapshot, build_asteroid_threat_snapshots
-from gravity_ho_matey.gameplay.weapon_combat import HitDisposition, apply_explosive_burst, resolve_projectile_after_hit, spawn_weapon_hit_fx
+from gravity_ho_matey.gameplay.weapon_combat import (
+    HitDisposition,
+    apply_explosive_burst,
+    handle_junk_impact,
+    resolve_projectile_after_hit,
+    spawn_weapon_hit_fx,
+)
 from gravity_ho_matey.gameplay.weapon_fire import player_fire_cooldown, spawn_player_shots
 from gravity_ho_matey.gameplay.weapon_heat import (
     apply_heat_on_fire,
@@ -105,6 +115,10 @@ class GameWorld:
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
     asteroid_threat_snapshots: tuple[AsteroidThreatSnapshot, ...] = ()
     asteroid_spatial: AsteroidSpatialGrid = field(default_factory=AsteroidSpatialGrid)
+    space_junk: list[SpaceJunk] = field(default_factory=list)
+    junk_spatial: JunkSpatialGrid = field(default_factory=JunkSpatialGrid)
+    junk_spatial_static: bool = False
+    _junk_motion_start: dict[int, Vec2] = field(default_factory=dict)
     chart_radiation_exposure: float = 0.0
     squid_cling_timer: float = 0.0
     mega_squid: MegaSquidBoss | None = None
@@ -133,6 +147,17 @@ class GameWorld:
     brood_moon: BroodMoonState | None = None
     player_weapon_track: WeaponTrack | None = None
     player_weapon_advanced: bool = False
+    _frame_dt: float = 0.0
+
+    def _companion_junk_kwargs(self, pos: Vec2, query_radius: float) -> dict[str, object]:
+        """Optional space-junk steering args for ally/drone/nifflerp integrate()."""
+        if not self.space_junk or not self.config.space_junk_enabled:
+            return {}
+        self._ensure_junk_spatial()
+        nearby = self._nearby_junk(pos, query_radius)
+        if not nearby:
+            return {}
+        return {"space_junk": nearby, "junk_spatial": self.junk_spatial}
 
     def refresh_threat_snapshots(self) -> None:
         """Narrow-phase meshes for interaction zone only — far belt rocks stay motion-only."""
@@ -213,11 +238,13 @@ class GameWorld:
     def update(self, dt: float, intent: ControlIntent, *, beacon_capture_slack: float = 0.0, interaction_hold: bool = False) -> bool:
         """Advance simulation. Returns True when gravity field should be rebaked (brood moon phase swap)."""
         dt = max(0.0, min(dt, 1.0 / 20.0))
+        self._frame_dt = dt
         self.elapsed += dt
         self.explosions.update(dt)
         if self.status is not GameStatus.RUNNING:
             return False
 
+        self._junk_motion_start.clear()
         rebake_gravity = False
         if self.brood_moon is not None:
             if self.brood_moon.in_cinematic:
@@ -239,6 +266,7 @@ class GameWorld:
         self._update_boss_and_pods(dt)
         self._update_space_station(dt)
         self._update_friendly_stations(dt)
+        self._resolve_units_against_junk(dt)
         self._update_projectiles(dt)
         self.refresh_threat_snapshots()
         self._collect_beacons(beacon_capture_slack)
@@ -247,6 +275,7 @@ class GameWorld:
         self._check_station_squid_cling_damage(dt)
         if self.status is GameStatus.RUNNING:
             self._check_patrol_enemy_collisions()
+        self._check_companion_hazards()
         self._check_finish()
         if self.protection_wave_alert_ttl > 0.0:
             self.protection_wave_alert_ttl = max(0.0, self.protection_wave_alert_ttl - dt)
@@ -280,6 +309,7 @@ class GameWorld:
                 gravity_scale=cfg.gravity_scale,
                 world_width=float(cfg.width),
                 world_height=float(cfg.height),
+                wall_bounce=not cfg.open_bounds,
             )
 
     def _asteroid_hit_at(self, pos: Vec2, radius: float, *, use_spatial: bool = False) -> Asteroid | None:
@@ -308,6 +338,81 @@ class GameWorld:
             if circle_intersects_convex_polygon(pos, radius, asteroid.world_vertices()):
                 return asteroid
         return None
+
+    def _ensure_junk_spatial(self) -> None:
+        if not self.space_junk:
+            return
+        if self.junk_spatial_static and self.junk_spatial.populated:
+            return
+        self.junk_spatial.rebuild(self.space_junk)
+
+    def _junk_hit_at(self, pos: Vec2, radius: float) -> SpaceJunk | None:
+        if not self.space_junk or not self.config.space_junk_enabled:
+            return None
+        self._ensure_junk_spatial()
+        return junk_hit_at(self.space_junk, self.junk_spatial, pos, radius)
+
+    def _nearby_junk(self, pos: Vec2, radius: float) -> list[SpaceJunk]:
+        if not self.space_junk or not self.config.space_junk_enabled:
+            return []
+        self._ensure_junk_spatial()
+        if self.junk_spatial.populated:
+            return self.junk_spatial.query_circle(pos, radius)
+        reach_sq = (radius + 72.0) ** 2
+        return [junk for junk in self.space_junk if (junk.pos - pos).length_sq() <= reach_sq]
+
+    def _resolve_units_against_junk(self, dt: float) -> None:
+        if not self.space_junk or not self.config.space_junk_enabled:
+            return
+        self._ensure_junk_spatial()
+        junk_list = self.space_junk
+        spatial = self.junk_spatial
+        for enemy in self.enemies:
+            if not enemy.alive:
+                continue
+            motion_start = self._junk_motion_start.get(id(enemy), Vec2(enemy.pos.x, enemy.pos.y))
+            pos, vel = apply_unit_junk_separation(
+                motion_start, enemy.pos, enemy.vel, enemy.radius, junk_list, spatial, dt=dt
+            )
+            enemy.pos, enemy.vel = pos, vel
+        boss = self.mega_squid
+        if boss is not None and boss.alive:
+            motion_start = self._junk_motion_start.get(id(boss), Vec2(boss.pos.x, boss.pos.y))
+            pos, vel = apply_unit_junk_separation(
+                motion_start, boss.pos, boss.vel, boss.radius, junk_list, spatial, dt=dt
+            )
+            boss.pos, boss.vel = pos, vel
+        for ally in self.allies:
+            if not ally.alive:
+                continue
+            motion_start = self._junk_motion_start.get(id(ally), Vec2(ally.pos.x, ally.pos.y))
+            pos, vel = apply_unit_junk_separation(
+                motion_start, ally.pos, ally.vel, ally.radius, junk_list, spatial, dt=dt
+            )
+            ally.pos, ally.vel = pos, vel
+        drone = self.drone_wingman
+        if drone is not None and drone.alive:
+            motion_start = self._junk_motion_start.get(id(drone), Vec2(drone.pos.x, drone.pos.y))
+            pos, vel = apply_unit_junk_separation(
+                motion_start, drone.pos, drone.vel, drone.radius, junk_list, spatial, dt=dt
+            )
+            drone.pos, drone.vel = pos, vel
+        buddy = self.nifflerp
+        if buddy is not None and buddy.alive:
+            motion_start = self._junk_motion_start.get(id(buddy), Vec2(buddy.pos.x, buddy.pos.y))
+            pos, vel = apply_unit_junk_separation(
+                motion_start, buddy.pos, buddy.vel, buddy.radius, junk_list, spatial, dt=dt
+            )
+            buddy.pos, buddy.vel = pos, vel
+        for pod in self.squid_pods:
+            if not pod.alive or pod.phase is not PodPhase.FLYING:
+                continue
+            pod_r = pod.hit_radius()
+            motion_start = self._junk_motion_start.get(id(pod), Vec2(pod.pos.x, pod.pos.y))
+            pos, vel = apply_unit_junk_separation(
+                motion_start, pod.pos, pod.vel, pod_r, junk_list, spatial, dt=dt
+            )
+            pod.pos, pod.vel = pos, vel
 
     def _tick_invuln(self, dt: float) -> None:
         if self.invuln_remaining > 0.0:
@@ -425,7 +530,8 @@ class GameWorld:
             rapid_fire=rapid_fire,
         )
 
-    def _apply_asteroid_combat_result(self, result: AsteroidCombatResult) -> None:
+    def _apply_asteroid_combat_result(self, result: AsteroidCombatResult, *, dt: float | None = None) -> None:
+        step = self._frame_dt if dt is None else dt
         for fx in result.fx:
             self.explosions.spawn(fx.kind, fx.pos, scale=fx.scale)
         for asteroid in result.asteroids_removed:
@@ -436,9 +542,28 @@ class GameWorld:
                 self._spawn_jewels_at(asteroid.pos, drop_count)
         if result.asteroids_added:
             self.asteroids.extend(result.asteroids_added)
+            if step > 0.0:
+                self._integrate_fresh_asteroids(result.asteroids_added, step)
         if result.snapshots_dirty:
             self.asteroid_spatial.rebuild(self.asteroids)
             self.refresh_threat_snapshots()
+
+    def _integrate_fresh_asteroids(self, asteroids: list[Asteroid], dt: float) -> None:
+        """Breakup shards spawn mid-frame — step once so burst reads on frame 0."""
+        cfg = self.config
+        for asteroid in asteroids:
+            if asteroid.drift_kind == "ring" and asteroid.ring_anchor is not None:
+                integrate_ring_asteroid_kinematic(asteroid, dt)
+                continue
+            integrate_asteroid(
+                asteroid,
+                dt,
+                self.wells,
+                gravity_scale=cfg.gravity_scale,
+                world_width=float(cfg.width),
+                world_height=float(cfg.height),
+                wall_bounce=False,
+            )
 
     def _spawn_jewels_at(self, pos: Vec2, count: int) -> None:
         self.jewels.extend(spawn_scattered_jewels(pos, count))
@@ -455,6 +580,11 @@ class GameWorld:
             if not self.config.open_bounds and not self._point_in_bounds(projectile.pos, margin=32):
                 self.explosions.spawn(ExplosionKind.PROJECTILE_IMPACT, Vec2(projectile.pos.x, projectile.pos.y))
                 continue
+            if self.config.space_junk_enabled and self.space_junk:
+                junk = self._junk_hit_at(projectile.pos, projectile.radius)
+                if junk is not None:
+                    handle_junk_impact(self, projectile, Vec2(projectile.pos.x, projectile.pos.y))
+                    continue
             hit = self._asteroid_hit_at(projectile.pos, projectile.radius, use_spatial=True)
             if hit is not None:
                 impact = Vec2(projectile.pos.x, projectile.pos.y)
@@ -473,7 +603,8 @@ class GameWorld:
                             projectile.vel,
                             world_asteroid_count=len(self.asteroids),
                             max_asteroids=self.config.max_asteroids,
-                        )
+                        ),
+                        dt=dt,
                     )
                 continue
             if projectile.hostile:
@@ -944,6 +1075,7 @@ class GameWorld:
     def _update_boss_and_pods(self, dt: float) -> None:
         boss = self.mega_squid
         if boss is not None and boss.alive:
+            self._junk_motion_start[id(boss)] = Vec2(boss.pos.x, boss.pos.y)
             boss.integrate(
                 dt,
                 self.wells,
@@ -977,6 +1109,8 @@ class GameWorld:
         for pod in self.squid_pods:
             if not pod.alive:
                 continue
+            if pod.phase is PodPhase.FLYING:
+                self._junk_motion_start[id(pod)] = Vec2(pod.pos.x, pod.pos.y)
             if pod.tick(dt):
                 squid = SquidEnemy(
                     pos=Vec2(pod.pos.x, pod.pos.y),
@@ -1052,6 +1186,7 @@ class GameWorld:
         for enemy in self.enemies:
             if not enemy.alive:
                 continue
+            self._junk_motion_start[id(enemy)] = Vec2(enemy.pos.x, enemy.pos.y)
             enemy.tick_combat(dt)
             if enemy.kind is EnemyKind.SQUID:
                 assert isinstance(enemy, SquidEnemy)
@@ -1103,6 +1238,7 @@ class GameWorld:
         for ally in self.allies:
             if not ally.alive:
                 continue
+            self._junk_motion_start[id(ally)] = Vec2(ally.pos.x, ally.pos.y)
             ally.tick_combat(dt)
             if ally.boost_flash > 0.0:
                 ally.boost_flash = max(0.0, ally.boost_flash - dt)
@@ -1124,11 +1260,11 @@ class GameWorld:
                 well_maw_radius=self.config.well_maw_radius,
                 threat=threat,
                 asteroids=nearby_asteroids,
+                **self._companion_junk_kwargs(ally.pos, ALLY_ASTEROID_QUERY_RADIUS),
             )
             shot = ally.try_fire(threat)
             if shot is not None:
                 self.projectiles.append(shot)
-        self._check_ally_hazards()
         self._prune_dead_allies()
 
     def _nearby_asteroids(self, pos: Vec2, radius: float) -> list[Asteroid]:
@@ -1148,6 +1284,7 @@ class GameWorld:
         drone = self.drone_wingman
         if drone is None or not drone.alive:
             return
+        self._junk_motion_start[id(drone)] = Vec2(drone.pos.x, drone.pos.y)
         drone.tick_combat(dt)
         nearby_asteroids = self._nearby_asteroids_for_drone(drone.pos)
         suspend_combat = False
@@ -1177,11 +1314,11 @@ class GameWorld:
             asteroids=nearby_asteroids,
             enemies=self.enemies,
             hostile_projectiles=[p for p in self.projectiles if p.hostile],
+            **self._companion_junk_kwargs(drone.pos, DRONE_ASTEROID_QUERY_RADIUS),
         )
         shot = None if suspend_combat else drone.try_fire(threat)
         if shot is not None:
             self.projectiles.append(shot)
-        self._check_drone_hazards()
         if not drone.alive:
             self.drone_wingman = None
 
@@ -1189,6 +1326,7 @@ class GameWorld:
         buddy = self.nifflerp
         if buddy is None or not buddy.alive:
             return
+        self._junk_motion_start[id(buddy)] = Vec2(buddy.pos.x, buddy.pos.y)
         buddy.tick(dt)
         nearby_asteroids = self._nearby_asteroids(buddy.pos, NIFFLERP_ASTEROID_QUERY_RADIUS)
         buddy.integrate(
@@ -1205,9 +1343,22 @@ class GameWorld:
             asteroids=nearby_asteroids,
             enemies=self.enemies,
             hostile_projectiles=[p for p in self.projectiles if p.hostile],
+            **self._companion_junk_kwargs(buddy.pos, NIFFLERP_ASTEROID_QUERY_RADIUS),
         )
-        self._check_nifflerp_hazards()
         if not buddy.alive:
+            self.nifflerp = None
+
+    def _check_companion_hazards(self) -> None:
+        """Ally/drone/nifflerp ram checks — after junk separation (§7.6)."""
+        self._check_ally_hazards()
+        self._check_drone_hazards()
+        self._check_nifflerp_hazards()
+        self._prune_dead_allies()
+        drone = self.drone_wingman
+        if drone is not None and not drone.alive:
+            self.drone_wingman = None
+        buddy = self.nifflerp
+        if buddy is not None and not buddy.alive:
             self.nifflerp = None
 
     def _projectile_hits_drone(self, projectile: Projectile) -> bool:
@@ -1240,6 +1391,11 @@ class GameWorld:
         drone = self.drone_wingman
         if drone is None or not drone.alive or drone.hit_invuln > 0.0:
             return
+        if self._junk_hit_at(drone.pos, drone.radius) is not None:
+            self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(drone.pos.x, drone.pos.y), scale=0.7)
+            if drone.apply_shot():
+                self.drone_wingman = None
+            return
         if self._asteroid_hit_at(drone.pos, drone.radius) is not None:
             self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(drone.pos.x, drone.pos.y), scale=0.7)
             if drone.apply_shot():
@@ -1266,6 +1422,11 @@ class GameWorld:
             return
         buddy = self.nifflerp
         if buddy is None or not buddy.alive or buddy.hit_invuln > 0.0:
+            return
+        if self._junk_hit_at(buddy.pos, buddy.radius) is not None:
+            self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(buddy.pos.x, buddy.pos.y), scale=0.55)
+            if buddy.apply_shot():
+                self.nifflerp = None
             return
         if self._asteroid_hit_at(buddy.pos, buddy.radius) is not None:
             self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(buddy.pos.x, buddy.pos.y), scale=0.55)
@@ -1327,6 +1488,10 @@ class GameWorld:
             return
         for ally in self.allies:
             if not ally.alive:
+                continue
+            if self._junk_hit_at(ally.pos, ally.radius) is not None:
+                self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(ally.pos.x, ally.pos.y), scale=0.75)
+                ally.alive = False
                 continue
             if self._asteroid_hit_at(ally.pos, ally.radius) is not None:
                 self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(ally.pos.x, ally.pos.y), scale=0.75)
@@ -1449,6 +1614,22 @@ class GameWorld:
         if not self.config.open_bounds and not self._point_in_bounds(self.ship.pos, margin=0):
             self._register_ship_hit(DamageSource.OUT_OF_BOUNDS)
             return
+        for well in self.wells:
+            maw = well.maw_radius if well.maw_radius is not None else self.config.well_maw_radius
+            if (well.pos - self.ship.pos).length() <= maw:
+                reason = self._gravity_maw_reason(well)
+                self._register_ship_hit(DamageSource.GRAVITY_MAW, reason=reason)
+                return
+        junk = self._junk_hit_at(self.ship.pos, self.ship.radius)
+        if junk is not None:
+            if junk.contact_policy is ContactPolicy.BOUNCE:
+                resolve_junk_bounce(self.ship, junk)
+                return
+            if self.consume_rubber_hull_bounce and self.consume_rubber_hull_bounce():
+                resolve_junk_bounce(self.ship, junk)
+                return
+            self._register_ship_hit(DamageSource.SPACE_JUNK)
+            return
         asteroid = self._asteroid_hit_at(self.ship.pos, self.ship.radius)
         if asteroid is not None:
             if self.consume_rubber_hull_bounce and self.consume_rubber_hull_bounce():
@@ -1456,12 +1637,6 @@ class GameWorld:
                 return
             self._register_ship_hit(DamageSource.ASTEROID)
             return
-        for well in self.wells:
-            maw = well.maw_radius if well.maw_radius is not None else self.config.well_maw_radius
-            if (well.pos - self.ship.pos).length() <= maw:
-                reason = self._gravity_maw_reason(well)
-                self._register_ship_hit(DamageSource.GRAVITY_MAW, reason=reason)
-                return
 
     def _gravity_maw_reason(self, well: GravityWell) -> str:
         if well.kind == "black_hole":

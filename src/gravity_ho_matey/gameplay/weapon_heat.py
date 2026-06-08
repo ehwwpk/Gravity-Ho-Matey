@@ -10,6 +10,7 @@ from gravity_ho_matey.gameplay.weapon_config import (
     PLAYER_WEAPON_HEAT_ESCALATION_POWER,
     PLAYER_WEAPON_HEAT_ESCALATION_SCALE,
     PLAYER_WEAPON_HEAT_ESCALATION_START,
+    PLAYER_WEAPON_HEAT_GAIN_MULT,
     PLAYER_WEAPON_HEAT_PER_SHOT_DEFAULT,
     PLAYER_WEAPON_HEAT_PER_SHOT_EXPLOSIVE,
     PLAYER_WEAPON_HEAT_PER_SHOT_LASER,
@@ -90,6 +91,7 @@ def player_heat_simmer_rate(heat: float) -> float:
 def _add_weapon_heat(ship: Ship, amount: float) -> None:
     if amount <= 0.0:
         return
+    amount *= PLAYER_WEAPON_HEAT_GAIN_MULT
     ship.weapon_heat = min(1.0, ship.weapon_heat + amount)
     if ship.weapon_heat >= 1.0:
         ship.weapon_overheat_timer = PLAYER_WEAPON_OVERHEAT_COOLDOWN

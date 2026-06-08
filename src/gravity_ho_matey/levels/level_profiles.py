@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from gravity_ho_matey.gameplay.chart_bounds import CHART_SECTOR_MARGIN_FRAC
+from gravity_ho_matey.gameplay.chart_bounds import CHART_L12_EXTRA_MARGIN_WU, CHART_SECTOR_MARGIN_FRAC
 from gravity_ho_matey.gameplay.entities import WorldConfig
 from gravity_ho_matey.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 
@@ -29,6 +29,7 @@ def chart_sector_config(
         open_bounds=True,
         radiation_enabled=True,
         chart_margin_frac=CHART_SECTOR_MARGIN_FRAC,
+        chart_extra_margin_wu=CHART_L12_EXTRA_MARGIN_WU,
         max_asteroids=48,
     )
     return replace(base, **overrides) if overrides else base

@@ -94,6 +94,39 @@ class Asteroid:
         return out
 
 
+class ContactPolicy(Enum):
+    CHIP = auto()
+    BOUNCE = auto()
+
+
+class JunkLayer(Enum):
+    STRUCTURAL = auto()
+
+
+@dataclass(slots=True)
+class SpaceJunk:
+    pos: Vec2
+    angle: float
+    prefab_id: str
+    local_verts: tuple[Vec2, ...]
+    contact_policy: ContactPolicy = ContactPolicy.CHIP
+    layer: JunkLayer = JunkLayer.STRUCTURAL
+    instance_id: int = 0
+
+    def approximate_radius(self) -> float:
+        if not self.local_verts:
+            return 20.0
+        return max(v.length() for v in self.local_verts)
+
+    def world_vertices(self) -> list[Vec2]:
+        c = math.cos(self.angle)
+        s = math.sin(self.angle)
+        out: list[Vec2] = []
+        for v in self.local_verts:
+            out.append(Vec2(self.pos.x + v.x * c - v.y * s, self.pos.y + v.x * s + v.y * c))
+        return out
+
+
 @dataclass(slots=True)
 class Beacon:
     pos: Vec2
@@ -129,6 +162,7 @@ class WorldConfig:
     level_name: str = "Level"
     open_bounds: bool = True
     chart_margin_frac: float = 0.05
+    chart_extra_margin_wu: float = 0.0
     radiation_enabled: bool = True
     max_asteroids: int = 48
     exit_requires_boss: bool = False
@@ -137,3 +171,5 @@ class WorldConfig:
     roster_kill_quota: int = 0
     brood_moon_mission: bool = False
     surface_wrap: bool = False
+    max_space_junk: int = 128
+    space_junk_enabled: bool = True

@@ -19,6 +19,7 @@ class ExplosionKind(Enum):
     NOVA_BLAST = auto()
     LASER_PIERCE = auto()
     REACTOR_BURST = auto()
+    JUNK_IMPACT = auto()
 
 
 @dataclass(slots=True)
@@ -66,6 +67,7 @@ _PRESETS: dict[ExplosionKind, tuple[int, float, float]] = {
     ExplosionKind.NOVA_BLAST: (36, 48.0, 0.42),
     ExplosionKind.LASER_PIERCE: (8, 18.0, 0.14),
     ExplosionKind.REACTOR_BURST: (16, 26.0, 0.24),
+    ExplosionKind.JUNK_IMPACT: (8, 12.0, 0.12),
 }
 
 
@@ -88,6 +90,7 @@ def spawn_explosion(
         ExplosionKind.NOVA_BLAST: 1.25,
         ExplosionKind.LASER_PIERCE: 0.65,
         ExplosionKind.REACTOR_BURST: 0.92,
+        ExplosionKind.JUNK_IMPACT: 0.48,
     }[kind]
     scale = max(0.35, min(1.8, scale * base_scale))
 

@@ -11,6 +11,7 @@ from gravity_ho_matey.narrative.chart_briefing_copy import LEVEL_BRIEFING
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.menu_ui import draw_fitted_text, draw_holo_corners, draw_wrapped_text, measure_text
+from gravity_ho_matey.render.title_combat_weapons import draw_weapon_doctrine_row
 from gravity_ho_matey.render.title_deploy_list import TitleChromeLayout
 from gravity_ho_matey.render.title_home_layout import compute_body_panel
 
@@ -20,14 +21,6 @@ class _KeyBind:
     keys: str
     action: str
     note: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class _ThreatCard:
-    glyph: str
-    title: str
-    body: str
-    severity: str  # safe | warn | lethal
 
 
 _CAMPAIGN_ARC: tuple[tuple[str, str, str], ...] = (
@@ -165,52 +158,6 @@ def _draw_key_bind_row(
         )
         return 34.0
     return 24.0
-
-
-def _severity_color(severity: str) -> str:
-    if severity == "lethal":
-        return palette.HUD_WARN
-    if severity == "warn":
-        return palette.BOSS_SCRAPE_WARN
-    return palette.TEXT
-
-
-def _draw_threat_card(
-    canvas: tk.Canvas,
-    x: float,
-    y: float,
-    w: float,
-    h: float,
-    card: _ThreatCard,
-    *,
-    accent: str,
-    dim: str,
-    frame: str,
-) -> None:
-    color = _severity_color(card.severity)
-    hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill="#080e18")
-    canvas.create_rectangle(x + 1, y + 1, x + 4, y + h - 1, fill=color, outline="")
-    canvas.create_text(x + 14, y + 12, anchor="w", text=card.glyph, fill=color, font=hp.FONT_DISPLAY)
-    draw_fitted_text(
-        canvas,
-        x + 38,
-        y + 8,
-        card.title,
-        max_width=w - 46,
-        color=accent,
-        font=hp.FONT_BODY_BOLD,
-    )
-    draw_wrapped_text(
-        canvas,
-        x + 12,
-        y + 28,
-        card.body,
-        max_width=w - 20,
-        line_height=14.0,
-        color=color,
-        font=hp.FONT_BODY,
-        max_lines=3,
-    )
 
 
 def _draw_bullet_list(
@@ -444,45 +391,37 @@ def draw_combat_page(
         y,
         w,
         h,
-        title="COMBAT & SURVIVAL",
-        subtitle="Three lives · three hull chunks per life · chart radiation on bounded sectors.",
+        title="WEAPON DOCTRINES",
+        subtitle="Pick one track in the Holo Bazaar · Space fires · one upgrade per campaign.",
         accent=accent,
         dim=dim,
         frame=frame,
         elapsed=elapsed,
     )
-    pad = 14.0
-    gap = 10.0
-    cols = 3
-    rows = 2
-    legend_h = 32.0
-    grid_h = h - (content_y - y) - pad - legend_h - 4.0
-    card_w = (w - pad * 2 - gap * (cols - 1)) / cols
-    card_h = (grid_h - gap * (rows - 1)) / rows
-    cards: tuple[_ThreatCard, ...] = (
-        _ThreatCard("♥", "Campaign lives", "Three lives for the full run. Zero lives ends the campaign.", "safe"),
-        _ThreatCard("▣", "Hull chunks", "Three chunks per life. A chunk lost respawns you at sector start.", "warn"),
-        _ThreatCard("●", "Singularity maw", "Black hole contact destroys the ship — instant life lost.", "lethal"),
-        _ThreatCard("×", "Patrol skiff", "Ram or heavy fire costs one hull chunk.", "warn"),
-        _ThreatCard("◉", "Void squid", "Tentacles cling — one chunk every two seconds until you boost free.", "warn"),
-        _ThreatCard("⬡", "Asteroid impact", "Direct rock contact chips one hull chunk.", "warn"),
+    pad = 12.0
+    footer_h = 30.0
+    row_h = h - (content_y - y) - pad - footer_h - 2.0
+    draw_weapon_doctrine_row(
+        canvas,
+        x + pad,
+        content_y,
+        w - pad * 2,
+        row_h,
+        elapsed=elapsed,
+        accent=accent,
+        dim=dim,
+        frame=frame,
     )
-    for i, card in enumerate(cards):
-        col = i % cols
-        row = i // cols
-        cx = x + pad + col * (card_w + gap)
-        cy = content_y + row * (card_h + gap)
-        _draw_threat_card(canvas, cx, cy, card_w, card_h, card, accent=accent, dim=dim, frame=frame)
 
-    legend_y = content_y + rows * (card_h + gap) + 2.0
-    hp.draw_panel(canvas, x + pad, legend_y, w - pad * 2, 28.0, frame=frame, accent=accent, fill="#0a1828")
+    footer_y = content_y + row_h + 4.0
+    hp.draw_panel(canvas, x + pad, footer_y, w - pad * 2, footer_h - 4.0, frame=frame, accent=accent, fill="#0a1828")
     draw_fitted_text(
         canvas,
         x + pad + 12,
-        legend_y + 8,
-        "Open drift sectors: 5s off-chart radiation banks exposure — chip damage, no respawn.",
+        footer_y + 6,
+        "Survival: 3 lives · 3 hull chunks per life · overheat cools before refire · B opens shop mid-chart.",
         max_width=w - pad * 2 - 24,
-        color=palette.HUD_WARN,
+        color=dim,
         font=hp.FONT_SMALL,
     )
 

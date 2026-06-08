@@ -8,7 +8,7 @@ from gravity_ho_matey.levels.asteroid_placements import build_cove_asteroids, bu
 from gravity_ho_matey.levels.drift_belt_asteroids import build_drift_belt_asteroids
 from gravity_ho_matey.levels.drift_belt_layout import build_drift_layout
 from gravity_ho_matey.levels.drift_enemies import drift_squid_enemies
-from gravity_ho_matey.gameplay.chart_bounds import COVE_CHART_MARGIN_FRAC
+from gravity_ho_matey.gameplay.chart_bounds import COVE_CHART_MARGIN_FRAC, SOLAR_CHART_EXTRA_MARGIN_WU
 from gravity_ho_matey.levels.level_profiles import (
     chart_sector_config,
     open_sector_config,
@@ -103,6 +103,7 @@ def build_solar_crossing_level() -> GameWorld:
         gravity_scale=0.45,
         turn_rate=5.2,
         thrust=255.0,
+        chart_extra_margin_wu=SOLAR_CHART_EXTRA_MARGIN_WU,
     )
     return GameWorld(
         config=config,

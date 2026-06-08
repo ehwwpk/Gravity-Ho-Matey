@@ -152,6 +152,7 @@ def _resolve_large_breakup(
     child_size_class = size_class_for_scale(mass_scale)
     parent_radius = parent.approximate_radius()
     impulse_base = 45.0 + parent_radius * 0.55
+    max_jitter = parent_radius * 0.07
 
     impact_dir = projectile_vel.normalized() if projectile_vel.length_sq() > 1e-6 else Vec2(1.0, 0.0)
     step = math.tau / n_fragments
@@ -164,8 +165,8 @@ def _resolve_large_breakup(
         blend = dir_vec * 0.65 + impact_dir * 0.35
         outward = blend.normalized() if blend.length_sq() > 1e-6 else dir_vec
 
-        offset_dist = parent_radius * (0.28 + child_rng.uniform(0.0, 0.18))
-        spawn_pos = parent.pos + outward * offset_dist
+        jitter = max_jitter * child_rng.uniform(0.0, 1.0)
+        spawn_pos = parent.pos + outward * jitter
         impulse = impulse_base + child_rng.uniform(-12.0, 18.0)
         tangential = outward.rotated(math.pi / 2.0) * child_rng.uniform(-22.0, 22.0)
         child_vel = parent.vel + outward * impulse + tangential

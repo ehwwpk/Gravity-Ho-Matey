@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.ally_kinds import AllyKind
@@ -19,6 +20,10 @@ from gravity_ho_matey.gameplay.friendly_fighter_config import (
 )
 from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at, hazard_escape_acceleration_at
 from gravity_ho_matey.gameplay.mega_squid_boss import MegaSquidBoss
+
+if TYPE_CHECKING:
+    from gravity_ho_matey.gameplay.entities import SpaceJunk
+    from gravity_ho_matey.gameplay.space_junk_spatial import JunkSpatialGrid
 
 # Escort baseline — faster than prior pass, still below player top-end.
 _DEFAULT_THRUST = 252.0
@@ -157,11 +162,28 @@ class FriendlyFighter:
         well_maw_radius: float,
         threat: ThreatTarget | None,
         asteroids: list[Asteroid] | None = None,
+        space_junk: list[SpaceJunk] | None = None,
+        junk_spatial: JunkSpatialGrid | None = None,
     ) -> None:
         if not self.alive:
             return
 
         avoid_accel, dodge_urgency = self._asteroid_avoidance(asteroids or ())
+        if space_junk and junk_spatial is not None:
+            from gravity_ho_matey.gameplay.space_junk import junk_avoidance_push
+
+            jpush, jurgency = junk_avoidance_push(
+                self.pos,
+                self.vel,
+                self.radius,
+                space_junk,
+                junk_spatial,
+                avoid_radius=ALLY_ASTEROID_AVOID_RADIUS,
+                panic_gap=ALLY_ASTEROID_PANIC_GAP,
+                thrust=ALLY_ASTEROID_AVOID_THRUST,
+            )
+            avoid_accel += jpush
+            dodge_urgency = max(dodge_urgency, jurgency)
 
         form_target = self.formation_target(player_pos, player_angle)
         to_form = form_target - self.pos

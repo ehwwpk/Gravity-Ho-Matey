@@ -8,7 +8,9 @@ WEAPON_ADVANCED_PRICE = 20
 RAPID_FIRE_COOLDOWN_MULT = 0.82
 PLAYER_WEAPON_RAPID_FIRE_HEAT_MULT = 1.12
 
-# Player weapon overheat — slow ramp (~2s to 45%, ~5s to lockout on full auto).
+# Player weapon overheat — slow ramp (~2.5s to 45%, ~6.5s to lockout on full auto).
+# Global scaler on all heat buildup (per-shot, simmer, escalation). 1.0 = baseline.
+PLAYER_WEAPON_HEAT_GAIN_MULT = 0.78
 PLAYER_WEAPON_HEAT_PER_SHOT_DEFAULT = 0.023
 PLAYER_WEAPON_HEAT_PER_SHOT_LASER = 0.019
 PLAYER_WEAPON_HEAT_PER_SHOT_SHOTGUN = 0.032

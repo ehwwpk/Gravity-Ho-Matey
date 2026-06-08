@@ -884,6 +884,21 @@ class ChartMapOverlay:
                 rig=map_rig,
             )
 
+        if world.space_junk:
+            from gravity_ho_matey.render.space_junk_viz import draw_holo_junk_glyph
+
+            for junk in world.space_junk:
+                hit = self._world_to_map(junk.pos, t)
+                if hit is None:
+                    continue
+                draw_holo_junk_glyph(
+                    canvas,
+                    junk,
+                    map_x=hit[0],
+                    map_y=hit[1],
+                    map_scale=glyph_scale,
+                )
+
         for well in world.wells:
             hit = self._world_to_map(well.pos, t)
             if hit is None:
