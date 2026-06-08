@@ -25,7 +25,7 @@ class _FakeHost:
 
 
 
-_COVE_OOB_X = -120.0  # outside Cove chart (10.5% margin on 960-wide level)
+_COVE_OOB_X = -120.0  # outside Cove play chart (expanded ~11.8% margin on 960-wide level)
 
 
 class ChartBoundsAlertTests(unittest.TestCase):

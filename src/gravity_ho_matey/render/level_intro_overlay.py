@@ -43,7 +43,17 @@ class LevelIntroOverlay:
         bg = palette.HUD_BG
 
         canvas.create_rectangle(0, 0, vw, vh, fill=palette.BACKGROUND, outline="")
-        self._starfield(canvas, vw, vh)
+        from gravity_ho_matey.render.starfield_viz import draw_layered_starfield
+
+        draw_layered_starfield(
+            canvas,
+            x=0.0,
+            y=0.0,
+            width=float(vw),
+            height=float(vh),
+            elapsed=elapsed,
+            theme=level_id,
+        )
         self._draw_header(canvas, vw, level_id, spec, accent, dim, frame, bg, elapsed)
         body_top = _HEADER_H + 8
         footer_top = vh - _FOOTER_H - 6
@@ -215,9 +225,3 @@ class LevelIntroOverlay:
             hover=hover_id == "skip_intro",
         )
 
-    def _starfield(self, canvas: tk.Canvas, vw: int, vh: int) -> None:
-        for i in range(120):
-            x = (i * 83 + 17) % vw
-            y = (i * 47 + 31) % vh
-            tone = "#3a5570" if i % 7 == 0 else "#1a3048"
-            canvas.create_rectangle(x, y, x + 2, y + 2, fill=tone, outline="")

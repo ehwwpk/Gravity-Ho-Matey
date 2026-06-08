@@ -6,23 +6,10 @@ from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render.camera import ViewCamera
+from gravity_ho_matey.render.gravity_field_viz import heatmap_cell_visible, inside_black_hole_footprint
 from gravity_ho_matey.render.world_draw import gravity_field_color
 
 _CHASE_HEATMAP_CELL_CAP_PX = 44.0
-
-_CHASE_HEATMAP_NORM_FLOOR = 0.24
-_WELL_HEATMAP_SUPPRESS_FRAC = 0.92
-
-
-def _inside_well_footprint(world: GameWorld, wx: float, wy: float) -> bool:
-    for well in world.wells:
-        if well.kind != "black_hole":
-            continue
-        dx = wx - well.pos.x
-        dy = wy - well.pos.y
-        if dx * dx + dy * dy <= (well.radius * _WELL_HEATMAP_SUPPRESS_FRAC) ** 2:
-            return True
-    return False
 
 
 def draw_chase_gravity_heatmap(
@@ -37,17 +24,18 @@ def draw_chase_gravity_heatmap(
 ) -> None:
     """Subtle purple floor wash — capped screen cells; rings carry well read at titans."""
     horizon = camera.chase_horizon_y()
+    wells = _world.wells if _world is not None else ()
     for row in range(0, field.rows, step):
         for col in range(0, field.cols, step):
             cell = field.cell_at(col, row)
             if cell.magnitude <= 1e-6:
                 continue
             norm = cell.magnitude / field.max_magnitude
-            if norm < _CHASE_HEATMAP_NORM_FLOOR:
+            if not heatmap_cell_visible(norm):
                 continue
             wx = field.origin.x + col * field.cell_size + field.cell_size * 0.5
             wy = field.origin.y + row * field.cell_size + field.cell_size * 0.5
-            if _world is not None and _inside_well_footprint(_world, wx, wy):
+            if wells and inside_black_hole_footprint(wells, wx, wy):
                 continue
             wp = Vec2(wx, wy)
             p = camera.world_to_chase_screen(

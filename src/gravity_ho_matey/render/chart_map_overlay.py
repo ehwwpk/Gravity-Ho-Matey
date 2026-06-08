@@ -20,6 +20,7 @@ from gravity_ho_matey.render.camera import CameraMode
 from gravity_ho_matey.render.entity_viz import draw_gate_glyph
 from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_menu_button
 from gravity_ho_matey.render.shop_tree_view import ShopTreeView
+from gravity_ho_matey.render.gravity_field_viz import heatmap_cell_visible, inside_black_hole_footprint
 from gravity_ho_matey.render.world_draw import gravity_field_color
 
 # Layout aligned with SciFiHudOverlay command deck (960×640).
@@ -71,6 +72,7 @@ class ChartMapOverlay:
         shop_open: bool = False,
         shop_open_anim: float = 1.0,
         shop_view: ShopTreeView | None = None,
+        shop_ui: object | None = None,
     ) -> None:
         self.hits.clear()
         vw = world.config.viewport_width
@@ -103,7 +105,7 @@ class ChartMapOverlay:
             fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.SIEGE_BG if siege else palette.BROOD_MOON_BG if brood else palette.BACKGROUND,
             outline="",
         )
-        self._starfield(canvas, vw, vh, dense=solar or drift or rift or siege or brood)
+        self._starfield(canvas, vw, vh, theme=world.config.level_theme, elapsed=elapsed, dense=solar or drift or rift or siege or brood)
         self._draw_command_bar(canvas, world, campaign, cleared_level_id, accent, dim, frame, bg)
         self._draw_status_banner(canvas, vw, cleared_level_id, upcoming_level_id, elapsed, accent, dim)
         body_top = _HEADER_H + _CLEARED_H + 8
@@ -162,6 +164,7 @@ class ChartMapOverlay:
                 elapsed=elapsed,
                 shop_open_anim=shop_open_anim,
                 shop_view=shop_view,
+                shop_ui=shop_ui,
             )
 
     def _draw_command_bar(
@@ -674,7 +677,10 @@ class ChartMapOverlay:
         inner_h = h - 42
         canvas.create_rectangle(inner_x, inner_y, inner_x + inner_w, inner_y + inner_h, fill="#040810", outline=frame)
         transform = self._map_transform(world, inner_x, inner_y, inner_w, inner_h)
-        self._draw_map_field(canvas, field, transform)
+        self._draw_map_field(canvas, field, transform, world.wells)
+        sweep_y = inner_y + (elapsed * 0.32 % 1.0) * inner_h
+        canvas.create_line(inner_x, sweep_y, inner_x + inner_w, sweep_y, fill=accent, width=1)
+        canvas.create_line(inner_x, sweep_y + 1, inner_x + inner_w, sweep_y + 1, fill=frame, width=1)
         self._draw_map_entities(canvas, world, transform, dim, elapsed)
         if transform.strip_window:
             self._draw_strip_window_chrome(canvas, world, transform, accent, dim)
@@ -741,7 +747,13 @@ class ChartMapOverlay:
             return None
         return mx, my
 
-    def _draw_map_field(self, canvas: tk.Canvas, field: GravityField, t: _MapTransform) -> None:
+    def _draw_map_field(
+        self,
+        canvas: tk.Canvas,
+        field: GravityField,
+        t: _MapTransform,
+        wells: tuple,
+    ) -> None:
         step = 2 if field.rows > 32 else 1
         for row in range(0, field.rows, step):
             for col in range(0, field.cols, step):
@@ -750,12 +762,16 @@ class ChartMapOverlay:
                     continue
                 wx = field.origin.x + col * field.cell_size + field.cell_size * 0.5
                 wy = field.origin.y + row * field.cell_size + field.cell_size * 0.5
+                if wells and inside_black_hole_footprint(wells, wx, wy):
+                    continue
                 hit = self._world_to_map(Vec2(wx, wy), t)
                 if hit is None:
                     continue
                 mx, my = hit
-                size = field.cell_size * step * t.scale * 0.92
                 norm = cell.magnitude / field.max_magnitude
+                if not heatmap_cell_visible(norm):
+                    continue
+                size = field.cell_size * step * t.scale * 0.92
                 tone = gravity_field_color(norm)
                 canvas.create_rectangle(mx, my, mx + size, my + size * 0.85, fill=tone, outline="")
 
@@ -1081,10 +1097,25 @@ class ChartMapOverlay:
             shown += 1
 
     @staticmethod
-    def _starfield(canvas: tk.Canvas, width: int, height: int, *, dense: bool) -> None:
-        count = 120 if dense else 70
-        for i in range(count):
-            sx = (i * 83 + 17) % width
-            sy = (i * 47 + 31) % height
-            tone = palette.CHASE_STAR_FAR if dense and i % 5 == 0 else "#294764"
-            canvas.create_rectangle(sx, sy, sx + 2, sy + 2, fill=tone, outline="")
+    def _starfield(
+        canvas: tk.Canvas,
+        width: int,
+        height: int,
+        *,
+        theme: str = "cove",
+        elapsed: float = 0.0,
+        dense: bool,
+    ) -> None:
+        from gravity_ho_matey.render.starfield_viz import draw_layered_starfield
+
+        if not dense:
+            return
+        draw_layered_starfield(
+            canvas,
+            x=0.0,
+            y=0.0,
+            width=float(width),
+            height=float(height),
+            elapsed=elapsed,
+            theme=theme,
+        )

@@ -57,16 +57,21 @@ def recover_ship_in_place(world: GameWorld) -> None:
     if world.config.open_bounds:
         world.ship.pos = nudge_ship_into_chart(world.ship.pos, world.config)
     world.ship.vel = Vec2()
+    world.ship.boost_flash = 0.0
+    world.ship.boost_jolt = 0.0
     world.invuln_remaining = INVULN_SECONDS
     world.last_damage = None
     world.status = GameStatus.RUNNING
 
 
 def respawn_ship_at_spawn(world: GameWorld) -> None:
+    """Teleport ship to level spawn with invuln. Caller should reset chase camera presentation."""
     world.ship.pos = Vec2(world.spawn_pos.x, world.spawn_pos.y)
     world.ship.vel = Vec2()
     world.ship.angle = world.spawn_angle
     world.ship.cooldown = 0.0
+    world.ship.boost_flash = 0.0
+    world.ship.boost_jolt = 0.0
     world.invuln_remaining = INVULN_SECONDS
     world.last_damage = None
     world.status = GameStatus.RUNNING

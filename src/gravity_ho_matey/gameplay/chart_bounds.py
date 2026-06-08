@@ -10,9 +10,14 @@ CHART_RADIATION_EXPOSURE_LIMIT = 5.0
 CHART_BOUNDS_TOAST_SECONDS = 1.6
 CHART_BOUNDS_MARGIN_FRAC = 0.05
 # Levels 1–2 (Cove, Solar): +10% outward breathing room beyond base margin.
-CHART_SECTOR_MARGIN_FRAC = CHART_BOUNDS_MARGIN_FRAC * 1.10
-# Level 1 Cove only — another 5% per side beyond sector margin (OOB pebble ring room).
-COVE_CHART_MARGIN_FRAC = CHART_SECTOR_MARGIN_FRAC + CHART_BOUNDS_MARGIN_FRAC
+_CHART_SECTOR_BASE_FRAC = CHART_BOUNDS_MARGIN_FRAC * 1.10
+# Playtest widen L1/L2 — chart rim +12.5% vs prior (wells/rocks/beacons stay put).
+CHART_RIM_EXPAND_L12 = 1.125
+CHART_SECTOR_MARGIN_FRAC = _CHART_SECTOR_BASE_FRAC * CHART_RIM_EXPAND_L12
+# Level 1 Cove play chart — sector base + another 5% per side, then L12 expand.
+COVE_CHART_MARGIN_FRAC = (_CHART_SECTOR_BASE_FRAC + CHART_BOUNDS_MARGIN_FRAC) * CHART_RIM_EXPAND_L12
+# Cove void ring / rim hazards — placement frozen at pre-expand rim (objects unchanged).
+COVE_OOB_PLACEMENT_MARGIN_FRAC = _CHART_SECTOR_BASE_FRAC + CHART_BOUNDS_MARGIN_FRAC
 
 # Camera: ramp free-follow over this distance past the chart rim (world units).
 OOB_CAMERA_BLEND_FULL_DIST = 90.0
@@ -42,6 +47,32 @@ def chart_limits(config: WorldConfig) -> tuple[float, float, float, float]:
     """Inclusive playable chart rect — expanded outward from level width/height."""
     mx, my = chart_margin_xy(config)
     return (-mx, -my, config.width + mx, config.height + my)
+
+
+def chart_limits_for_margin_frac(
+    config: WorldConfig,
+    margin_frac: float,
+) -> tuple[float, float, float, float]:
+    """Chart rect for an explicit margin — used when hazard placement stays on an older rim."""
+    mx = config.width * margin_frac
+    my = config.height * margin_frac
+    return (-mx, -my, config.width + mx, config.height + my)
+
+
+def chart_outer_radius_for_margin_frac(config: WorldConfig, margin_frac: float) -> float:
+    cx = config.width * 0.5
+    cy = config.height * 0.5
+    x0, y0, x1, y1 = chart_limits_for_margin_frac(config, margin_frac)
+    return max(
+        math.hypot(x0 - cx, y0 - cy),
+        math.hypot(x1 - cx, y0 - cy),
+        math.hypot(x1 - cx, y1 - cy),
+        math.hypot(x0 - cx, y1 - cy),
+    )
+
+
+def oob_ring_radius_for_margin_frac(config: WorldConfig, margin_frac: float) -> float:
+    return chart_outer_radius_for_margin_frac(config, margin_frac) + OOB_RING_TRAVEL_SECONDS * OOB_RING_CRUISE_SPEED
 
 
 def chart_outer_radius_from_center(config: WorldConfig) -> float:

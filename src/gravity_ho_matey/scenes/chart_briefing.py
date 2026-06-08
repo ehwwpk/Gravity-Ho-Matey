@@ -62,7 +62,7 @@ class ChartBriefingScene(Scene):
             anim=self._anim,
             shop_open=self.shop_open,
             shop_open_anim=shop_open_anim_at(self._shop_opened_at, self._anim),
-            shop_view=self._shop_ui.view,
+            shop_ui=self._shop_ui,
         )
 
     def _set_shop_open(self, open_: bool) -> None:

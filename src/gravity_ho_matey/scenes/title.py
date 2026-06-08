@@ -90,7 +90,7 @@ class TitleScene(Scene):
 
             shop_open_anim=shop_open_anim_at(self._shop_opened_at, self.elapsed),
 
-            shop_view=self._shop_ui.view,
+            shop_ui=self._shop_ui,
 
             codex=self.codex,
 

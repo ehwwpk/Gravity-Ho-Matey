@@ -3,7 +3,12 @@ from __future__ import annotations
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.asteroid_motion import make_asteroid, make_ring_cluster, make_shower_cluster
 from gravity_ho_matey.gameplay.asteroid_tiers import AsteroidTier
-from gravity_ho_matey.gameplay.chart_bounds import chart_limits, oob_ring_radius
+from gravity_ho_matey.gameplay.chart_bounds import (
+    COVE_OOB_PLACEMENT_MARGIN_FRAC,
+    chart_limits_for_margin_frac,
+    chart_outer_radius_for_margin_frac,
+    oob_ring_radius_for_margin_frac,
+)
 from gravity_ho_matey.gameplay.entities import Asteroid, WorldConfig
 from gravity_ho_matey.settings import CANVAS_WIDTH, SOLAR_STRIP_HEIGHT
 
@@ -24,7 +29,7 @@ def build_cove_oob_chart_ring(config: WorldConfig) -> list[Asteroid]:
     anchor = _cove_void_anchor(config)
     ring = make_ring_cluster(
         anchor,
-        radius=oob_ring_radius(config),
+        radius=oob_ring_radius_for_margin_frac(config, COVE_OOB_PLACEMENT_MARGIN_FRAC),
         count=_COVE_OOB_RING_COUNT,
         base_seed=_COVE_OOB_RING_SEED,
         size_class="pebble",
@@ -37,11 +42,9 @@ def build_cove_oob_chart_ring(config: WorldConfig) -> list[Asteroid]:
 
 def build_cove_oob_void_scatter(config: WorldConfig) -> list[Asteroid]:
     """Mid-band void pebbles between chart rim and main ring."""
-    from gravity_ho_matey.gameplay.chart_bounds import chart_outer_radius_from_center
-
     anchor = _cove_void_anchor(config)
-    outer = chart_outer_radius_from_center(config)
-    full = oob_ring_radius(config)
+    outer = chart_outer_radius_for_margin_frac(config, COVE_OOB_PLACEMENT_MARGIN_FRAC)
+    full = oob_ring_radius_for_margin_frac(config, COVE_OOB_PLACEMENT_MARGIN_FRAC)
     mid_radius = outer + (full - outer) * 0.55
     scatter = make_ring_cluster(
         anchor,
@@ -58,7 +61,7 @@ def build_cove_oob_void_scatter(config: WorldConfig) -> list[Asteroid]:
 
 def build_cove_chart_rim_mediums(config: WorldConfig) -> list[Asteroid]:
     """Medium rocks perched just past the chart rim — first void hazards when leaving chart."""
-    x0, y0, x1, y1 = chart_limits(config)
+    x0, y0, x1, y1 = chart_limits_for_margin_frac(config, COVE_OOB_PLACEMENT_MARGIN_FRAC)
     cx = config.width * 0.5
     cy = config.height * 0.5
     o = _COVE_RIM_OUTSET

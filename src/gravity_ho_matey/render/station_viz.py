@@ -80,9 +80,7 @@ def _chase_station_frame(
     forward = Vec2.from_angle(ship_angle)
     right = forward.rotated(math.pi / 2.0)
     depth = max(camera.min_depth, center.depth)
-    scale = camera.focal_length / depth
-    lateral_scale = scale * camera.chase_thrust_boost
-    pitch = 0.48 + camera.chase_lift / camera.focal_length
+    scale, lateral_scale, pitch = camera.chase_mesh_scales(depth)
     cx, cy = center.x, center.y
 
     max_r = 0.0

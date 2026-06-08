@@ -53,6 +53,7 @@ def draw_chase_gate(
     solar: bool,
     gate_size: float,
     depth_scale: float = 1.0,
+    elapsed: float = 0.0,
 ) -> None:
     scale = max(0.55, min(1.35, depth_scale))
     draw_gate_glyph(
@@ -63,6 +64,7 @@ def draw_chase_gate(
         unlocked=unlocked,
         solar=solar,
         scale=scale,
+        elapsed=elapsed,
     )
 
 
@@ -116,11 +118,13 @@ def draw_chase_squid(
     )
 
 
-def draw_chase_jewel(canvas: tk.Canvas, pos: Vec2, *, elapsed: float = 0.0) -> None:
+def draw_chase_jewel(canvas: tk.Canvas, pos: Vec2, *, elapsed: float = 0.0, depth_scale: float = 1.0) -> None:
     from gravity_ho_matey.render.jewel_viz import draw_jewel_orb
 
-    draw_ground_fog_glow(canvas, pos.x, pos.y + 4, 12, (palette.JEWEL_GLOW, palette.JEWEL_CORE), pulse=elapsed * 4.0)
-    draw_jewel_orb(canvas, pos.x, pos.y, elapsed=elapsed, depth_scale=1.0)
+    scale = max(0.65, min(1.25, depth_scale))
+    glow_r = 12.0 * scale
+    draw_ground_fog_glow(canvas, pos.x, pos.y + 4, glow_r, (palette.JEWEL_GLOW, palette.JEWEL_CORE), pulse=elapsed * 4.0)
+    draw_jewel_orb(canvas, pos.x, pos.y, elapsed=elapsed, depth_scale=scale)
 
 
 def draw_chase_pickup(canvas: tk.Canvas, pos: Vec2, kind: PowerUpKind) -> None:

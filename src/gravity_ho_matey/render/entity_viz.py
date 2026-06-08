@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import tkinter as tk
 
 from gravity_ho_matey.core.vector import Vec2
@@ -23,10 +25,22 @@ def draw_gate_glyph(
     unlocked: bool,
     solar: bool,
     scale: float = 1.0,
+    elapsed: float = 0.0,
 ) -> None:
     color = palette.GATE_OPEN if unlocked else palette.GATE_LOCKED
     r = max(14.0, size * 0.45) * scale
-    canvas.create_arc(x - r, y - r, x + r, y + r, start=200, extent=140, style="arc", outline=color, width=3)
+    extent = 140.0
+    if unlocked and elapsed > 0.0:
+        extent = 128.0 + 12.0 * (0.5 + 0.5 * math.sin(elapsed * 4.2))
+    if solar and unlocked:
+        for i, frac in enumerate((1.08, 1.18)):
+            rr = r * frac
+            canvas.create_arc(
+                x - rr, y - rr, x + rr, y + rr,
+                start=200 + i * 8, extent=120, style="arc",
+                outline=palette.HUD_ACCENT if i else color, width=1,
+            )
+    canvas.create_arc(x - r, y - r, x + r, y + r, start=200, extent=extent, style="arc", outline=color, width=3)
     canvas.create_line(x - r * 0.85, y + r * 0.35, x + r * 0.85, y + r * 0.35, fill=color, width=2)
     font_size = max(7, min(8, int(8 * scale)))
     canvas.create_text(x, y - 2, text=gate_label(unlocked=unlocked, solar=solar), fill=color, font=("Courier New", font_size, "bold"))
@@ -69,6 +83,7 @@ def draw_gate_portal(
     unlocked: bool,
     solar: bool,
     hud_top: float = 0.0,
+    elapsed: float = 0.0,
 ) -> None:
     draw_gate_glyph(
         canvas,
@@ -78,6 +93,7 @@ def draw_gate_portal(
         unlocked=unlocked,
         solar=solar,
         scale=1.0,
+        elapsed=elapsed,
     )
 
 

@@ -9,6 +9,7 @@ from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.menu_ui import draw_holo_corners
+from gravity_ho_matey.render.starfield_viz import draw_layered_starfield
 from gravity_ho_matey.render.title_home_layout import WelcomeHomeLayout
 from gravity_ho_matey.render.title_codex import CODEX_ENTRIES
 
@@ -24,22 +25,15 @@ def draw_title_starfield(
 ) -> None:
     """Layered parallax stars — denser in the hangar band."""
     bottom = height if body_bottom is None else body_bottom
-    for layer, (count, speed, alpha_size) in enumerate(
-        (
-            (48, 4.0, 2),
-            (72, 12.0, 3),
-            (36, 22.0, 4),
-        )
-    ):
-        drift = elapsed * speed
-        for i in range(count):
-            sx = (i * 97 + 13 + layer * 41 + int(drift)) % int(width)
-            sy = body_top + (i * 53 + 29 + layer * 17) % max(1, int(bottom - body_top))
-            size = alpha_size if i % 4 else alpha_size + 1
-            tone = "#4a6a88" if layer == 2 else "#324f68" if layer == 1 else "#1e3348"
-            if sy > body_top + (bottom - body_top) * 0.35:
-                tone = "#3d5870" if layer >= 1 else "#253d52"
-            canvas.create_rectangle(sx, sy, sx + size, sy + size, fill=tone, outline="")
+    draw_layered_starfield(
+        canvas,
+        x=0.0,
+        y=body_top,
+        width=width,
+        height=max(1.0, bottom - body_top),
+        elapsed=elapsed,
+        theme="cove",
+    )
 
 
 def draw_hangar_bay(

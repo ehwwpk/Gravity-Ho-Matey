@@ -9,6 +9,8 @@ from gravity_ho_matey.gameplay.enemy_kinds import EnemyKind
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import ViewCamera
+from gravity_ho_matey.render.gravity_field_viz import heatmap_cell_visible, inside_black_hole_footprint
+from gravity_ho_matey.render.launch_countdown_overlay import accent_for_theme
 from gravity_ho_matey.render.world_draw import gravity_field_color
 
 # Rear-view mirror — ship-frame tactical display (presentation only).
@@ -140,7 +142,9 @@ def _draw_gravity_heatmap(
                 continue
             px, py, _ = hit
             norm = field.normalized_magnitude_at(world_pt)
-            if norm < 0.08:
+            if not heatmap_cell_visible(norm):
+                continue
+            if inside_black_hole_footprint(world.wells, world_pt.x, world_pt.y):
                 continue
             tone = gravity_field_color(norm)
             tw = mw * _LATERAL_FRAC / _HEAT_LAT_STEPS * 0.92
@@ -192,7 +196,7 @@ def draw_rear_view_mirror(
     elapsed: float = 0.0,
 ) -> None:
     mx, my, mw, mh = mirror_layout(camera, hud_top)
-    accent = palette.HELM_HUD_ACCENT
+    accent = accent_for_theme(world.config.level_theme)
     dim = palette.HELM_HUD_DIM
 
     _draw_mirror_chrome(canvas, mx, my, mw, mh, accent=accent, dim=dim)

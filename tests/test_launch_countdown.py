@@ -24,6 +24,12 @@ class LaunchCountdownFlowTests(unittest.TestCase):
         scene = start_launch_countdown("cove", CampaignState.new())
         self.assertIsInstance(scene, LaunchCountdownScene)
         self.assertEqual(scene.level_id, "cove")
+        self.assertAlmostEqual(launch_countdown_for("cove").total_seconds, 1.5)
+
+    def test_default_step_timing(self) -> None:
+        spec = launch_countdown_for("cove")
+        self.assertAlmostEqual(spec.step_seconds, 0.5)
+        self.assertAlmostEqual(spec.total_seconds, 1.5)
 
     def test_brood_moon_with_intro_returns_intro_scene(self) -> None:
         from gravity_ho_matey.narrative.level_intros import has_level_intro
@@ -100,11 +106,11 @@ class LaunchCountdownRenderTests(unittest.TestCase):
                 digits=(3, 2, 1),
                 step_index=1,
                 current_digit=2,
-                step_elapsed=0.4,
-                step_seconds=1.0,
+                step_elapsed=0.2,
+                step_seconds=0.5,
                 reveal=0.55,
-                total_elapsed=1.4,
-                total_seconds=3.0,
+                total_elapsed=0.7,
+                total_seconds=1.5,
             )
             self.assertGreater(len(canvas.find_all()), 8)
         finally:

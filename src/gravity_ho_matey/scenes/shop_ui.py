@@ -11,6 +11,7 @@ from gravity_ho_matey.render.shop_tree_view import (
 
 _SHOP_ZOOM_HITS = frozenset({"shop_zoom_in", "shop_zoom_out", "shop_zoom_fit"})
 _SHOP_CHROME_HITS = frozenset({"shop_close", "shop_zoom_in", "shop_zoom_out", "shop_zoom_fit"})
+_SHOP_INSPECTOR_HITS = frozenset({"shop_inspector_drag", "shop_inspector_panel"})
 
 
 @dataclass(slots=True)
@@ -19,11 +20,21 @@ class ShopUiState:
     dragging: bool = False
     drag_x: float = 0.0
     drag_y: float = 0.0
+    inspector_hit: str | None = None
+    inspector_offset_x: float = 0.0
+    inspector_offset_y: float = 0.0
+    inspector_dragging: bool = False
+    inspector_drag_x: float = 0.0
+    inspector_drag_y: float = 0.0
 
 
 def shop_open_reset(state: ShopUiState) -> None:
     state.view.reset()
     state.dragging = False
+    state.inspector_hit = None
+    state.inspector_offset_x = 0.0
+    state.inspector_offset_y = 0.0
+    state.inspector_dragging = False
 
 
 def shop_on_open(state: ShopUiState, *, opening: bool) -> None:
@@ -31,8 +42,22 @@ def shop_on_open(state: ShopUiState, *, opening: bool) -> None:
         shop_open_reset(state)
 
 
+def shop_select_inspector(state: ShopUiState, hit: str) -> bool:
+    if shop_kind_from_hit(hit) is None:
+        return False
+    state.inspector_hit = hit
+    return True
+
+
 def shop_on_pointer_down(state: ShopUiState, x: float, y: float, hit: str | None, *, shop_open: bool) -> None:
     if not shop_open:
+        return
+    if hit == "shop_inspector_drag":
+        state.inspector_dragging = True
+        state.inspector_drag_x = x
+        state.inspector_drag_y = y
+        return
+    if hit in _SHOP_INSPECTOR_HITS:
         return
     if hit in _SHOP_CHROME_HITS:
         return
@@ -44,7 +69,15 @@ def shop_on_pointer_down(state: ShopUiState, x: float, y: float, hit: str | None
 
 
 def shop_on_pointer_motion(state: ShopUiState, x: float, y: float, *, shop_open: bool) -> None:
-    if not shop_open or not state.dragging:
+    if not shop_open:
+        return
+    if state.inspector_dragging:
+        state.inspector_offset_x += x - state.inspector_drag_x
+        state.inspector_offset_y += y - state.inspector_drag_y
+        state.inspector_drag_x = x
+        state.inspector_drag_y = y
+        return
+    if not state.dragging:
         return
     state.view.pan_by(x - state.drag_x, y - state.drag_y)
     state.drag_x = x
@@ -53,6 +86,7 @@ def shop_on_pointer_motion(state: ShopUiState, x: float, y: float, *, shop_open:
 
 def shop_on_pointer_up(state: ShopUiState) -> None:
     state.dragging = False
+    state.inspector_dragging = False
 
 
 def shop_on_wheel(
@@ -114,6 +148,7 @@ def shop_handle_pointer_click(
         state.view.fit_all()
         return True
     if hit.startswith("shop_"):
+        shop_select_inspector(state, hit)
         kind = shop_kind_from_hit(hit)
         if kind is not None:
             on_purchase(kind)

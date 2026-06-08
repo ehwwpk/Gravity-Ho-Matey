@@ -10,7 +10,9 @@ from gravity_ho_matey.render.camera import CameraMode
 
 _KEY_COVE = Vec2(-0.65, -0.75).normalized()
 _KEY_SOLAR = Vec2(-0.55, -0.80).normalized()
+_KEY_DRIFT = Vec2(-0.60, -0.78).normalized()
 _KEY_RIFT = Vec2(-0.48, -0.82).normalized()
+_KEY_SIEGE = Vec2(-0.52, -0.76).normalized()
 _KEY_BROOD = Vec2(-0.58, -0.78).normalized()
 
 
@@ -27,7 +29,9 @@ class LightRig:
     @staticmethod
     def for_play(*, theme: str, camera_mode: CameraMode) -> LightRig:
         solar = theme == "solar"
+        drift = theme == "drift"
         rift = theme == "rift"
+        siege = theme == "siege"
         brood = theme == "brood_moon"
         key = (
             _KEY_SOLAR
@@ -36,6 +40,10 @@ class LightRig:
             if rift
             else _KEY_BROOD
             if brood
+            else _KEY_SIEGE
+            if siege
+            else _KEY_DRIFT
+            if drift
             else _KEY_COVE
         )
         view = "chase" if camera_mode is CameraMode.CHASE else "tactical"
@@ -44,9 +52,23 @@ class LightRig:
             rim += 0.05
         elif rift:
             rim += 0.08
+        elif siege:
+            rim += 0.06
+        elif drift:
+            rim += 0.04
         elif brood:
             rim += 0.05 if view == "chase" else 0.03
-        ambient = 0.28 if solar else 0.38 if rift else 0.38 if brood else 0.35
+        ambient = (
+            0.28
+            if solar
+            else 0.38
+            if rift
+            else 0.36
+            if brood
+            else 0.34
+            if siege
+            else 0.35
+        )
         return LightRig(
             theme=theme,
             view=view,

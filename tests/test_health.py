@@ -203,6 +203,27 @@ class HealthWorldTests(unittest.TestCase):
         self.assertNotAlmostEqual(world.ship.pos.x, world.spawn_pos.x)
         self.assertEqual(world.ship.vel.length(), 0.0)
 
+    def test_recover_clears_boost_flash_and_jolt(self) -> None:
+        world = tiny_world()
+        world.ship.boost_flash = 0.25
+        world.ship.boost_jolt = 0.15
+        world.ship.vel = Vec2(0, -180)
+        world.status = GameStatus.SHIP_HIT
+        recover_ship_in_place(world)
+        self.assertEqual(world.ship.boost_flash, 0.0)
+        self.assertEqual(world.ship.boost_jolt, 0.0)
+        self.assertEqual(world.ship.vel.length(), 0.0)
+
+    def test_respawn_clears_boost_flash_and_jolt(self) -> None:
+        world = tiny_world(ship_pos=Vec2(120, 80))
+        world.ship.boost_flash = 0.3
+        world.ship.boost_jolt = 0.2
+        world.ship.vel = Vec2(200, -50)
+        respawn_ship_at_spawn(world)
+        self.assertEqual(world.ship.boost_flash, 0.0)
+        self.assertEqual(world.ship.boost_jolt, 0.0)
+        self.assertEqual(world.ship.vel.length(), 0.0)
+
     def test_oob_open_bounds_chip_recovers_in_place(self) -> None:
         self.assertTrue(chip_damage_recovers_in_place(life_lost=False))
 

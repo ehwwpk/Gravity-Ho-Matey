@@ -192,9 +192,7 @@ def chase_asteroid_screen_outline(
     forward = Vec2.from_angle(ship_angle)
     right = forward.rotated(math.pi / 2.0)
     depth = center.depth
-    scale = camera.focal_length / depth
-    lateral_scale = scale * camera.chase_thrust_boost
-    pitch = 0.48 + camera.chase_lift / camera.focal_length
+    scale, lateral_scale, pitch = camera.chase_mesh_scales(depth)
     cx, cy = center.x, center.y
 
     screen_points: list[tuple[float, float]] = []
@@ -207,7 +205,8 @@ def chase_asteroid_screen_outline(
     if len(screen_points) < 3:
         return None
 
-    display_scale = max(0.35, min(1.4, camera.focal_length / max(depth, 1.0)))
+    focal = camera.effective_focal_length()
+    display_scale = max(0.35, min(1.4, focal / max(depth, 1.0)))
     return screen_points, display_scale, depth
 
 

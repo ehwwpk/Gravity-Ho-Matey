@@ -105,7 +105,7 @@ class ChartBriefingLayoutTests(unittest.TestCase):
         self.assertIn("CHART BRIEF", joined)
         self.assertIn("INITIAL BRIEF", joined)
         self.assertIn("BRIEFING", joined)
-        self.assertIn("OPEN SKILL DECK", joined)
+        self.assertIn("MERCHANT TREE", joined)
         self.assertNotIn("PURCHASE", joined)
         self.assertGreater(len(canvas.find_all()), 40)
         root.destroy()

@@ -10,7 +10,7 @@ from gravity_ho_matey.levels.level_registry import LEVEL_LABELS, LEVEL_ORDER
 from gravity_ho_matey.render import hud_primitives as hp
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.holo_shop_overlay import HoloShopOverlay
-from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_level_row, draw_menu_button
+from gravity_ho_matey.render.menu_ui import MenuHitMap, draw_fitted_text, draw_holo_corners, draw_level_row, draw_menu_button, measure_text
 from gravity_ho_matey.render.shop_tree_view import ShopTreeView
 from gravity_ho_matey.render.title_home_layout import compute_body_panel, compute_codex_layout, compute_welcome_home_layout
 from gravity_ho_matey.render.title_home_viz import (
@@ -116,6 +116,7 @@ class TitleScreenOverlay:
         shop_open: bool = False,
         shop_open_anim: float = 1.0,
         shop_view: ShopTreeView | None = None,
+        shop_ui: object | None = None,
         codex: TitleCodexState | None = None,
     ) -> None:
         self.hits.clear()
@@ -199,6 +200,7 @@ class TitleScreenOverlay:
                 elapsed=elapsed,
                 shop_open_anim=shop_open_anim,
                 shop_view=shop_view,
+                shop_ui=shop_ui,
             )
 
     def _draw_top_bar(
@@ -627,20 +629,23 @@ class TitleScreenOverlay:
         hover_id: str | None,
         elapsed: float,
     ) -> None:
-        tab_h = 18.0
+        tab_h = 22.0
         tab_y = chrome.rail_y + (chrome.rail_h - tab_h) * 0.5
-        count = len(TITLE_PAGE_ORDER)
         idx = TITLE_PAGE_ORDER.index(page)
-        spacing = 72.0
-        start_x = self.WIDTH / 2 - (count - 1) * spacing / 2
-        for i, terminal in enumerate(TITLE_PAGE_ORDER):
-            tab_x = start_x + i * spacing - 28
-            tab_w = 56.0
+        inner_w = self.WIDTH - self.MARGIN * 2
+        tab_font = hp.FONT_BODY
+        tab_pad = 12.0
+        tab_gap = 6.0
+        labels = [_PAGE_LABELS[terminal] for terminal in TITLE_PAGE_ORDER]
+        tab_widths = [measure_text(label, tab_font) + tab_pad * 2 for label in labels]
+        total_w = sum(tab_widths) + tab_gap * (len(tab_widths) - 1)
+        start_x = self.MARGIN + max(0.0, (inner_w - total_w) * 0.5)
+        tab_x = start_x
+        for terminal, label, tab_w in zip(TITLE_PAGE_ORDER, labels, tab_widths):
             region_id = f"tab:{terminal.name.lower()}"
             self.hits.add(region_id, tab_x, tab_y, tab_w, tab_h)
             selected = terminal is page
             hover = hover_id == region_id
-            label = _PAGE_LABELS[terminal][:8]
             draw_menu_button(
                 canvas,
                 tab_x,
@@ -655,6 +660,7 @@ class TitleScreenOverlay:
                 selected=selected,
                 hover=hover,
             )
+            tab_x += tab_w + tab_gap
         pulse = 0.5 + 0.5 * math.sin(elapsed * 3.0)
         canvas.create_text(
             self.WIDTH / 2,

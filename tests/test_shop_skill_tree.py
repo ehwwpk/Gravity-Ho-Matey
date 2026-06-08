@@ -152,6 +152,59 @@ class ShopSkillTreeLayoutTests(unittest.TestCase):
         shop_on_pointer_down(state, 400.0, 300.0, shop_hit_id(PowerUpKind.THRUST_BOOST), shop_open=True)
         self.assertFalse(state.dragging)
 
+    def test_inspector_hidden_until_node_clicked(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            canvas = tk.Canvas(root, width=960, height=640)
+            hits = MenuHitMap()
+            campaign = CampaignState.new()
+            ui = ShopUiState()
+            HoloShopOverlay().draw(
+                canvas,
+                vw=960,
+                vh=640,
+                campaign=campaign,
+                hits=hits,
+                hover_id=None,
+                shop_open_anim=1.0,
+                shop_ui=ui,
+            )
+            self.assertNotIn("NODE INSPECTOR", " ".join(
+                str(canvas.itemcget(i, "text")) for i in canvas.find_all() if canvas.type(i) == "text"
+            ))
+            ui.inspector_hit = shop_hit_id(PowerUpKind.THRUST_BOOST)
+            canvas.delete("all")
+            hits.clear()
+            HoloShopOverlay().draw(
+                canvas,
+                vw=960,
+                vh=640,
+                campaign=campaign,
+                hits=hits,
+                hover_id=None,
+                shop_open_anim=1.0,
+                shop_ui=ui,
+            )
+            joined = " ".join(
+                str(canvas.itemcget(i, "text")) for i in canvas.find_all() if canvas.type(i) == "text"
+            )
+            self.assertIn("NODE INSPECTOR", joined)
+            self.assertIn("THRUST", joined.upper())
+        finally:
+            root.destroy()
+
+    def test_inspector_drag_moves_offset(self) -> None:
+        from gravity_ho_matey.scenes.shop_ui import shop_on_pointer_motion
+
+        state = ShopUiState()
+        state.inspector_hit = shop_hit_id(PowerUpKind.THRUST_BOOST)
+        shop_on_pointer_down(state, 100.0, 200.0, "shop_inspector_drag", shop_open=True)
+        self.assertTrue(state.inspector_dragging)
+        shop_on_pointer_motion(state, 130.0, 220.0, shop_open=True)
+        self.assertAlmostEqual(state.inspector_offset_x, 30.0)
+        self.assertAlmostEqual(state.inspector_offset_y, 20.0)
+
     def test_fitted_text_uses_font_metrics(self) -> None:
         if tk is None:
             self.skipTest("Tk unavailable")

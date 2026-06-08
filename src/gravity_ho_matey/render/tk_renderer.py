@@ -49,7 +49,7 @@ class TkRenderer:
         elapsed: float = 0.0,
         shop_open: bool = False,
         shop_open_anim: float = 1.0,
-        shop_view: ShopTreeView | None = None,
+        shop_ui: object | None = None,
         codex: TitleCodexState | None = None,
     ) -> None:
         from gravity_ho_matey.gameplay.campaign import CampaignState as _CampaignState
@@ -71,7 +71,8 @@ class TkRenderer:
             elapsed=elapsed,
             shop_open=shop_open,
             shop_open_anim=shop_open_anim,
-            shop_view=shop_view,
+            shop_view=shop_ui.view if shop_ui is not None else None,
+            shop_ui=shop_ui,
             codex=codex or _TitleCodexState(),
         )
 
@@ -125,7 +126,6 @@ class TkRenderer:
             world,
             hud_top,
             camera_mode=camera.mode,
-            camera_mode_flash=camera.mode_flash_ttl > 0.0,
             bounds_alert_flash=camera.bounds_alert_flash_ttl > 0.0,
         )
         self._hud.draw(
@@ -137,7 +137,6 @@ class TkRenderer:
             bounds_toast_ttl=bounds_toast_ttl,
             treasury_flash_ttl=treasury_flash_ttl,
             camera_mode=camera.mode,
-            camera_mode_flash=camera.mode_flash_ttl > 0.0,
         )
         if world.status is GameStatus.WON:
             self.canvas.create_text(
@@ -177,7 +176,7 @@ class TkRenderer:
         anim: float = 0.0,
         shop_open: bool = False,
         shop_open_anim: float = 1.0,
-        shop_view: ShopTreeView | None = None,
+        shop_ui: object | None = None,
     ) -> None:
         self.clear()
         self._chart.draw(
@@ -191,7 +190,8 @@ class TkRenderer:
             hover_id=hover_id,
             shop_open=shop_open,
             shop_open_anim=shop_open_anim,
-            shop_view=shop_view,
+            shop_view=shop_ui.view if shop_ui is not None else None,
+            shop_ui=shop_ui,
         )
 
     def chart_hit_test(self, x: float, y: float) -> str | None:

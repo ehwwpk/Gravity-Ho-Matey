@@ -353,12 +353,17 @@ class AsteroidCombatWorldTests(unittest.TestCase):
         self.assertEqual(len(authored), 1)
 
     def test_cove_has_oob_chart_ring(self) -> None:
-        from gravity_ho_matey.gameplay.chart_bounds import oob_ring_radius
+        from gravity_ho_matey.gameplay.chart_bounds import (
+            COVE_OOB_PLACEMENT_MARGIN_FRAC,
+            oob_ring_radius_for_margin_frac,
+        )
 
         world = build_level("cove")
         ring = [a for a in world.asteroids if a.free_bounds]
         self.assertEqual(len(ring), 20)
-        expected_radius = oob_ring_radius(world.config)
+        expected_radius = oob_ring_radius_for_margin_frac(
+            world.config, COVE_OOB_PLACEMENT_MARGIN_FRAC
+        )
         anchor = Vec2(world.config.width * 0.5, world.config.height * 0.5)
         main_ring = [a for a in ring if a.ring_radius and abs(a.ring_radius - expected_radius) < 1.0]
         self.assertEqual(len(main_ring), 12)

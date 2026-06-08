@@ -61,10 +61,17 @@ class TacticalViewRenderer:
             else palette.BACKGROUND
         )
         canvas.create_rectangle(0, hud_top, vw, vh, fill=bg, outline="")
-        if solar or rift or siege or brood:
-            self._starfield(canvas, vw, vh, hud_top, dense=True)
-        else:
-            self._ambient_depth(canvas, vw, vh, hud_top)
+        from gravity_ho_matey.render.starfield_viz import draw_tactical_starfield
+
+        draw_tactical_starfield(
+            canvas,
+            width=vw,
+            height=vh,
+            y_offset=hud_top,
+            theme=world.config.level_theme,
+            elapsed=world.elapsed,
+            dense=True,
+        )
         brood_surface = brood and world.brood_moon is not None and world.brood_moon.on_surface
         if not brood_surface:
             draw_gravity_heatmap(
@@ -126,6 +133,7 @@ class TacticalViewRenderer:
                     well.kind,
                     scale=camera.tactical_scale * WELL_RING_VISUAL_SCALE,
                     rig=rig,
+                    elapsed=world.elapsed,
                 )
         for asteroid in world.asteroids:
             if not asteroid_in_play_view(
@@ -157,6 +165,7 @@ class TacticalViewRenderer:
                     well.kind,
                     scale=camera.tactical_scale * WELL_RING_VISUAL_SCALE,
                     rig=rig,
+                    elapsed=world.elapsed,
                 )
         gate = world.finish_gate.rect
         gate_center = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
@@ -179,6 +188,7 @@ class TacticalViewRenderer:
                 unlocked=world.finish_unlocked,
                 solar=solar,
                 hud_top=hud_top,
+                elapsed=world.elapsed,
             )
         for beacon in world.beacons:
             p = camera.world_to_screen(beacon.pos, ship_pos, world.ship.angle)
@@ -493,15 +503,6 @@ class TacticalViewRenderer:
             if y_offset <= y < height:
                 canvas.create_oval(x - 1, y - 1, x + 1, y + 1, fill=color, outline="")
 
-    def _starfield(self, canvas: tk.Canvas, width: int, height: int, y_offset: int, dense: bool) -> None:
-        count = 140 if dense else 80
-        for i in range(count):
-            x = (i * 83 + 17) % width
-            y = y_offset + (i * 47 + 31) % max(1, height - y_offset)
-            size = 3 if dense and i % 5 == 0 else 2
-            tone = "#3a5570" if dense and i % 7 == 0 else "#294764"
-            canvas.create_rectangle(x, y, x + size, y + size, fill=tone, outline="")
-
 
 class PerspectiveViewRenderer:
     def draw(
@@ -529,6 +530,8 @@ class PerspectiveViewRenderer:
         from gravity_ho_matey.gameplay.squid_enemy import SquidEnemy
         from gravity_ho_matey.render.chase_projectile_fx import draw_chase_projectile
         from gravity_ho_matey.render.chase_fx import (
+            draw_boost_pressure,
+            draw_chase_boost_jolt,
             draw_chase_floor_gradient,
             draw_chase_sky,
             draw_engine_bloom,
@@ -537,7 +540,8 @@ class PerspectiveViewRenderer:
         )
         from gravity_ho_matey.render.chase_ground import draw_chase_gravity_heatmap
         from gravity_ho_matey.render.asteroid_viz import collect_chase_asteroid_sprites, draw_chase_asteroids
-        from gravity_ho_matey.render.chase_helm import bank_angle_for_chase, draw_xwing_cockpit_hud
+        from gravity_ho_matey.render.chase_helm import draw_xwing_cockpit_hud
+        from gravity_ho_matey.render.camera import CHASE_SCREEN_HEADING
         from gravity_ho_matey.render.chase_wells import draw_chase_well
 
         vw = camera.viewport_width
@@ -551,7 +555,7 @@ class PerspectiveViewRenderer:
         elapsed = world.elapsed
         rig = LightRig.for_play(theme=world.config.level_theme, camera_mode=camera.mode)
         thrusting = world.ship.boost_flash > 0.0
-        camera.chase_thrust_boost = 1.12 if thrusting else 1.0
+        chase_intensity = camera.chase_intensity()
 
         bg = (
             palette.RIFT_BG
@@ -578,6 +582,10 @@ class PerspectiveViewRenderer:
             from gravity_ho_matey.render.chase_fx import draw_rift_chase_floor_wash
 
             draw_rift_chase_floor_wash(canvas, camera)
+        elif world.config.level_theme == "siege":
+            from gravity_ho_matey.render.chase_fx import draw_siege_chase_floor_wash
+
+            draw_siege_chase_floor_wash(canvas, camera)
         elif brood_on_surface:
             from gravity_ho_matey.render.brood_moon_surface_viz import (
                 draw_brood_chase_floor_wash,
@@ -700,7 +708,8 @@ class PerspectiveViewRenderer:
         for jewel in world.jewels:
             p = camera.world_to_screen(jewel.pos, ship_pos, ship_angle)
             if p.visible:
-                sprites.append((p.depth, "jewel", (Vec2(p.x, p.y), world.elapsed)))
+                j_scale = max(0.5, camera.perspective_scale(p.depth) / camera.focal_length)
+                sprites.append((p.depth, "jewel", (Vec2(p.x, p.y), world.elapsed, j_scale)))
         if brood and world.egg_pods:
             for pod in world.egg_pods:
                 if not pod.alive:
@@ -806,6 +815,7 @@ class PerspectiveViewRenderer:
                         solar=solar,
                         gate_size=gate_size,
                         depth_scale=g_scale,
+                        elapsed=elapsed,
                     )
             elif kind == "beacon":
                 pos, beacon, b_scale = payload
@@ -818,8 +828,8 @@ class PerspectiveViewRenderer:
                     rig=rig,
                 )
             elif kind == "jewel":
-                pos, elapsed_j = payload
-                draw_chase_jewel(canvas, pos, elapsed=elapsed_j)
+                pos, elapsed_j, j_scale = payload
+                draw_chase_jewel(canvas, pos, elapsed=elapsed_j, depth_scale=j_scale)
             elif kind == "egg_pod":
                 from gravity_ho_matey.render.egg_pod_viz import draw_egg_pod_chase
 
@@ -978,30 +988,50 @@ class PerspectiveViewRenderer:
             )
 
         anchor_x, anchor_y = camera.chase_anchor()
-        if thrusting:
+        display_angle = CHASE_SCREEN_HEADING + camera.bank_display
+        if not thrusting and world.ship.vel.length() > 55.0:
             draw_speed_streaks(
                 canvas,
                 camera,
                 world,
                 anchor_x=anchor_x,
                 anchor_y=anchor_y,
-                ship_pos=ship_pos,
-                ship_angle=ship_angle,
+                display_angle=display_angle,
+                ship_scale=CHASE_SHIP_SCALE,
             )
-        draw_speed_vignette(canvas, camera, world.ship.vel.length())
-        draw_engine_bloom(canvas, anchor_x, anchor_y, boost_energy=world.ship.boost_energy, thrusting=thrusting)
-        display_angle = bank_angle_for_chase(
-            world.ship.vel,
-            ship_angle,
-            turn_rate=camera.turn_rate,
-            on_highway=False,
-        )
+        draw_speed_vignette(canvas, camera, world.ship.vel.length(), intensity=chase_intensity)
+        draw_boost_pressure(canvas, camera, thrusting=thrusting, intensity=chase_intensity)
+        if thrusting:
+            draw_chase_boost_jolt(
+                canvas,
+                anchor_x=anchor_x,
+                anchor_y=anchor_y,
+                display_angle=display_angle,
+                world=world,
+                camera=camera,
+                intensity=chase_intensity,
+                elapsed=elapsed,
+                ship_scale=CHASE_SHIP_SCALE,
+            )
+        else:
+            draw_engine_bloom(
+                canvas,
+                anchor_x,
+                anchor_y,
+                display_angle=display_angle,
+                boost_energy=world.ship.boost_energy,
+                thrusting=False,
+                speed=world.ship.vel.length(),
+                intensity=chase_intensity,
+                ship_scale=CHASE_SHIP_SCALE,
+            )
         draw_ship(
             canvas,
             Vec2(anchor_x, anchor_y),
             display_angle,
             world.ship.boost_energy,
             boost_burst=world.ship.boost_flash,
+            chase_boost=thrusting,
             invuln=world.invuln_remaining,
             elapsed=elapsed,
             scale=CHASE_SHIP_SCALE,

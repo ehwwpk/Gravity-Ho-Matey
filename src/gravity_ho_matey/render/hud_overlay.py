@@ -58,7 +58,6 @@ class SciFiHudOverlay:
         bounds_toast_ttl: float = 0.0,
         treasury_flash_ttl: float = 0.0,
         camera_mode: CameraMode | None = None,
-        camera_mode_flash: bool = False,
     ) -> None:
         width = world.config.viewport_width
         solar = world.config.level_theme == "solar"
@@ -452,7 +451,6 @@ class SciFiHudOverlay:
         hud_top: float,
         *,
         camera_mode: CameraMode | None = None,
-        camera_mode_flash: bool = False,
         bounds_alert_flash: bool = False,
     ) -> None:
         """Sector + camera badges on the playfield — never stacked on command panels."""
@@ -486,7 +484,7 @@ class SciFiHudOverlay:
             font=self.FONT_TITLE,
         )
         if camera_mode is not None:
-            mode_color = accent if camera_mode_flash else dim
+            mode_color = dim
             self._badge(
                 canvas,
                 width - 10,

@@ -52,11 +52,13 @@ class PlayScene(Scene):
         self._transition_frame_elapsed = 0.0
         self._transition_frame_hold: object | None = None
         self._transition_loaded_stem: str = ""
+        self._prev_boost_flash: float = 0.0
         wire_world_for_campaign(
             self.world,
             self.campaign,
             on_jewels_collected_hud=self._on_jewels_collected_hud,
         )
+        self._prev_boost_flash = self.world.ship.boost_flash
 
     def _sync_chart_bounds_state(self, *, suppress_toast: bool) -> None:
         if not self.world.config.open_bounds:
@@ -90,9 +92,19 @@ class PlayScene(Scene):
         self.camera.set_play_layout(self._playfield_hud_top())
         self.camera.update_follow(self.world.ship.pos, self.world.config, dt)
         self.camera.update_chase_heading(self.world.ship.angle, dt)
-        self.camera.update_chase_velocity(
-            self.world.ship.vel, self.world.ship.angle, self.world.config, dt
+        boost_tapped = (
+            self.world.ship.boost_flash > 0.0 and self._prev_boost_flash <= 0.0
         )
+        self.camera.update_chase_dynamics(
+            self.world.ship.vel,
+            self.world.ship.angle,
+            self.world.config,
+            dt,
+            boost_flash=self.world.ship.boost_flash,
+            boost_energy=self.world.ship.boost_energy,
+            boost_tapped=boost_tapped,
+        )
+        self._prev_boost_flash = self.world.ship.boost_flash
 
     def update(self, host: SceneHost, dt: float) -> None:
         from gravity_ho_matey.scenes.end import EndScene
@@ -173,6 +185,8 @@ class PlayScene(Scene):
 
             if chip_damage_recovers_in_place(life_lost=result.life_lost):
                 recover_ship_in_place(self.world)
+                self.camera.reset_chase_presentation()
+                self._prev_boost_flash = self.world.ship.boost_flash
                 self._sync_chart_bounds_state(suppress_toast=True)
                 if damage.source is DamageSource.CHART_RADIATION:
                     self.hud_alert = (
@@ -205,6 +219,7 @@ class PlayScene(Scene):
         if self.camera.mode is CameraMode.TACTICAL:
             return
         self.camera.mode = CameraMode.TACTICAL
+        self.camera.reset_chase_presentation()
         self.camera.set_play_layout(self._playfield_hud_top())
         self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
 
@@ -315,6 +330,7 @@ class PlayScene(Scene):
                 self._enforce_brood_surface_camera()
                 return
             self.camera.cycle_mode()
+            self._prev_boost_flash = self.world.ship.boost_flash
             if self.camera.mode is CameraMode.TACTICAL:
                 self.camera.set_play_layout(self._playfield_hud_top())
                 self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)

@@ -6,7 +6,34 @@ import tkinter as tk
 from gravity_ho_matey.core.vector import Vec2
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
-from gravity_ho_matey.render.camera import ViewCamera
+from gravity_ho_matey.render.camera import CHASE_BOOST_KICK_Y, ViewCamera
+from gravity_ho_matey.render.ship_viz import ENGINE_PORTS
+from gravity_ho_matey.render.starfield_viz import draw_chase_parallax_stars
+
+_SKY_THEMES: dict[str, tuple[str, str]] = {
+    "cove": ("#040810", "#0a1830"),
+    "drift": ("#030610", "#0c1a38"),
+    "solar": ("#080408", "#281008"),
+    "rift": ("#060410", "#140828"),
+    "siege": ("#100608", "#281018"),
+    "brood_moon": ("#120818", "#281830"),
+}
+
+
+def _engine_screen(
+    anchor_x: float,
+    anchor_y: float,
+    display_angle: float,
+    ship_scale: float,
+    local: Vec2,
+) -> tuple[float, float]:
+    c = math.cos(display_angle)
+    s = math.sin(display_angle)
+    lx, ly = local.x, local.y
+    return (
+        anchor_x + (lx * c - ly * s) * ship_scale,
+        anchor_y + (lx * s + ly * c) * ship_scale,
+    )
 
 
 def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> None:
@@ -14,20 +41,9 @@ def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> N
     horizon = camera.chase_horizon_y()
     top = camera.play_hud_top
     width = camera.viewport_width
-    solar = world.config.level_theme == "solar"
-    drift = world.config.level_theme == "drift"
-    rift = world.config.level_theme == "rift"
-    brood = world.config.level_theme == "brood_moon"
-    deep_space = solar or drift or rift or brood
-    if brood:
-        sky_top = "#120818"
-        sky_horizon = "#281830"
-    elif deep_space:
-        sky_top = "#020408"
-        sky_horizon = "#0a1830" if (solar or drift or rift) else "#081420"
-    else:
-        sky_top = "#040810"
-        sky_horizon = "#081420"
+    theme = world.config.level_theme
+    solar = theme == "solar"
+    sky_top, sky_horizon = _SKY_THEMES.get(theme, _SKY_THEMES["cove"])
     steps = 8
     band = max(1.0, (horizon - top) / steps)
     for i in range(steps):
@@ -36,7 +52,52 @@ def draw_chase_sky(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld) -> N
         y1 = top + band * (i + 1)
         color = _lerp_color(sky_top, sky_horizon, t)
         canvas.create_rectangle(0, y0, width, y1, fill=color, outline="")
-    _draw_parallax_stars(canvas, camera, world, horizon)
+    _draw_theme_nebula(canvas, camera, world, horizon, theme)
+    if solar:
+        _draw_solar_corona(canvas, camera, horizon)
+    draw_chase_parallax_stars(canvas, camera=camera, world=world, horizon=horizon)
+
+
+def _draw_theme_nebula(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld, horizon: float, theme: str) -> None:
+    width = camera.viewport_width
+    top = camera.play_hud_top
+    elapsed = world.elapsed
+    blobs = {
+        "cove": (("#0a2840", 0.22),),
+        "drift": (("#180828", 0.18), ("#102038", 0.14)),
+        "rift": (("#201040", 0.2),),
+        "siege": (("#301008", 0.16),),
+        "brood_moon": (("#281030", 0.18),),
+    }.get(theme, ())
+    for i, (color, frac) in enumerate(blobs):
+        cx = width * (0.28 + 0.22 * i) + math.sin(elapsed * 0.15 + i) * 24.0
+        cy = top + (horizon - top) * (0.35 + 0.12 * i)
+        rx = width * frac * (0.9 + 0.08 * math.sin(elapsed * 0.4 + i))
+        ry = (horizon - top) * frac * 0.55
+        canvas.create_oval(cx - rx, cy - ry, cx + rx, cy + ry, fill=color, outline="")
+
+
+def _draw_solar_corona(canvas: tk.Canvas, camera: ViewCamera, horizon: float) -> None:
+    width = camera.viewport_width
+    top = camera.play_hud_top
+    corona_y = top + (horizon - top) * 0.12
+    canvas.create_rectangle(0, top, width, corona_y + 6, fill="#3a2010", outline="")
+    canvas.create_line(0, corona_y, width, corona_y, fill="#806030", width=1)
+
+
+def draw_siege_chase_floor_wash(canvas: tk.Canvas, camera: ViewCamera) -> None:
+    """Ember haze on the chase floor for siege sectors."""
+    horizon = camera.chase_horizon_y()
+    bottom = camera.viewport_height
+    width = camera.viewport_width
+    steps = 4
+    band = max(1.0, (bottom - horizon) / steps)
+    for i in range(steps):
+        t = i / max(1, steps - 1)
+        y0 = horizon + band * i
+        y1 = horizon + band * (i + 1)
+        color = _lerp_color("#1a0c10", "#0a0608", t * 0.7)
+        canvas.create_rectangle(0, y0, width, y1, fill=color, outline="")
 
 
 def draw_rift_chase_floor_wash(canvas: tk.Canvas, camera: ViewCamera) -> None:
@@ -125,39 +186,115 @@ def draw_speed_streaks(
     *,
     anchor_x: float,
     anchor_y: float,
-    ship_pos: Vec2,
-    ship_angle: float,
+    display_angle: float,
+    ship_scale: float = 1.12,
 ) -> None:
+    """Cruise-only motion streaks — aligned to chase ship rig, never world-velocity skew."""
+    if world.ship.boost_flash > 0.0:
+        return
     speed = world.ship.vel.length()
-    if speed < 38.0:
+    if speed < 55.0:
         return
-    vel = world.ship.vel
-    tail_world = ship_pos - vel.normalized() * min(140.0, speed * 0.55)
-    tail = camera.world_to_screen(tail_world, ship_pos, ship_angle)
-    dx = anchor_x - tail.x
-    dy = anchor_y - tail.y
-    length = math.hypot(dx, dy)
-    if length < 1e-6:
-        return
-    ux, uy = dx / length, dy / length
-    px, py = -uy, ux
-
-    thrusting = world.ship.boost_flash > 0.0
-    count = min(18, int(6 + speed / 22.0))
-    color = palette.CHASE_SPEED_STREAK_BOOST if thrusting else palette.CHASE_SPEED_STREAK
+    forward = Vec2.from_angle(display_angle)
+    right = forward.rotated(math.pi / 2.0)
+    intensity = min(1.0, (speed - 55.0) / 180.0)
+    count = min(14, int(4 + speed / 28.0))
     horizon = camera.chase_horizon_y()
-    streak_len = min(90.0, 16.0 + speed * 0.16)
+    streak_len = min(72.0, 10.0 + speed * 0.12)
+    color = palette.CHASE_SPEED_STREAK
 
     for i in range(count):
         t = (i + 1) / (count + 1)
-        lateral = ((i * 53) % 27 - 13) * (1.2 - t * 0.4)
-        sx = anchor_x - ux * (40 + t * 120) + px * lateral
-        sy = anchor_y - uy * (40 + t * 120) + py * lateral * 0.35
+        lateral = ((i * 41) % 19 - 9) * (1.1 - t * 0.35)
+        back = 36.0 + t * (90.0 + intensity * 30.0)
+        sx = anchor_x - forward.x * back + right.x * lateral
+        sy = anchor_y - forward.y * back + right.y * lateral * 0.35
         if sy < horizon + 8:
             continue
-        ex = sx + ux * streak_len * (0.5 + t * 0.5)
-        ey = sy + uy * streak_len * (0.5 + t * 0.5)
-        canvas.create_line(sx, sy, ex, ey, fill=color, width=2 if thrusting else 1)
+        ex = sx - forward.x * streak_len * (0.45 + t * 0.55)
+        ey = sy - forward.y * streak_len * (0.45 + t * 0.55)
+        canvas.create_line(sx, sy, ex, ey, fill=color, width=1)
+
+
+def _boost_tap_strength(flash: float, max_flash: float) -> float:
+    """Early-boost window for shock/spark punch — strongest right after Shift tap."""
+    window = max(0.05, max_flash * 0.22)
+    elapsed = max(0.0, max_flash - flash)
+    return max(0.0, 1.0 - elapsed / window)
+
+
+def draw_chase_boost_jolt(
+    canvas: tk.Canvas,
+    *,
+    anchor_x: float,
+    anchor_y: float,
+    display_angle: float,
+    world: GameWorld,
+    camera: ViewCamera,
+    intensity: float,
+    elapsed: float,
+    ship_scale: float = 1.12,
+) -> None:
+    """Shift-boost punch — shock rings and sparks (screen-aligned).
+
+    Line exhaust + engine blooms live on ``draw_fighter_ship(chase_boost=True)``.
+    """
+    flash = world.ship.boost_flash
+    if flash <= 0.0:
+        return
+    max_flash = max(0.05, world.config.boost_flash_seconds)
+    tap = _boost_tap_strength(flash, max_flash)
+    kick = min(1.0, camera.boost_kick_y / max(1.0, CHASE_BOOST_KICK_Y))
+    _ = elapsed
+
+    forward = Vec2.from_angle(display_angle)
+    aft_center_x = anchor_x - forward.x * 10.0 * ship_scale
+    aft_center_y = anchor_y - forward.y * 10.0 * ship_scale
+
+    if tap > 0.12:
+        outer_r = (18.0 + tap * 26.0 + kick * 14.0) * ship_scale
+        inner_r = outer_r * 0.55
+        canvas.create_oval(
+            aft_center_x - outer_r,
+            aft_center_y - outer_r * 0.62,
+            aft_center_x + outer_r,
+            aft_center_y + outer_r * 0.62,
+            fill="#ff5028",
+            outline="",
+        )
+        canvas.create_oval(
+            aft_center_x - inner_r,
+            aft_center_y - inner_r * 0.58,
+            aft_center_x + inner_r,
+            aft_center_y + inner_r * 0.58,
+            fill="#ff9040",
+            outline="",
+        )
+
+    if tap > 0.08:
+        for ring, color in enumerate(palette.CHASE_BOOST_SHOCK):
+            spread = (14.0 + tap * (28.0 + ring * 10.0) + kick * 16.0) * ship_scale
+            canvas.create_oval(
+                aft_center_x - spread,
+                aft_center_y - spread * 0.62,
+                aft_center_x + spread,
+                aft_center_y + spread * 0.62,
+                outline=color,
+                width=3 - ring,
+            )
+
+    spark_count = int(5 + tap * 9 + intensity * 3)
+    for i in range(spark_count):
+        fan = (i / max(1, spark_count - 1) - 0.5) * 1.1
+        spread_angle = display_angle + math.pi + fan
+        dist = (10.0 + (i * 13) % 22 + tap * 18.0) * ship_scale
+        sx = aft_center_x + math.cos(spread_angle) * dist * 0.35
+        sy = aft_center_y + math.sin(spread_angle) * dist * 0.35
+        spark_len = (8.0 + tap * 14.0 + kick * 8.0) * ship_scale
+        ex = sx - forward.x * spark_len
+        ey = sy - forward.y * spark_len
+        color = palette.CHASE_BOOST_SPARK[i % len(palette.CHASE_BOOST_SPARK)]
+        canvas.create_line(sx, sy, ex, ey, fill=color, width=2 if tap > 0.35 else 1)
 
 
 def draw_engine_bloom(
@@ -165,45 +302,89 @@ def draw_engine_bloom(
     anchor_x: float,
     anchor_y: float,
     *,
+    display_angle: float,
     boost_energy: float,
     thrusting: bool,
+    speed: float = 0.0,
+    intensity: float = 0.0,
+    ship_scale: float = 1.12,
 ) -> None:
-    for i, frac in enumerate((1.0, 0.72, 0.48)):
-        r = 14 + i * 8
-        color = palette.CHASE_ENGINE_CORE if i == 0 else palette.CHASE_ENGINE_GLOW
-        canvas.create_oval(anchor_x - r, anchor_y - r * 0.4, anchor_x + r, anchor_y + r * 0.9, fill="", outline=color, width=2 - i)
-    if thrusting and boost_energy > 0.02:
-        flame_y = anchor_y + 22
-        canvas.create_line(anchor_x, anchor_y + 8, anchor_x, flame_y, fill="#ff7a4a", width=4)
-        canvas.create_oval(anchor_x - 8, flame_y - 4, anchor_x + 8, flame_y + 10, fill=palette.CHASE_ENGINE_GLOW, outline="")
-
-
-def draw_speed_vignette(canvas: tk.Canvas, camera: ViewCamera, speed: float) -> None:
-    if speed < 95.0:
+    """Idle engine glow at cruise — boost uses draw_chase_boost_jolt instead."""
+    if thrusting:
         return
-    strength = min(1.0, (speed - 95.0) / 140.0)
+    if speed < 48.0 and intensity < 0.08:
+        return
+    forward = Vec2.from_angle(display_angle)
+    speed_scale = min(1.35, 1.0 + speed / 240.0)
+    for eng in ENGINE_PORTS:
+        ex, ey = _engine_screen(anchor_x, anchor_y, display_angle, ship_scale, eng)
+        for i, frac in enumerate((0.55, 0.85, 1.0)):
+            r = (5.0 + i * 3.5) * speed_scale * ship_scale
+            color = palette.CHASE_ENGINE_CORE if i == 2 else palette.CHASE_ENGINE_GLOW
+            canvas.create_oval(ex - r, ey - r * 0.5, ex + r, ey + r * 0.65, fill="", outline=color, width=1)
+        if speed > 95.0 and boost_energy > 0.15:
+            tail = 6.0 * speed_scale * ship_scale
+            canvas.create_line(
+                ex,
+                ey,
+                ex - forward.x * tail,
+                ey - forward.y * tail,
+                fill=palette.CHASE_ENGINE_GLOW,
+                width=1,
+            )
+
+
+def draw_speed_vignette(
+    canvas: tk.Canvas,
+    camera: ViewCamera,
+    speed: float,
+    *,
+    intensity: float | None = None,
+) -> None:
+    chase_intensity = intensity if intensity is not None else camera.chase_intensity()
+    if speed < 85.0 and chase_intensity < 0.12:
+        return
+    speed_strength = min(1.0, (speed - 85.0) / 150.0)
+    strength = max(speed_strength, chase_intensity * 0.85)
     if strength <= 0.05:
         return
     w = camera.viewport_width
     h = camera.viewport_height
-    inset = int(40 + strength * 50)
-    canvas.create_rectangle(0, camera.play_hud_top, inset, h, fill=palette.CHASE_VIGNETTE, outline="")
-    canvas.create_rectangle(w - inset, camera.play_hud_top, w, h, fill=palette.CHASE_VIGNETTE, outline="")
-
-
-def _draw_parallax_stars(canvas: tk.Canvas, camera: ViewCamera, world: GameWorld, horizon: float) -> None:
-    width = camera.viewport_width
     top = camera.play_hud_top
-    vel = world.ship.vel
-    parallax = vel * (-0.018)
-    for i in range(64):
-        hx = (i * 7919 + 1237) % 10000
-        hy = (i * 6271 + 4111) % 10000
-        x = (hx / 10000.0) * width + parallax.x
-        y = top + (hy / 10000.0) * max(1.0, horizon - top - 8) + parallax.y * 0.5
-        size = 2 if i % 4 else 3
-        tone = palette.CHASE_STAR_FAR if i % 3 else palette.CHASE_STAR_NEAR
-        canvas.create_rectangle(x, y, x + size, y + size, fill=tone, outline="")
+    inset = int(36 + strength * (54 + chase_intensity * 18))
+    fill = palette.CHASE_VIGNETTE
+    canvas.create_rectangle(0, top, inset, h, fill=fill, outline="")
+    canvas.create_rectangle(w - inset, top, w, h, fill=fill, outline="")
+    band = int(10 + strength * (20 + chase_intensity * 10))
+    canvas.create_rectangle(0, top, w, top + band, fill=fill, outline="")
+    canvas.create_rectangle(0, h - band, w, h, fill=fill, outline="")
+    corner = int(20 + strength * (36 + chase_intensity * 16))
+    for cx, cy in ((0, top), (w, top), (0, h), (w, h)):
+        canvas.create_rectangle(cx - corner, cy - corner, cx + corner, cy + corner, fill=fill, outline="")
+
+
+def draw_boost_pressure(
+    canvas: tk.Canvas,
+    camera: ViewCamera,
+    *,
+    thrusting: bool,
+    intensity: float | None = None,
+) -> None:
+    """Edge pressure bands during boost — speed sensation without shifting the rig."""
+    if not thrusting:
+        return
+    chase_intensity = intensity if intensity is not None else camera.chase_intensity()
+    if chase_intensity < 0.2:
+        return
+    w = camera.viewport_width
+    h = camera.viewport_height
+    top = camera.play_hud_top
+    band = int(6 + chase_intensity * 14)
+    colors = ("#1a0808", "#120606", "#0a0404")
+    for i, color in enumerate(colors):
+        inset = band * (i + 1)
+        canvas.create_rectangle(0, top, inset, h, fill=color, outline="")
+        canvas.create_rectangle(w - inset, top, w, h, fill=color, outline="")
 
 
 def _lerp_color(a: str, b: str, t: float) -> str:

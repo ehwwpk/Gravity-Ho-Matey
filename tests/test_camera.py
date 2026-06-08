@@ -266,6 +266,16 @@ class ViewCameraHostileTests(unittest.TestCase):
         self.assertGreater(camera.velocity_lag_y, 0.0)
         camera.cycle_mode()
         self.assertEqual(camera.velocity_lag_y, 0.0)
+        self.assertEqual(camera.velocity_lag_x, 0.0)
+
+    def test_lateral_lag_opposes_turn(self) -> None:
+        config = WorldConfig(width=960, height=640, max_ship_speed=330.0)
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.turn_rate = 80.0
+        vel = Vec2.from_angle(-math.pi / 2) * 200.0
+        for _ in range(25):
+            camera.update_chase_velocity(vel, -math.pi / 2, config, 0.05)
+        self.assertLess(camera.velocity_lag_x, -1.0)
 
     def test_mode_cycle_toggles_tactical_and_chase_only(self) -> None:
         camera = ViewCamera()
@@ -274,13 +284,6 @@ class ViewCameraHostileTests(unittest.TestCase):
         self.assertEqual(camera.mode, CameraMode.CHASE)
         camera.cycle_mode()
         self.assertEqual(camera.mode, CameraMode.TACTICAL)
-
-    def test_mode_flash_decays(self) -> None:
-        camera = ViewCamera()
-        camera.cycle_mode()
-        self.assertGreater(camera.mode_flash_ttl, 0.0)
-        camera.tick(2.0)
-        self.assertEqual(camera.mode_flash_ttl, 0.0)
 
     def test_chase_hfov_target_is_105_degrees(self) -> None:
         camera = ViewCamera(mode=CameraMode.CHASE)

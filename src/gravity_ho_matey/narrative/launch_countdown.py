@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from gravity_ho_matey.levels.level_registry import LEVEL_ORDER
 
-DEFAULT_STEP_SECONDS = 1.0
+DEFAULT_STEP_SECONDS = 0.5
 DEFAULT_DIGITS = (3, 2, 1)
 
 

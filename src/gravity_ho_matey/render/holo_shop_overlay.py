@@ -26,10 +26,37 @@ from gravity_ho_matey.render.shop_skill_tree_layout import (
     skill_tree_nodes,
 )
 from gravity_ho_matey.render.shop_tree_view import ShopTreeView, apply_shop_tree_view
+from gravity_ho_matey.scenes.shop_ui import ShopUiState
 
 
 class HoloShopOverlay:
     """Radial skill-tree bazaar — captain at center, branches for doctrine / drive / hull / escort."""
+
+    _INSPECTOR_W = 420.0
+    _INSPECTOR_H = 112.0
+    _INSPECTOR_DRAG_H = 22.0
+
+    @classmethod
+    def inspector_default_rect(
+        cls,
+        px: float,
+        py: float,
+        pw: float,
+        ph: float,
+        *,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
+    ) -> tuple[float, float, float, float]:
+        """Lower-left dock — keeps escort/drone branch on the right readable."""
+        footer_h = 44.0
+        panel_w = min(cls._INSPECTOR_W, pw - 160.0)
+        panel_h = cls._INSPECTOR_H
+        header_h = 48.0
+        base_x = px + 14.0
+        base_y = py + ph - footer_h - panel_h - 44.0
+        panel_x = max(px + 8.0, min(px + pw - panel_w - 8.0, base_x + offset_x))
+        panel_y = max(py + header_h + 8.0, min(py + ph - footer_h - panel_h - 8.0, base_y + offset_y))
+        return panel_x, panel_y, panel_w, panel_h
 
     _PANEL_W = 920.0
     _PANEL_H = 624.0
@@ -71,7 +98,7 @@ class HoloShopOverlay:
         canvas.create_line(x + 6, y + 2, x + 36, y + 2, fill=palette.JEWEL_CORE if pulse > 0.8 else accent)
         canvas.create_line(x + w - 36, y + h - 2, x + w - 6, y + h - 2, fill=palette.JEWEL_CORE if pulse > 0.8 else accent)
         hits.add("shop_open", x, y, w, h)
-        label = f"◈  OPEN SKILL DECK  ·  ★ {campaign.jewels} TREASURY  ·  UPGRADE TREE  ◈"
+        label = f"◈  MERCHANT TREE  ·  ★ {campaign.jewels} TREASURY  ·  UPGRADE TREE  ◈"
         draw_fitted_text(
             canvas,
             x + w / 2,
@@ -121,6 +148,7 @@ class HoloShopOverlay:
         elapsed: float = 0.0,
         shop_open_anim: float = 1.0,
         shop_view: ShopTreeView | None = None,
+        shop_ui: ShopUiState | None = None,
     ) -> None:
         accent = palette.HUD_ACCENT
         dim = palette.HUD_DIM
@@ -169,7 +197,7 @@ class HoloShopOverlay:
         tree_left, tree_top, tree_w, tree_h = shop_tree_rect(px, py, pw, ph)
         hits.add("shop_tree_pan", tree_left, tree_top, tree_w, tree_h)
         nodes = skill_tree_nodes(campaign)
-        view = shop_view or ShopTreeView()
+        view = shop_ui.view if shop_ui is not None else (shop_view or ShopTreeView())
         fit = compute_fit_viewport(
             nodes,
             left=tree_left,
@@ -232,10 +260,9 @@ class HoloShopOverlay:
             py=py,
             pw=pw,
             ph=ph,
-            tree_top=tree_top,
-            tree_h=tree_h,
+            hits=hits,
             campaign=campaign,
-            hover_id=hover_id,
+            shop_ui=shop_ui,
             accent=accent,
             dim=dim,
             frame=frame,
@@ -244,7 +271,7 @@ class HoloShopOverlay:
         canvas.create_text(
             px + pw / 2,
             py + ph - 10,
-            text="Scroll or +/- zoom · drag background to pan · hover node for details · Esc closes",
+            text="Click a node for details · drag inspector header to move · scroll zoom · Esc closes",
             fill=dim,
             font=hp.FONT_SMALL,
         )
@@ -526,10 +553,9 @@ class HoloShopOverlay:
         py: float,
         pw: float,
         ph: float,
-        tree_top: float,
-        tree_h: float,
+        hits: MenuHitMap,
         campaign: CampaignState,
-        hover_id: str | None,
+        shop_ui: ShopUiState | None,
         accent: str,
         dim: str,
         frame: str,
@@ -537,30 +563,45 @@ class HoloShopOverlay:
         from gravity_ho_matey.gameplay.shop_catalog import shop_kind_from_hit
         from gravity_ho_matey.render.menu_ui import wrap_text_lines
 
-        footer_h = 44.0
-        panel_w = min(420.0, pw - 160.0)
-        panel_h = 112.0
-        panel_x = px + (pw - panel_w) * 0.5
-        panel_y = py + ph - footer_h - panel_h - 6.0
-        hp.draw_panel(canvas, panel_x, panel_y, panel_w, panel_h, frame=frame, accent=accent, fill="#0a1420")
-        hp.draw_panel_title(canvas, panel_x + 10, panel_y + 8, "NODE INSPECTOR", color=dim)
-
-        if not hover_id or not hover_id.startswith("shop_") or hover_id in (
-            "shop_zoom_in",
-            "shop_zoom_out",
-            "shop_zoom_fit",
-            "shop_tree_pan",
-        ):
-            canvas.create_text(
-                panel_x + panel_w / 2,
-                panel_y + panel_h * 0.55,
-                text="Hover a node for full details",
-                fill=dim,
-                font=hp.FONT_BODY,
-            )
+        if shop_ui is None:
+            return
+        selected = shop_ui.inspector_hit
+        if not selected or shop_kind_from_hit(selected) is None:
             return
 
-        kind = shop_kind_from_hit(hover_id)
+        panel_x, panel_y, panel_w, panel_h = self.inspector_default_rect(
+            px,
+            py,
+            pw,
+            ph,
+            offset_x=shop_ui.inspector_offset_x,
+            offset_y=shop_ui.inspector_offset_y,
+        )
+        drag_h = self._INSPECTOR_DRAG_H
+        hp.draw_panel(canvas, panel_x, panel_y, panel_w, panel_h, frame=frame, accent=accent, fill="#0a1420")
+        canvas.create_rectangle(
+            panel_x,
+            panel_y,
+            panel_x + panel_w,
+            panel_y + drag_h,
+            fill="#0e1828",
+            outline=accent,
+            width=1,
+        )
+        canvas.create_line(panel_x, panel_y + drag_h, panel_x + panel_w, panel_y + drag_h, fill=frame)
+        hp.draw_panel_title(canvas, panel_x + 10, panel_y + 5, "NODE INSPECTOR", color=accent)
+        canvas.create_text(
+            panel_x + panel_w - 10,
+            panel_y + drag_h * 0.5,
+            anchor="e",
+            text="drag",
+            fill=dim,
+            font=hp.FONT_SMALL,
+        )
+        hits.add("shop_inspector_drag", panel_x, panel_y, panel_w, drag_h)
+        hits.add("shop_inspector_panel", panel_x, panel_y + drag_h, panel_w, panel_h - drag_h)
+
+        kind = shop_kind_from_hit(selected)
         if kind is None:
             return
         nodes = skill_tree_nodes(campaign)
@@ -575,7 +616,7 @@ class HoloShopOverlay:
         price = campaign.upgrade_price(kind)
         action = shop_button_label(campaign, kind)
         inner_w = panel_w - 24.0
-        y = panel_y + 28.0
+        y = panel_y + drag_h + 10.0
         canvas.create_text(panel_x + 12, y, anchor="w", text=item.tag, fill=color, font=("Courier New", 12, "bold"))
         y += 16.0
         for line in wrap_text_lines(item.label, inner_w * 0.58, hp.FONT_BODY, max_lines=2):
@@ -583,7 +624,7 @@ class HoloShopOverlay:
             y += 13.0
         status_x = panel_x + panel_w * 0.52
         status_w = inner_w * 0.46
-        sy = panel_y + 28.0
+        sy = panel_y + drag_h + 10.0
         for line in wrap_text_lines(status, status_w, hp.FONT_BODY, max_lines=3):
             canvas.create_text(status_x, sy, anchor="w", text=line, fill=dim, font=hp.FONT_BODY)
             sy += 13.0

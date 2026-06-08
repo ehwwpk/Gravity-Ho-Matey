@@ -24,6 +24,26 @@ class TitleOverlayTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_progress()
 
+    def test_page_rail_shows_full_tab_labels(self) -> None:
+        root, canvas = _canvas()
+        overlay = TitleScreenOverlay()
+        campaign = CampaignState.new()
+        overlay.draw(
+            canvas,
+            page=TitlePage.WELCOME,
+            campaign=campaign,
+            solar_unlocked=True,
+            drift_unlocked=True,
+            elapsed=1.0,
+        )
+        texts = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
+        joined = " ".join(str(t) for t in texts if t)
+        for label in ("WELCOME", "MISSION", "CONTROLS", "COMBAT", "SELECT CHART", "MERCHANT TREE"):
+            self.assertIn(label, joined, msg=f"missing tab/shop label: {label}")
+        for bad in ("WELCO…", "WELCO...", "MISSI…", "SELEC…"):
+            self.assertNotIn(bad, joined)
+        root.destroy()
+
     def test_each_terminal_page_draws_without_error(self) -> None:
         root, canvas = _canvas()
         overlay = TitleScreenOverlay()

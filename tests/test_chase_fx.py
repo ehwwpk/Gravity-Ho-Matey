@@ -1,3 +1,4 @@
+import math
 import unittest
 import tkinter as tk
 
@@ -8,7 +9,7 @@ from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.levels.level_data import build_cove_run_level
 from gravity_ho_matey.render import palette
 from gravity_ho_matey.render.camera import CameraMode, ViewCamera, tactical_scale_for
-from gravity_ho_matey.render.chase_fx import draw_fog_glow, draw_speed_streaks
+from gravity_ho_matey.render.chase_fx import _boost_tap_strength, draw_chase_boost_jolt, draw_fog_glow, draw_speed_streaks
 from gravity_ho_matey.render.world_draw import gravity_field_color
 from gravity_ho_matey.render.asteroid_viz import collect_chase_asteroid_sprites
 from gravity_ho_matey.render.field_viz import gravity_emphasis
@@ -102,7 +103,10 @@ class ChaseSpeedTests(unittest.TestCase):
         root, canvas = _tk_canvas()
         camera = ViewCamera(mode=CameraMode.CHASE)
         camera.set_play_layout(54.0)
-        draw_speed_streaks(canvas, camera, world, anchor_x=480, anchor_y=500, ship_pos=world.ship.pos, ship_angle=world.ship.angle)
+        draw_speed_streaks(
+            canvas, camera, world, anchor_x=480, anchor_y=500,
+            display_angle=-math.pi / 2,
+        )
         lines = [i for i in canvas.find_all() if canvas.type(i) == "line"]
         self.assertGreater(len(lines), 0)
         root.destroy()
@@ -113,23 +117,122 @@ class ChaseSpeedTests(unittest.TestCase):
         root, canvas = _tk_canvas()
         camera = ViewCamera(mode=CameraMode.CHASE)
         camera.set_play_layout(54.0)
-        draw_speed_streaks(canvas, camera, world, anchor_x=480, anchor_y=500, ship_pos=world.ship.pos, ship_angle=world.ship.angle)
+        draw_speed_streaks(
+            canvas, camera, world, anchor_x=480, anchor_y=500,
+            display_angle=-math.pi / 2,
+        )
         self.assertEqual(canvas.find_all(), ())
         root.destroy()
 
-    def test_no_vertical_center_streak_artifact(self) -> None:
+    def test_no_streaks_during_boost(self) -> None:
+        world = build_cove_run_level()
+        world.ship.vel = Vec2(0, 220)
+        world.ship.boost_flash = 0.25
+        root, canvas = _tk_canvas()
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        draw_speed_streaks(
+            canvas, camera, world, anchor_x=480, anchor_y=500,
+            display_angle=-math.pi / 2,
+        )
+        self.assertEqual(canvas.find_all(), ())
+        root.destroy()
+
+    def test_streaks_follow_display_angle_not_slip_velocity(self) -> None:
+        """Drift velocity skew must not rotate streaks away from ship rig."""
+        world = build_cove_run_level()
+        world.ship.vel = Vec2(180, -40)
+        root, canvas = _tk_canvas()
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        draw_speed_streaks(
+            canvas, camera, world, anchor_x=480, anchor_y=500,
+            display_angle=-math.pi / 2,
+        )
+        for item in canvas.find_all():
+            if canvas.type(item) != "line":
+                continue
+            x1, y1, x2, y2 = canvas.coords(item)
+            dx, dy = x2 - x1, y2 - y1
+            if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+                continue
+            angle = math.degrees(math.atan2(dy, dx))
+            self.assertGreater(angle, 70.0)
+            self.assertLess(angle, 110.0)
+        root.destroy()
+
+    def test_streaks_trail_aft_of_ship_rig(self) -> None:
         world = build_cove_run_level()
         world.ship.vel = Vec2(0, 180)
         root, canvas = _tk_canvas()
         camera = ViewCamera(mode=CameraMode.CHASE)
         camera.set_play_layout(54.0)
-        draw_speed_streaks(canvas, camera, world, anchor_x=480, anchor_y=500, ship_pos=world.ship.pos, ship_angle=world.ship.angle)
-        for item in canvas.find_all():
-            if canvas.type(item) != "line":
-                continue
+        draw_speed_streaks(
+            canvas, camera, world, anchor_x=480, anchor_y=500,
+            display_angle=-math.pi / 2,
+        )
+        lines = [i for i in canvas.find_all() if canvas.type(i) == "line"]
+        self.assertGreater(len(lines), 0)
+        for item in lines:
             x1, y1, x2, y2 = canvas.coords(item)
-            if abs(x1 - x2) < 0.01 and abs(x1 - 480) < 2:
-                self.fail("vertical center streak should not be drawn")
+            self.assertGreater(max(y1, y2), 500.0)
+        root.destroy()
+
+
+class ChaseBoostJoltTests(unittest.TestCase):
+    def test_boost_tap_strength_peaks_at_fresh_flash(self) -> None:
+        max_flash = 0.35
+        self.assertAlmostEqual(_boost_tap_strength(max_flash, max_flash), 1.0)
+        window = max_flash * 0.22
+        self.assertAlmostEqual(_boost_tap_strength(max_flash - window, max_flash), 0.0, places=5)
+
+    def test_boost_jolt_draws_shock_and_sparks_behind_ship(self) -> None:
+        world = build_cove_run_level()
+        world.ship.boost_flash = world.config.boost_flash_seconds * 0.99
+        root, canvas = _tk_canvas()
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        camera.set_play_layout(54.0)
+        camera.boost_kick_y = 7.0
+        draw_chase_boost_jolt(
+            canvas,
+            anchor_x=480,
+            anchor_y=500,
+            display_angle=-math.pi / 2,
+            world=world,
+            camera=camera,
+            intensity=0.8,
+            elapsed=1.0,
+        )
+        lines = [i for i in canvas.find_all() if canvas.type(i) == "line"]
+        ovals = [i for i in canvas.find_all() if canvas.type(i) == "oval"]
+        self.assertGreater(len(lines), 2)
+        self.assertGreaterEqual(len(ovals), 2)
+        for item in lines:
+            x1, y1, x2, y2 = canvas.coords(item)
+            self.assertGreater(y1, 500)
+            self.assertGreater(y2, 500)
+        plume_colors = {palette.CHASE_BOOST_PLUME_MID.lower(), palette.CHASE_BOOST_PLUME_CORE.lower()}
+        for item in lines:
+            fill = canvas.itemcget(item, "fill").lower()
+            self.assertNotIn(fill, plume_colors)
+        root.destroy()
+
+    def test_boost_jolt_skips_when_not_thrusting(self) -> None:
+        world = build_cove_run_level()
+        world.ship.boost_flash = 0.0
+        root, canvas = _tk_canvas()
+        camera = ViewCamera(mode=CameraMode.CHASE)
+        draw_chase_boost_jolt(
+            canvas,
+            anchor_x=480,
+            anchor_y=500,
+            display_angle=-math.pi / 2,
+            world=world,
+            camera=camera,
+            intensity=0.0,
+            elapsed=0.0,
+        )
+        self.assertEqual(canvas.find_all(), ())
         root.destroy()
 
 

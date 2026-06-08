@@ -8,8 +8,9 @@ from gravity_ho_matey.gameplay.gravity import gravity_acceleration_at
 from gravity_ho_matey.gameplay.gravity_field import GravityField
 from gravity_ho_matey.gameplay.world import GameWorld
 from gravity_ho_matey.render import palette
-from gravity_ho_matey.render.camera import CHASE_SCREEN_HEADING, ViewCamera
+from gravity_ho_matey.render.camera import ViewCamera
 from gravity_ho_matey.render.chase_mirror import draw_rear_view_mirror
+from gravity_ho_matey.render.launch_countdown_overlay import accent_for_theme
 from gravity_ho_matey.render.chase_threat import predict_path_with_threats
 
 # Instrument tuning — sensitive enough to read small pulls at cruise speed.
@@ -19,31 +20,19 @@ _G_DANGER = 0.62
 _SLIP_WARN = 0.22
 
 
+from gravity_ho_matey.render.chase_rig import slip_angle_rad  # re-export for tests / tactical HUD
+
+
 def predict_ship_path(world: GameWorld, *, steps: int = 16, step_dt: float = 0.05) -> list[Vec2]:
     return [p for p, _ in predict_path_with_threats(world, steps=steps, step_dt=step_dt)]
 
 
-def slip_angle_rad(vel: Vec2, ship_angle: float) -> float:
-    if vel.length_sq() < 16.0:
-        return 0.0
-    forward = Vec2.from_angle(ship_angle)
-    right = forward.rotated(math.pi / 2.0)
-    fwd = vel.dot(forward)
-    lat = vel.dot(right)
-    return math.atan2(lat, max(abs(fwd), 10.0))
-
-
 def bank_angle_for_chase(vel: Vec2, ship_angle: float, *, turn_rate: float = 0.0, on_highway: bool = False) -> float:
-    slip = slip_angle_rad(vel, ship_angle)
-    slip_scale = 0.32 if on_highway else 0.72
-    turn_scale = 0.35 if on_highway else 1.0
-    turn_bank = max(-0.38, min(0.38, turn_rate * 0.00055 * turn_scale))
-    slip_bank = max(-0.32, min(0.32, slip * slip_scale))
-    return CHASE_SCREEN_HEADING + turn_bank + slip_bank
+    from gravity_ho_matey.render.chase_rig import chase_bank_display_angle
 
-
-def _hud_bank_rad(slip: float, turn_rate: float) -> float:
-    return max(-0.42, min(0.42, slip * 0.6 + turn_rate * 0.0005))
+    return chase_bank_display_angle(
+        vel, ship_angle, turn_rate=turn_rate, on_highway=on_highway,
+    )
 
 
 def ship_frame_gravity(world: GameWorld, ship_angle: float) -> tuple[float, float, float]:
@@ -126,11 +115,11 @@ def draw_xwing_cockpit_hud(
     vh = camera.viewport_height
     play_top = camera.play_hud_top
     horizon = camera.chase_horizon_y()
-    accent = palette.HELM_HUD_ACCENT
+    accent = accent_for_theme(world.config.level_theme)
     dim = palette.HELM_HUD_DIM
     vel = world.ship.vel
     slip = slip_angle_rad(vel, ship_angle) if vel.length_sq() >= 16.0 else 0.0
-    bank = _hud_bank_rad(slip, camera.turn_rate)
+    bank = camera.bank_display
     g_fwd, g_lat, g_total = ship_frame_gravity(world, ship_angle)
 
     _draw_banked_horizon(canvas, horizon, vw, bank, turn_rate=camera.turn_rate, accent=accent, dim=dim)
@@ -182,7 +171,7 @@ def _draw_banked_horizon(
 ) -> None:
     span = vw * 0.48
     cx = vw * 0.5
-    lift = math.sin(bank) * 18.0
+    lift = math.sin(bank) * 22.0
     canvas.create_line(cx - span, horizon_y + lift, cx + span, horizon_y - lift, fill=accent, width=2)
     tick_step = 56
     for i in range(-5, 6):

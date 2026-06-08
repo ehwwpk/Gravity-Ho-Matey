@@ -28,12 +28,22 @@ _FIGHTER_HULL_LOCAL: tuple[tuple[float, float], ...] = (
 )
 
 _ENGINE_LOCAL = (Vec2(-12.5, 3.6), Vec2(-12.5, -3.6))
+ENGINE_PORTS = _ENGINE_LOCAL
 _PANEL_LINES_LOCAL = (
     ((8.0, 0.0), (0.0, 6.5)),
     ((8.0, 0.0), (0.0, -6.5)),
     ((-2.0, 7.5), (-9.0, 4.0)),
     ((-2.0, -7.5), (-9.0, -4.0)),
 )
+
+
+def engine_port_screen(
+    pos: Vec2,
+    angle: float,
+    scale: float,
+    local: Vec2,
+) -> tuple[float, float]:
+    return _local_to_screen(pos, angle, scale, local)
 
 
 def fighter_hull_screen_points(pos: Vec2, angle: float, scale: float) -> list[tuple[float, float]]:
@@ -151,9 +161,11 @@ def draw_fighter_ship(
     rig: LightRig,
     boost_burst: float = 0.0,
     planetside_boost: bool = False,
+    chase_boost: bool = False,
     powerup_stacks: PowerUpStacks | None = None,
 ) -> None:
     stacks = powerup_stacks or PowerUpStacks()
+    heavy_boost = planetside_boost or chase_boost
     base_material = material_for("ship", theme=rig.theme, view=rig.view)
     material = _material_with_fittings(base_material, stacks)
     hull = fighter_hull_screen_points(pos, angle, scale)
@@ -213,13 +225,13 @@ def draw_fighter_ship(
     )
 
     if boost_burst > 0.0:
-        burst_norm = 0.55 if planetside_boost else 0.35
+        burst_norm = 0.55 if heavy_boost else 0.35
         burst_t = min(1.0, boost_burst / burst_norm)
-        flame_scale = 0.85 + (0.75 if planetside_boost else 0.35) * burst_t
+        flame_scale = 0.85 + (0.75 if heavy_boost else 0.35) * burst_t
         flame_len = (16.0 + 3.0 * stacks.get(PowerUpKind.THRUST_BOOST, 0)) * scale * flame_scale
-        width = max(2, int(2 + (4 if planetside_boost else 2) * burst_t + stacks.get(PowerUpKind.THRUST_BOOST, 0)))
+        width = max(2, int(2 + (4 if heavy_boost else 2) * burst_t + stacks.get(PowerUpKind.THRUST_BOOST, 0)))
         core = "#ffb060" if boost_burst > 0.12 else "#ff9048"
-        if planetside_boost:
+        if heavy_boost:
             core = "#ffd080" if boost_burst > 0.12 else "#ffb848"
         if stacks.get(PowerUpKind.THRUST_BOOST, 0):
             core = lerp_hex(core, palette.PICKUP_THRUST, 0.45)
@@ -228,7 +240,7 @@ def draw_fighter_ship(
             tail = (ex - forward.x * flame_len, ey - forward.y * flame_len)
             canvas.create_line(ex, ey, tail[0], tail[1], fill=core, width=width)
             canvas.create_line(ex, ey, tail[0], tail[1], fill="#fff0c0", width=max(1, width - 1))
-            if planetside_boost and burst_t > 0.25:
+            if heavy_boost and burst_t > 0.25:
                 outer_tail = (
                     ex - forward.x * flame_len * 1.35,
                     ey - forward.y * flame_len * 1.35,

@@ -164,17 +164,19 @@ def draw_well(
     *,
     scale: float = 1.0,
     rig: LightRig | None = None,
+    elapsed: float = 0.0,
 ) -> None:
     r = radius * scale
     theme = rig.theme if rig is not None else "cove"
     material = material_for(well_material_kind(kind), theme=theme)
     cx, cy = pos.x, pos.y
+    breathe = 1.0 + math.sin(elapsed * 2.4) * 0.04 if kind == "black_hole" else 1.0
     if kind == "black_hole":
         ring_fracs = _BLACK_HOLE_RING_FRACS
     else:
         ring_fracs = _WELL_RING_FRACS
     for i, frac in enumerate(ring_fracs):
-        ring = r * frac
+        ring = r * frac * breathe
         width = 2 if (kind == "black_hole" and (i < 3 or frac >= 0.58)) or frac >= 0.72 else 1
         if rig is not None:
             _draw_lit_ring_oval(canvas, cx, cy, ring, rig, material, width)
@@ -230,6 +232,7 @@ def draw_ship(
     *,
     boost_burst: float = 0.0,
     planetside_boost: bool = False,
+    chase_boost: bool = False,
     invuln: float = 0.0,
     elapsed: float = 0.0,
     scale: float = 1.0,
@@ -248,20 +251,12 @@ def draw_ship(
             rig=rig,
             boost_burst=boost_burst,
             planetside_boost=planetside_boost,
+            chase_boost=chase_boost,
             powerup_stacks=powerup_stacks,
         )
     else:
         draw_fighter_ship_fallback(canvas, pos, angle, scale=scale)
     _ = boost_energy
-
-
-def draw_velocity_trail(canvas: tk.Canvas, ship_pos: Vec2, ship_vel: Vec2, screen_pos: Vec2) -> None:
-    if ship_vel.length_sq() <= 25.0:
-        return
-    tail_world = ship_pos - ship_vel.normalized() * min(48.0, ship_vel.length() * 0.18)
-    dx = screen_pos.x - (ship_pos.x - tail_world.x)
-    dy = screen_pos.y - (ship_pos.y - tail_world.y)
-    canvas.create_line(screen_pos.x - dx, screen_pos.y - dy, screen_pos.x, screen_pos.y, fill="#66e8ff", width=2)
 
 
 def world_playfield_height(world: GameWorld, hud_top: int) -> int:

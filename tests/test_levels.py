@@ -1,4 +1,9 @@
-from gravity_ho_matey.gameplay.chart_bounds import CHART_SECTOR_MARGIN_FRAC, COVE_CHART_MARGIN_FRAC
+from gravity_ho_matey.gameplay.chart_bounds import (
+    CHART_RIM_EXPAND_L12,
+    CHART_SECTOR_MARGIN_FRAC,
+    COVE_CHART_MARGIN_FRAC,
+    COVE_OOB_PLACEMENT_MARGIN_FRAC,
+)
 from gravity_ho_matey.levels.level_registry import LEVEL_BUILDERS, build_level
 
 
@@ -68,7 +73,8 @@ def test_cove_chart_rim_mediums_sit_just_outside_chart() -> None:
     for asteroid in rim:
         assert not ship_in_chart(asteroid.pos, world.config)
         dist = chart_oob_distance(asteroid.pos, world.config)
-        assert 8.0 <= dist <= 40.0
+        # Rim pebbles stay on the pre-expand hazard ring; play chart grew outward ~12.5%.
+        assert 2.0 <= dist <= 40.0
 
 
 def test_solar_level_is_open_space_layout() -> None:
@@ -117,6 +123,28 @@ def test_solar_level_has_patrol_enemies() -> None:
     assert any(enemy.alive for enemy in world.enemies)
 
 
+def test_cove_play_chart_wider_than_hazard_placement_rim() -> None:
+    from dataclasses import replace
+
+    from gravity_ho_matey.core.vector import Vec2
+    from gravity_ho_matey.gameplay.chart_bounds import (
+        COVE_OOB_PLACEMENT_MARGIN_FRAC,
+        chart_limits,
+        chart_limits_for_margin_frac,
+        ship_in_chart,
+    )
+
+    world = build_level("cove")
+    x0, _, x1, _ = chart_limits(world.config)
+    px0, _, px1, _ = chart_limits_for_margin_frac(world.config, COVE_OOB_PLACEMENT_MARGIN_FRAC)
+    assert x0 < px0
+    assert x1 > px1
+    probe = Vec2(px0 - 4.0, world.config.height * 0.5)
+    old_cfg = replace(world.config, chart_margin_frac=COVE_OOB_PLACEMENT_MARGIN_FRAC)
+    assert not ship_in_chart(probe, old_cfg)
+    assert ship_in_chart(probe, world.config)
+
+
 def test_chart_sectors_use_expanded_margin_on_levels_one_and_two() -> None:
     cove = build_level("cove")
     solar = build_level("solar")
@@ -124,6 +152,8 @@ def test_chart_sectors_use_expanded_margin_on_levels_one_and_two() -> None:
     assert cove.config.chart_margin_frac == COVE_CHART_MARGIN_FRAC
     assert solar.config.chart_margin_frac == CHART_SECTOR_MARGIN_FRAC
     assert drift.config.chart_margin_frac != CHART_SECTOR_MARGIN_FRAC
+    assert abs(COVE_CHART_MARGIN_FRAC / COVE_OOB_PLACEMENT_MARGIN_FRAC - CHART_RIM_EXPAND_L12) < 1e-6
+    assert abs(CHART_SECTOR_MARGIN_FRAC / (COVE_OOB_PLACEMENT_MARGIN_FRAC - 0.05) - CHART_RIM_EXPAND_L12) < 1e-6
 
 
 def test_level_registry_matches_builders() -> None:
