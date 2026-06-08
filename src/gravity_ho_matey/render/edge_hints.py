@@ -61,18 +61,6 @@ def draw_edge_hints(
         tag = "XT" if world.finish_unlocked else "PD"
         color = palette.GATE_OPEN if world.finish_unlocked else palette.RIFT_PAD_COOLDOWN
         _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top)
-        from gravity_ho_matey.render.wave_ingress_viz import draw_wave_ingress_edge_hints
-
-        draw_wave_ingress_edge_hints(
-            hints,
-            camera,
-            world,
-            ship,
-            ship_angle,
-            vw=vw,
-            vh=vh,
-            play_top=play_top,
-        )
     elif world.config.brood_moon_mission and world.brood_moon is not None:
         from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
 
@@ -223,6 +211,21 @@ def draw_edge_hints(
                         font_size=10,
                     )
             return
+
+    if world.config.protection_mission and world.protection_hostiles_alive() > 0:
+        from gravity_ho_matey.render.offscreen_hostile_hints import append_offscreen_hostile_hints
+
+        append_offscreen_hostile_hints(
+            hints,
+            camera,
+            world,
+            ship,
+            ship_angle,
+            vw=vw,
+            vh=vh,
+            play_top=play_top,
+            margin=margin,
+        )
 
     hints.sort(key=lambda item: item[0])
     for angle, tag, color in hints[:8]:

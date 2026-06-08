@@ -282,15 +282,6 @@ class TacticalViewRenderer:
                     elapsed=world.elapsed,
                     rig=rig,
                 )
-        from gravity_ho_matey.render.wave_ingress_viz import draw_wave_ingress_tactical
-
-        draw_wave_ingress_tactical(
-            canvas,
-            world,
-            camera,
-            hud_top=float(hud_top),
-            elapsed=world.elapsed,
-        )
         if brood and world.mega_squid is not None and world.mega_squid.alive:
             from gravity_ho_matey.render.squid_boss_viz import draw_mega_squid_tactical
 
