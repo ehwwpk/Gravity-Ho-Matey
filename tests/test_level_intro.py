@@ -42,10 +42,14 @@ class LevelIntroRegistryTests(unittest.TestCase):
         spec = intro_spec_for("brood_moon")
         self.assertIsNotNone(spec)
         assert spec is not None
-        self.assertEqual(spec.asset_stem, "cove")
+        self.assertEqual(spec.asset_stem, "brood_moon")
         self.assertEqual(spec.header_tag, "BROOD MOON · CAPTAIN'S LOG")
-        if resolve_intro_asset(spec) is not None:
-            self.assertTrue(has_level_intro("brood_moon"))
+        path = resolve_intro_asset(spec)
+        if path is None:
+            self.skipTest("brood_moon.gif not dropped yet")
+        self.assertTrue(path.is_file())
+        self.assertEqual(path.name, "brood_moon.gif")
+        self.assertTrue(has_level_intro("brood_moon"))
 
     def test_rift_intro_registered(self) -> None:
         spec = intro_spec_for("rift")

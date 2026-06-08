@@ -45,7 +45,7 @@ LEVEL_INTROS: dict[str, LevelIntroSpec] = {
         header_tag="SIEGE LINE · CAPTAIN'S LOG",
     ),
     "brood_moon": LevelIntroSpec(
-        asset_stem="cove",
+        asset_stem="brood_moon",
         header_tag="BROOD MOON · CAPTAIN'S LOG",
     ),
 }

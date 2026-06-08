@@ -11,8 +11,9 @@ CHART_BOUNDS_TOAST_SECONDS = 1.6
 CHART_BOUNDS_MARGIN_FRAC = 0.05
 # Levels 1–2 (Cove, Solar): +10% outward breathing room beyond base margin.
 _CHART_SECTOR_BASE_FRAC = CHART_BOUNDS_MARGIN_FRAC * 1.10
-# Playtest widen L1/L2 — chart rim +12.5% vs prior (wells/rocks/beacons stay put).
-CHART_RIM_EXPAND_L12 = 1.125
+# Playtest widen L1/L2 — chart rim expanded vs pre-playtest base (wells/rocks/beacons stay put).
+# Stacked: sector base +10%, then +12.5%, then +10% playtest follow-up ≈ +37% total vs first L1/L2 margins.
+CHART_RIM_EXPAND_L12 = 1.2375
 CHART_SECTOR_MARGIN_FRAC = _CHART_SECTOR_BASE_FRAC * CHART_RIM_EXPAND_L12
 # Level 1 Cove play chart — sector base + another 5% per side, then L12 expand.
 COVE_CHART_MARGIN_FRAC = (_CHART_SECTOR_BASE_FRAC + CHART_BOUNDS_MARGIN_FRAC) * CHART_RIM_EXPAND_L12
@@ -31,6 +32,11 @@ CHART_EDGE_HINT_START_FRAC = 0.14
 CHART_EDGE_HINT_FULL_FRAC = 0.045
 CHART_EDGE_HINT_START_MIN = 85.0
 CHART_EDGE_HINT_FULL_MIN = 28.0
+# L1/L2 — chase dotted rim only when hugging the true boundary (not mid-chart drift).
+CHART_EDGE_HINT_START_FRAC_L12 = 0.085
+CHART_EDGE_HINT_FULL_FRAC_L12 = 0.032
+CHART_EDGE_HINT_START_MIN_L12 = 58.0
+CHART_EDGE_HINT_FULL_MIN_L12 = 20.0
 
 
 class ChartBoundsToast(Enum):
@@ -170,8 +176,18 @@ def chart_bounds_toast_copy(
 def chart_edge_hint_distances(config: WorldConfig) -> tuple[float, float]:
     """Return (fade_in_start, full_strength) distances from a chart edge."""
     span = min(config.width, config.height)
-    start = max(CHART_EDGE_HINT_START_MIN, span * CHART_EDGE_HINT_START_FRAC)
-    full = max(CHART_EDGE_HINT_FULL_MIN, span * CHART_EDGE_HINT_FULL_FRAC)
+    if config.level_theme in ("cove", "solar"):
+        start_frac = CHART_EDGE_HINT_START_FRAC_L12
+        full_frac = CHART_EDGE_HINT_FULL_FRAC_L12
+        start_min = CHART_EDGE_HINT_START_MIN_L12
+        full_min = CHART_EDGE_HINT_FULL_MIN_L12
+    else:
+        start_frac = CHART_EDGE_HINT_START_FRAC
+        full_frac = CHART_EDGE_HINT_FULL_FRAC
+        start_min = CHART_EDGE_HINT_START_MIN
+        full_min = CHART_EDGE_HINT_FULL_MIN
+    start = max(start_min, span * start_frac)
+    full = max(full_min, span * full_frac)
     return start, full
 
 

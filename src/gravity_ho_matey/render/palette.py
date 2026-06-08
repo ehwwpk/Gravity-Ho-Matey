@@ -72,12 +72,13 @@ CHASE_STAR_FAR = "#3a5570"
 CHASE_STAR_NEAR = "#8ec8ff"
 CHASE_STAR_GLOW = "#4a90c8"
 CHASE_SPEED_STREAK = "#8a6040"
-CHASE_SPEED_STREAK_BOOST = "#ff9040"
-# Chase boost tap — warm shock + exhaust (not cyan HUD blues)
-CHASE_BOOST_SHOCK = ("#ff4018", "#ff6828", "#ff8838")
-CHASE_BOOST_SPARK = ("#fff0c0", "#ffb060", "#ff6020")
-CHASE_BOOST_PLUME_CORE = "#fff8d0"
-CHASE_BOOST_PLUME_MID = "#ff7820"
+CHASE_SPEED_STREAK_BOOST = "#b89868"
+# Chase boost tap — warm amber shock + exhaust (muted; motion over saturation)
+CHASE_BOOST_SHOCK = ("#504038", "#706048", "#988868")
+CHASE_BOOST_SPARK = ("#fff4e0", "#e8c898", "#c8a878")
+CHASE_BOOST_PLUME_CORE = "#fff0d8"
+CHASE_BOOST_PLUME_MID = "#d8a868"
+CHASE_BOOST_PLUME_OUTER = "#806848"
 CHASE_FOG_BLACK_HOLE = ("#1a0830", "#2a1050", "#4a1880", "#6b30a8", "#8b40cc")
 CHASE_FOG_PLANET = ("#1a2840", "#2a4870", "#3a68a0", "#6bc0ff")
 CHASE_FOG_WELL = ("#2a1040", "#4a2080", "#7a40b0", "#c58cff")

@@ -77,7 +77,7 @@ _PAGE_LABELS: dict[TitlePage, str] = {
     TitlePage.MISSION: "MISSION",
     TitlePage.HELM: "CONTROLS",
     TitlePage.COMBAT: "COMBAT",
-    TitlePage.DEPLOY: "SELECT CHART",
+    TitlePage.DEPLOY: "SELECT LEVEL",
 }
 
 
@@ -419,7 +419,7 @@ class TitleScreenOverlay:
             btn_y,
             btn_w,
             btn_h,
-            "SELECT CHART →",
+            "SELECT LEVEL →",
             accent=accent,
             dim=dim,
             frame=frame,
@@ -579,7 +579,7 @@ class TitleScreenOverlay:
         if page is TitlePage.DEPLOY:
             center = "Select a chart · Enter confirms · wheel scrolls list · B opens Holo Bazaar"
         elif page is TitlePage.WELCOME:
-            center = "Open Holo Bazaar to trade · Select Chart to launch"
+            center = "Open Holo Bazaar to trade · Select Level to launch"
         else:
             center = "Use PREV / NEXT tabs · B opens Holo Bazaar"
         draw_fitted_text(

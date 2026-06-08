@@ -60,10 +60,17 @@ def test_cove_is_light_intro_asteroid_field() -> None:
 
 
 def test_cove_chart_rim_mediums_sit_just_outside_chart() -> None:
+    from dataclasses import replace
+
     from gravity_ho_matey.gameplay.asteroid_tiers import AsteroidTier
-    from gravity_ho_matey.gameplay.chart_bounds import chart_limits, chart_oob_distance, ship_in_chart
+    from gravity_ho_matey.gameplay.chart_bounds import (
+        COVE_OOB_PLACEMENT_MARGIN_FRAC,
+        chart_oob_distance,
+        ship_in_chart,
+    )
 
     world = build_level("cove")
+    placement_cfg = replace(world.config, chart_margin_frac=COVE_OOB_PLACEMENT_MARGIN_FRAC)
     rim = [
         a
         for a in world.asteroids
@@ -71,10 +78,10 @@ def test_cove_chart_rim_mediums_sit_just_outside_chart() -> None:
     ]
     assert len(rim) == 4
     for asteroid in rim:
-        assert not ship_in_chart(asteroid.pos, world.config)
+        assert not ship_in_chart(asteroid.pos, placement_cfg)
         dist = chart_oob_distance(asteroid.pos, world.config)
-        # Rim pebbles stay on the pre-expand hazard ring; play chart grew outward ~12.5%.
-        assert 2.0 <= dist <= 40.0
+        # Hazard rim frozen; expanded play chart may overlap slightly.
+        assert -2.0 <= dist <= 18.0
 
 
 def test_solar_level_is_open_space_layout() -> None:
@@ -154,6 +161,25 @@ def test_chart_sectors_use_expanded_margin_on_levels_one_and_two() -> None:
     assert drift.config.chart_margin_frac != CHART_SECTOR_MARGIN_FRAC
     assert abs(COVE_CHART_MARGIN_FRAC / COVE_OOB_PLACEMENT_MARGIN_FRAC - CHART_RIM_EXPAND_L12) < 1e-6
     assert abs(CHART_SECTOR_MARGIN_FRAC / (COVE_OOB_PLACEMENT_MARGIN_FRAC - 0.05) - CHART_RIM_EXPAND_L12) < 1e-6
+
+
+def test_l12_play_chart_gives_more_room_than_pre_expand_rim() -> None:
+    """Play chart must extend well past the frozen hazard-placement rim on both L1/L2."""
+    from gravity_ho_matey.gameplay.chart_bounds import chart_limits, chart_limits_for_margin_frac
+
+    for level_id in ("cove", "solar"):
+        world = build_level(level_id)
+        x0, y0, x1, y1 = chart_limits(world.config)
+        px0, py0, px1, py1 = chart_limits_for_margin_frac(
+            world.config, COVE_OOB_PLACEMENT_MARGIN_FRAC if level_id == "cove" else (COVE_OOB_PLACEMENT_MARGIN_FRAC - 0.05)
+        )
+        assert x0 < px0
+        assert y0 < py0
+        assert x1 > px1
+        assert y1 > py1
+        # At least ~10 world units of grace beyond the old rim on every axis (Cove L1).
+        assert px0 - x0 >= 10.0
+        assert x1 - px1 >= 10.0
 
 
 def test_level_registry_matches_builders() -> None:

@@ -26,10 +26,10 @@ CHASE_VELOCITY_LAG_LATERAL_MAX = 8.0
 # Widen chase HFOV under boost / high speed (multiplier on focal: eff = base / (1 + boost)).
 CHASE_FOV_BOOST_MAX = 0.065
 # Smooth lateral scale punch — replaces binary 1.12 thrust snap.
-CHASE_THRUST_PUNCH_MAX = 1.14
+CHASE_THRUST_PUNCH_MAX = 1.10
 # Screen-space kick on boost tap (decays quickly; anchor stays fixed).
-CHASE_BOOST_KICK_Y = 7.0
-CHASE_BOOST_KICK_X = 2.5
+CHASE_BOOST_KICK_Y = 5.5
+CHASE_BOOST_KICK_X = 2.0
 
 # Follow-cam: beacons read smaller at depth — boost visuals + pickup forgiveness.
 CHASE_BEACON_VISUAL_BOOST = 1.38
@@ -260,7 +260,7 @@ class ViewCamera:
         elif speed_norm > 0.72:
             cruise = (speed_norm - 0.72) / 0.28
             target_punch = 1.0 + (CHASE_THRUST_PUNCH_MAX - 1.0) * 0.12 * cruise
-        punch_blend = 1.0 - math.exp(-22.0 * step)
+        punch_blend = 1.0 - math.exp(-16.0 * step)
         self._thrust_punch += (target_punch - self._thrust_punch) * punch_blend
         self.chase_thrust_boost = self._thrust_punch
 
@@ -277,17 +277,17 @@ class ViewCamera:
             self.boost_kick_y = CHASE_BOOST_KICK_Y
             self.boost_kick_x = max(
                 -CHASE_BOOST_KICK_X,
-                min(CHASE_BOOST_KICK_X, self.turn_rate * 0.028),
+                min(CHASE_BOOST_KICK_X, self.turn_rate * 0.022),
             )
-            # Snap presentation layers on tap so first rendered frame reads the punch.
             energy_mix = 0.62 + 0.38 * max(0.0, min(1.0, boost_energy))
-            self._thrust_punch = 1.0 + (CHASE_THRUST_PUNCH_MAX - 1.0) * energy_mix
+            tap_punch = 1.0 + (CHASE_THRUST_PUNCH_MAX - 1.0) * energy_mix
+            self._thrust_punch = max(self._thrust_punch, 1.0 + (tap_punch - 1.0) * 0.72)
             self.fov_boost = max(
                 self.fov_boost,
-                CHASE_FOV_BOOST_MAX * 0.42 * energy_mix,
+                CHASE_FOV_BOOST_MAX * 0.34 * energy_mix,
             )
         else:
-            kick_decay = 1.0 - math.exp(-18.0 * step)
+            kick_decay = 1.0 - math.exp(-13.0 * step)
             self.boost_kick_y *= 1.0 - kick_decay
             self.boost_kick_x *= 1.0 - kick_decay
 

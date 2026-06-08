@@ -141,14 +141,16 @@ class BroodMoonLevelTests(unittest.TestCase):
         self.assertEqual(SURFACE_WRAP_WIDTH, 9240)
         self.assertEqual(SEAL_TRAVEL_DISTANCE, SURFACE_WRAP_WIDTH)
 
-    def test_transition_asset_falls_back_to_cove(self) -> None:
+    def test_transition_assets_resolve_brood_gifs(self) -> None:
         from gravity_ho_matey.gameplay.brood_moon_mission import resolve_transition_asset
 
         landing = resolve_transition_asset("brood_moon_landing")
         ascent = resolve_transition_asset("brood_moon_ascent")
-        for path in (landing, ascent):
-            if path is not None:
-                self.assertIn(path.name, ("cove.gif", "cove.png", "brood_moon_landing.gif", "brood_moon_landing.png", "brood_moon_ascent.gif", "brood_moon_ascent.png"))
+        self.assertIsNotNone(landing)
+        self.assertIsNotNone(ascent)
+        assert landing is not None and ascent is not None
+        self.assertEqual(landing.name, "brood_moon_landing.gif")
+        self.assertEqual(ascent.name, "brood_moon_ascent.gif")
 
     def test_layout_swap_clears_projectiles(self) -> None:
         from gravity_ho_matey.gameplay.entities import Projectile

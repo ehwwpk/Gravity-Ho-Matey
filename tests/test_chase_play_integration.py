@@ -41,7 +41,9 @@ class ChasePlayIntegrationTests(unittest.TestCase):
         host.input_state.tap_shift()
         scene.update(host, 0.016)
         self.assertGreater(scene.world.ship.boost_flash, 0.0)
-        self.assertAlmostEqual(scene.camera.boost_kick_y, 7.0, places=1)
+        from gravity_ho_matey.render.camera import CHASE_BOOST_KICK_Y
+
+        self.assertAlmostEqual(scene.camera.boost_kick_y, CHASE_BOOST_KICK_Y, places=1)
         kick_after_first = scene.camera.boost_kick_y
         host.input_state.release_shift()
         scene.update(host, 0.016)

@@ -227,25 +227,43 @@ def draw_fighter_ship(
     if boost_burst > 0.0:
         burst_norm = 0.55 if heavy_boost else 0.35
         burst_t = min(1.0, boost_burst / burst_norm)
-        flame_scale = 0.85 + (0.75 if heavy_boost else 0.35) * burst_t
-        flame_len = (16.0 + 3.0 * stacks.get(PowerUpKind.THRUST_BOOST, 0)) * scale * flame_scale
-        width = max(2, int(2 + (4 if heavy_boost else 2) * burst_t + stacks.get(PowerUpKind.THRUST_BOOST, 0)))
-        core = "#ffb060" if boost_burst > 0.12 else "#ff9048"
-        if heavy_boost:
-            core = "#ffd080" if boost_burst > 0.12 else "#ffb848"
+        if chase_boost:
+            flame_scale = 0.78 + 0.55 * burst_t
+            flame_len = (14.0 + 2.0 * stacks.get(PowerUpKind.THRUST_BOOST, 0)) * scale * flame_scale
+            width = max(1, int(1 + 2 * burst_t + stacks.get(PowerUpKind.THRUST_BOOST, 0)))
+            core = "#f0d090" if boost_burst > 0.12 else "#e0c078"
+            hot = "#fff8e8"
+            outer = palette.CHASE_BOOST_PLUME_OUTER
+            bloom_outline = palette.CHASE_BOOST_SHOCK[2]
+        else:
+            flame_scale = 0.85 + (0.75 if heavy_boost else 0.35) * burst_t
+            flame_len = (16.0 + 3.0 * stacks.get(PowerUpKind.THRUST_BOOST, 0)) * scale * flame_scale
+            width = max(2, int(2 + (4 if heavy_boost else 2) * burst_t + stacks.get(PowerUpKind.THRUST_BOOST, 0)))
+            core = "#ffb060" if boost_burst > 0.12 else "#ff9048"
+            if heavy_boost:
+                core = "#ffd080" if boost_burst > 0.12 else "#ffb848"
+            hot = "#fff0c0"
+            outer = "#ff6020"
+            bloom_outline = "#ff9040"
         if stacks.get(PowerUpKind.THRUST_BOOST, 0):
-            core = lerp_hex(core, palette.PICKUP_THRUST, 0.45)
+            core = lerp_hex(core, palette.PICKUP_THRUST, 0.35 if chase_boost else 0.45)
         for eng in _ENGINE_LOCAL:
             ex, ey = _local_to_screen(pos, angle, scale, eng)
             tail = (ex - forward.x * flame_len, ey - forward.y * flame_len)
+            if chase_boost and burst_t > 0.2:
+                outer_tail = (
+                    ex - forward.x * flame_len * 1.22,
+                    ey - forward.y * flame_len * 1.22,
+                )
+                canvas.create_line(ex, ey, outer_tail[0], outer_tail[1], fill=outer, width=1)
             canvas.create_line(ex, ey, tail[0], tail[1], fill=core, width=width)
-            canvas.create_line(ex, ey, tail[0], tail[1], fill="#fff0c0", width=max(1, width - 1))
-            if heavy_boost and burst_t > 0.25:
+            canvas.create_line(ex, ey, tail[0], tail[1], fill=hot, width=max(1, width - 1))
+            if heavy_boost and burst_t > 0.25 and not chase_boost:
                 outer_tail = (
                     ex - forward.x * flame_len * 1.35,
                     ey - forward.y * flame_len * 1.35,
                 )
-                canvas.create_line(ex, ey, outer_tail[0], outer_tail[1], fill="#ff6020", width=max(1, width - 1))
+                canvas.create_line(ex, ey, outer_tail[0], outer_tail[1], fill=outer, width=max(1, width - 1))
                 bloom_r = (5.0 + 4.0 * burst_t) * scale
                 canvas.create_oval(
                     ex - bloom_r,
@@ -253,7 +271,18 @@ def draw_fighter_ship(
                     ex + bloom_r,
                     ey + bloom_r,
                     fill="",
-                    outline="#ff9040",
+                    outline=bloom_outline,
+                    width=1,
+                )
+            elif chase_boost and burst_t > 0.18:
+                bloom_r = (3.0 + 2.5 * burst_t) * scale
+                canvas.create_oval(
+                    ex - bloom_r,
+                    ey - bloom_r * 0.55,
+                    ex + bloom_r,
+                    ey + bloom_r * 0.65,
+                    fill="",
+                    outline=bloom_outline,
                     width=1,
                 )
 

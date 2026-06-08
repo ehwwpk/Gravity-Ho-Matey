@@ -217,10 +217,11 @@ def draw_speed_streaks(
 
 
 def _boost_tap_strength(flash: float, max_flash: float) -> float:
-    """Early-boost window for shock/spark punch — strongest right after Shift tap."""
-    window = max(0.05, max_flash * 0.22)
+    """Early-boost window for shock/spark punch — eased ramp, not a hard snap."""
+    window = max(0.05, max_flash * 0.34)
     elapsed = max(0.0, max_flash - flash)
-    return max(0.0, 1.0 - elapsed / window)
+    t = max(0.0, 1.0 - elapsed / window)
+    return t * t * (3.0 - 2.0 * t)
 
 
 def draw_chase_boost_jolt(
@@ -250,51 +251,52 @@ def draw_chase_boost_jolt(
     forward = Vec2.from_angle(display_angle)
     aft_center_x = anchor_x - forward.x * 10.0 * ship_scale
     aft_center_y = anchor_y - forward.y * 10.0 * ship_scale
+    sustain = min(1.0, flash / max_flash)
 
-    if tap > 0.12:
-        outer_r = (18.0 + tap * 26.0 + kick * 14.0) * ship_scale
-        inner_r = outer_r * 0.55
-        canvas.create_oval(
-            aft_center_x - outer_r,
-            aft_center_y - outer_r * 0.62,
-            aft_center_x + outer_r,
-            aft_center_y + outer_r * 0.62,
-            fill="#ff5028",
-            outline="",
-        )
-        canvas.create_oval(
-            aft_center_x - inner_r,
-            aft_center_y - inner_r * 0.58,
-            aft_center_x + inner_r,
-            aft_center_y + inner_r * 0.58,
-            fill="#ff9040",
-            outline="",
+    # Sustained exhaust wisps — thin lines for the whole boost, not just tap.
+    right = forward.rotated(math.pi / 2.0)
+    wisp_count = int(4 + sustain * 6 + intensity * 2)
+    for i in range(wisp_count):
+        fan = (i / max(1, wisp_count - 1) - 0.5) * 0.85
+        lateral = fan * (14.0 + sustain * 10.0) * ship_scale
+        sx = aft_center_x + right.x * lateral
+        sy = aft_center_y + right.y * lateral * 0.35
+        wisp_len = (14.0 + sustain * 22.0 + tap * 8.0) * ship_scale
+        color = palette.CHASE_BOOST_SPARK[1 + (i % 2)]
+        canvas.create_line(
+            sx,
+            sy,
+            sx - forward.x * wisp_len,
+            sy - forward.y * wisp_len,
+            fill=color,
+            width=1,
         )
 
-    if tap > 0.08:
+    if tap > 0.06:
         for ring, color in enumerate(palette.CHASE_BOOST_SHOCK):
-            spread = (14.0 + tap * (28.0 + ring * 10.0) + kick * 16.0) * ship_scale
+            spread = (10.0 + tap * (20.0 + ring * 8.0) + kick * 10.0) * ship_scale
             canvas.create_oval(
                 aft_center_x - spread,
                 aft_center_y - spread * 0.62,
                 aft_center_x + spread,
                 aft_center_y + spread * 0.62,
+                fill="",
                 outline=color,
-                width=3 - ring,
+                width=2 - ring,
             )
 
-    spark_count = int(5 + tap * 9 + intensity * 3)
+    spark_count = int(4 + tap * 7 + intensity * 2)
     for i in range(spark_count):
-        fan = (i / max(1, spark_count - 1) - 0.5) * 1.1
+        fan = (i / max(1, spark_count - 1) - 0.5) * 1.0
         spread_angle = display_angle + math.pi + fan
-        dist = (10.0 + (i * 13) % 22 + tap * 18.0) * ship_scale
+        dist = (8.0 + (i * 11) % 18 + tap * 12.0) * ship_scale
         sx = aft_center_x + math.cos(spread_angle) * dist * 0.35
         sy = aft_center_y + math.sin(spread_angle) * dist * 0.35
-        spark_len = (8.0 + tap * 14.0 + kick * 8.0) * ship_scale
+        spark_len = (6.0 + tap * 10.0 + kick * 5.0) * ship_scale
         ex = sx - forward.x * spark_len
         ey = sy - forward.y * spark_len
         color = palette.CHASE_BOOST_SPARK[i % len(palette.CHASE_BOOST_SPARK)]
-        canvas.create_line(sx, sy, ex, ey, fill=color, width=2 if tap > 0.35 else 1)
+        canvas.create_line(sx, sy, ex, ey, fill=color, width=1)
 
 
 def draw_engine_bloom(
@@ -379,8 +381,8 @@ def draw_boost_pressure(
     w = camera.viewport_width
     h = camera.viewport_height
     top = camera.play_hud_top
-    band = int(6 + chase_intensity * 14)
-    colors = ("#1a0808", "#120606", "#0a0404")
+    band = int(5 + chase_intensity * 11)
+    colors = ("#081018", "#060c14", "#040810")
     for i, color in enumerate(colors):
         inset = band * (i + 1)
         canvas.create_rectangle(0, top, inset, h, fill=color, outline="")

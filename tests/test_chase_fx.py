@@ -183,7 +183,7 @@ class ChaseBoostJoltTests(unittest.TestCase):
     def test_boost_tap_strength_peaks_at_fresh_flash(self) -> None:
         max_flash = 0.35
         self.assertAlmostEqual(_boost_tap_strength(max_flash, max_flash), 1.0)
-        window = max_flash * 0.22
+        window = max_flash * 0.34
         self.assertAlmostEqual(_boost_tap_strength(max_flash - window, max_flash), 0.0, places=5)
 
     def test_boost_jolt_draws_shock_and_sparks_behind_ship(self) -> None:
