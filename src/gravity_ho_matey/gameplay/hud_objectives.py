@@ -81,6 +81,35 @@ def objective_counters_for_world(world: GameWorld) -> tuple[HudObjectiveCounter,
             )
         )
 
+    if world.config.expedition_mission and world.expedition is not None:
+        from gravity_ho_matey.gameplay.expedition_mission import (
+            ExpeditionPhase,
+            expedition_fuel_loaded,
+            expedition_hostiles_cleared,
+        )
+        from gravity_ho_matey.levels.comet_fuel_layout import EXPEDITION_SQUID_COUNT, FUEL_NODES_REQUIRED
+
+        exp = world.expedition
+        if exp.phase is ExpeditionPhase.ON_FOOT:
+            hostiles_left = exp.hostiles_remaining
+            counters.append(
+                HudObjectiveCounter(
+                    label="HOSTILES",
+                    remaining=hostiles_left,
+                    total=EXPEDITION_SQUID_COUNT,
+                    complete=expedition_hostiles_cleared(exp),
+                )
+            )
+            fuel_left = max(0, FUEL_NODES_REQUIRED - exp.fuel_nodes_loaded)
+            counters.append(
+                HudObjectiveCounter(
+                    label="FUEL LOAD",
+                    remaining=fuel_left,
+                    total=FUEL_NODES_REQUIRED,
+                    complete=expedition_fuel_loaded(exp),
+                )
+            )
+
     if world.config.protection_mission and world.wave_director is not None:
         director = world.wave_director
         wave_total = director.total_waves

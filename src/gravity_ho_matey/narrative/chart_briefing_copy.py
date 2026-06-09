@@ -56,6 +56,14 @@ LEVEL_BRIEFING: dict[str, tuple[BriefingRow, ...]] = {
         ("", "Liftoff blocked if too close while she lives."),
         ("HAZARDS", "Nursery fauna on a wrap-around surface."),
     ),
+    "comet_fuel": (
+        ("ORBITAL", "Orbit volatile comet, hold E to dock."),
+        ("EXPEDITION", "Clear squids feeding on busted fuel lines."),
+        ("", "Hold E at depot valves to load fuel."),
+        ("WIN", "RTB lander, undock, deliver fuel at charter depot."),
+        ("", "Enter gate after fuel delivery."),
+        ("HAZARDS", "Escape flight through debris and squids."),
+    ),
 }
 
 # Right panel — two short reminders only (same keys every level).
@@ -83,6 +91,10 @@ LEVEL_INTEL: dict[str, tuple[BriefingRow, ...]] = {
     "brood_moon": (
         ("CONTROLS", "Hold E to land and to ascend when ready."),
         ("REMEMBER", "Seal lap after surface objectives."),
+    ),
+    "comet_fuel": (
+        ("CONTROLS", "Hold E for dock, fuel load, extract, delivery."),
+        ("REMEMBER", "Feeding squids ignore you until alerted."),
     ),
 }
 

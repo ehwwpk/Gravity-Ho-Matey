@@ -22,6 +22,7 @@ from gravity_ho_matey.gameplay.entities import (
     Asteroid,
     Beacon,
     ContactPolicy,
+    EvaAvatar,
     FinishGate,
     GameStatus,
     GravityWell,
@@ -52,12 +53,14 @@ from gravity_ho_matey.gameplay.tractor_beam import TractorBeamState
 from gravity_ho_matey.gameplay.squid_pod import PodPhase, SquidPod
 from gravity_ho_matey.gameplay.wave_director import WaveDirector
 from gravity_ho_matey.gameplay.egg_pod_objective import EggPodObjective
-from gravity_ho_matey.gameplay.brood_moon_mission import BroodMoonState, BroodPhase
 from gravity_ho_matey.gameplay.brood_moon_controller import (
     on_egg_pod_destroyed,
     surface_gravity_accel,
     tick_brood_moon,
 )
+from gravity_ho_matey.gameplay.brood_moon_mission import BroodMoonState, BroodPhase
+from gravity_ho_matey.gameplay.control_intent import ControlIntent
+from gravity_ho_matey.gameplay.expedition_mission import ExpeditionPhase, ExpeditionState, is_expedition_foot
 from gravity_ho_matey.levels.guard_layout import GuardLayout
 from gravity_ho_matey.levels.guard_waves import wave_spawn_for
 from gravity_ho_matey.gameplay.asteroid_spatial import AsteroidSpatialGrid
@@ -82,15 +85,6 @@ from gravity_ho_matey.gameplay.powerup_kinds import PowerUpKind
 from gravity_ho_matey.gameplay.weapon_kinds import WeaponTrack
 
 EnemyUnit = PatrolEnemy | SquidEnemy
-
-
-@dataclass(slots=True)
-class ControlIntent:
-    rotate_left: bool = False
-    rotate_right: bool = False
-    thrust: bool = False
-    boost_tap: bool = False
-    fire: bool = False
 
 
 @dataclass(slots=True)
@@ -145,6 +139,8 @@ class GameWorld:
     roster_enemies_remaining: int = 0
     egg_pods: list[EggPodObjective] = field(default_factory=list)
     brood_moon: BroodMoonState | None = None
+    expedition: ExpeditionState | None = None
+    avatar: EvaAvatar | None = None
     player_weapon_track: WeaponTrack | None = None
     player_weapon_advanced: bool = False
     _frame_dt: float = 0.0
@@ -188,6 +184,11 @@ class GameWorld:
 
     @property
     def finish_unlocked(self) -> bool:
+        if self.config.expedition_mission and self.expedition is not None:
+            exp = self.expedition
+            if exp.phase is ExpeditionPhase.ESCAPE_FLIGHT:
+                return exp.gate_unlocked and exp.fuel_delivered
+            return False
         if self.config.brood_moon_mission and self.brood_moon is not None:
             bm = self.brood_moon
             if bm.phase is BroodPhase.ORBITAL_RETURN:
@@ -235,7 +236,15 @@ class GameWorld:
     def roster_enemies_defeated(self) -> int:
         return max(0, self.roster_enemies_total - self.roster_enemies_remaining)
 
-    def update(self, dt: float, intent: ControlIntent, *, beacon_capture_slack: float = 0.0, interaction_hold: bool = False) -> bool:
+    def update(
+        self,
+        dt: float,
+        intent: ControlIntent,
+        *,
+        beacon_capture_slack: float = 0.0,
+        interaction_hold: bool = False,
+        aim_world: Vec2 | None = None,
+    ) -> bool:
         """Advance simulation. Returns True when gravity field should be rebaked (brood moon phase swap)."""
         dt = max(0.0, min(dt, 1.0 / 20.0))
         self._frame_dt = dt
@@ -246,6 +255,21 @@ class GameWorld:
 
         self._junk_motion_start.clear()
         rebake_gravity = False
+        if self.expedition is not None:
+            from gravity_ho_matey.gameplay.expedition_controller import tick_expedition
+
+            if self.expedition.in_cinematic:
+                rebake_gravity = tick_expedition(
+                    self, dt, intent, interaction_hold=interaction_hold, aim_world=aim_world
+                )
+                return rebake_gravity
+            rebake_gravity = tick_expedition(
+                self, dt, intent, interaction_hold=interaction_hold, aim_world=aim_world
+            )
+            if is_expedition_foot(self.config):
+                self._tick_invuln(dt)
+                return rebake_gravity
+
         if self.brood_moon is not None:
             if self.brood_moon.in_cinematic:
                 rebake_gravity = tick_brood_moon(self, dt, interaction_hold=interaction_hold)
@@ -418,6 +442,17 @@ class GameWorld:
         if self.invuln_remaining > 0.0:
             self.invuln_remaining = max(0.0, self.invuln_remaining - dt)
 
+    def _register_eva_hit(self, reason: str = "EVA suit breach — hull chunk lost.") -> None:
+        if self.avatar is None or self.avatar.invuln_remaining > 0.0:
+            return
+        self.last_damage = DamageEvent(source=DamageSource.SQUID_CLING, reason=reason)
+        spec = damage_spec_for(DamageSource.SQUID_CLING)
+        if spec.severity is DamageSeverity.LETHAL:
+            self.explosions.spawn(ExplosionKind.SHIP_DESTROYED, Vec2(self.avatar.pos.x, self.avatar.pos.y))
+        else:
+            self.explosions.spawn(ExplosionKind.SHIP_STRUCK, Vec2(self.avatar.pos.x, self.avatar.pos.y))
+        self.status = GameStatus.SHIP_HIT
+
     def _register_ship_hit(self, source: DamageSource, reason: str = "") -> None:
         if self.invuln_remaining > 0.0:
             return
@@ -434,6 +469,8 @@ class GameWorld:
         self.status = GameStatus.SHIP_HIT
 
     def _update_ship(self, dt: float, intent: ControlIntent) -> None:
+        if is_expedition_foot(self.config):
+            return
         turn_rate = self.config.turn_rate * self.ship.turn_rate_multiplier
         if intent.rotate_left:
             self.ship.angle -= turn_rate * dt

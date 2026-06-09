@@ -136,6 +136,7 @@ class ChartMapOverlay:
         rift = world.config.level_theme == "rift"
         siege = world.config.level_theme == "siege"
         brood = world.config.level_theme == "brood_moon"
+        comet = world.config.level_theme == "comet"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
@@ -145,6 +146,8 @@ class ChartMapOverlay:
             if siege
             else palette.BROOD_MOON_HUD_ACCENT
             if brood
+            else palette.COMET_HUD_ACCENT
+            if comet
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM
@@ -156,10 +159,10 @@ class ChartMapOverlay:
             0,
             vw,
             vh,
-            fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.SIEGE_BG if siege else palette.BROOD_MOON_BG if brood else palette.BACKGROUND,
+            fill=palette.SOLAR_BG if solar else palette.RIFT_BG if rift else palette.SIEGE_BG if siege else palette.BROOD_MOON_BG if brood else palette.COMET_BG if comet else palette.BACKGROUND,
             outline="",
         )
-        self._starfield(canvas, vw, vh, theme=world.config.level_theme, elapsed=elapsed, dense=solar or drift or rift or siege or brood)
+        self._starfield(canvas, vw, vh, theme=world.config.level_theme, elapsed=elapsed, dense=solar or drift or rift or siege or brood or comet)
         self._draw_command_bar(canvas, world, campaign, cleared_level_id, accent, dim, frame, bg)
         self._draw_status_banner(canvas, vw, cleared_level_id, upcoming_level_id, elapsed, accent, dim)
         body_top = _HEADER_H + _CLEARED_H + 8
@@ -928,6 +931,23 @@ class ChartMapOverlay:
                 canvas.create_oval(
                     mx - outer_rr, my - outer_rr, mx + outer_rr, my + outer_rr,
                     outline=palette.BROOD_MOON_VEIN, width=1, dash=(4, 3),
+                )
+            elif (
+                world.config.expedition_mission
+                and well.kind == "planet"
+                and world.expedition is not None
+                and world.expedition.comet is not None
+            ):
+                comet = world.expedition.comet
+                inner_rr = max(3.0, comet.landing_band_inner * t.scale * 0.32)
+                outer_rr = max(4.0, comet.landing_band_outer * t.scale * 0.32)
+                canvas.create_oval(
+                    mx - inner_rr, my - inner_rr, mx + inner_rr, my + inner_rr,
+                    outline=palette.COMET_HUD_ACCENT, width=1, dash=(3, 4),
+                )
+                canvas.create_oval(
+                    mx - outer_rr, my - outer_rr, mx + outer_rr, my + outer_rr,
+                    outline=palette.COMET_VEIN, width=1, dash=(4, 3),
                 )
             if well.label and rr >= 6:
                 canvas.create_text(mx, my - rr - 6, text=well.label, fill=dim if well.kind != "planet" else palette.PLANET_LABEL, font=self.FONT_SMALL)

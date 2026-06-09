@@ -189,3 +189,28 @@ def build_brood_moon_level() -> GameWorld:
         brood_moon=BroodMoonState(layout=layout),
     )
     return world
+
+
+def build_comet_fuel_level(*, dev_foot: bool = False) -> GameWorld:
+    """Level 7 — comet charter expedition: dock, EVA, fuel load, escape delivery."""
+    from gravity_ho_matey.gameplay.expedition_controller import apply_expedition_foot_layout
+    from gravity_ho_matey.gameplay.expedition_mission import ExpeditionState
+    from gravity_ho_matey.levels.comet_fuel_layout import build_comet_fuel_orbital_layout
+    from gravity_ho_matey.levels.comet_fuel_asteroids import orbital_debris_asteroids
+    from gravity_ho_matey.levels.level_profiles import comet_fuel_orbital_config
+
+    layout = build_comet_fuel_orbital_layout()
+    config = comet_fuel_orbital_config(width=layout.width, height=layout.height)
+    comet = layout.comet
+    world = GameWorld(
+        config=config,
+        ship=_spawn_ship_copy(layout.spawn_ship),
+        asteroids=orbital_debris_asteroids(layout, config, comet),
+        wells=list(layout.wells),
+        beacons=[],
+        finish_gate=layout.finish_gate,
+        expedition=ExpeditionState(layout=layout, comet=comet),
+    )
+    if dev_foot:
+        apply_expedition_foot_layout(world)
+    return world

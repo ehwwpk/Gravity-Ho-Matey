@@ -145,7 +145,7 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         from gravity_ho_matey.gameplay.brood_moon_controller import apply_surface_layout
         from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
         from gravity_ho_matey.levels.brood_moon_layout import SEAL_TRAVEL_DISTANCE
-        from gravity_ho_matey.scenes.end import EndScene
+        from gravity_ho_matey.scenes.chart_briefing import ChartBriefingScene
 
         scene = PlayScene("brood_moon", CampaignState.new())
         apply_surface_layout(scene.world)
@@ -164,10 +164,10 @@ class MultiPerspectiveFlowTests(unittest.TestCase):
         scene.world.ship.pos = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
         host = _FakeHost()
         scene.update(host, 0.016)
-        self.assertIsInstance(host.last_scene, EndScene)
-        end = host.last_scene
-        assert isinstance(end, EndScene)
-        self.assertTrue(end.won)
+        self.assertIsInstance(host.last_scene, ChartBriefingScene)
+        briefing = host.last_scene
+        assert isinstance(briefing, ChartBriefingScene)
+        self.assertEqual(briefing.upcoming_level_id, "comet_fuel")
 
     def test_chart_briefing_launches_upcoming_level_on_enter(self) -> None:
         from gravity_ho_matey.scenes.game_flow import start_chart_briefing, start_play

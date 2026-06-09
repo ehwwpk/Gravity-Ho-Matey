@@ -48,6 +48,10 @@ LEVEL_INTROS: dict[str, LevelIntroSpec] = {
         asset_stem="brood_moon",
         header_tag="BROOD MOON · CAPTAIN'S LOG",
     ),
+    "comet_fuel": LevelIntroSpec(
+        asset_stem="comet_fuel",
+        header_tag="VOLATILE CHARTER · CAPTAIN'S LOG",
+    ),
 }
 
 

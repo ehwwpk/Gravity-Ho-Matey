@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 from gravity_ho_matey.gameplay.chart_bounds import nudge_ship_into_chart
@@ -53,6 +54,29 @@ def wire_world_for_campaign(
 def chip_damage_recovers_in_place(*, life_lost: bool) -> bool:
     """True when a chip hit should keep the ship where it was struck."""
     return not life_lost
+
+
+def recover_eva_in_place(world: GameWorld) -> None:
+    """Chip damage on foot — respawn EVA at lander pad with brief invuln."""
+    from gravity_ho_matey.gameplay.expedition_mission import is_expedition_foot
+    from gravity_ho_matey.levels.comet_fuel_layout import LANDER_PAD
+
+    if not is_expedition_foot(world.config) or world.avatar is None:
+        recover_ship_in_place(world)
+        return
+    avatar = world.avatar
+    avatar.pos = Vec2(LANDER_PAD.x, LANDER_PAD.y + 28.0)
+    avatar.vel = Vec2()
+    avatar.face_angle = -math.pi / 2
+    avatar.aim_angle = -math.pi / 2
+    avatar.invuln_remaining = INVULN_SECONDS
+    world.invuln_remaining = INVULN_SECONDS
+    world.last_damage = None
+    world.status = GameStatus.RUNNING
+    exp = world.expedition
+    if exp is not None:
+        exp.interact_charge = 0.0
+        exp.active_interact_id = ""
 
 
 def recover_ship_in_place(world: GameWorld) -> None:

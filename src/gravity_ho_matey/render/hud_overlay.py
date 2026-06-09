@@ -71,6 +71,7 @@ class SciFiHudOverlay:
         rift = world.config.level_theme == "rift"
         siege = world.config.level_theme == "siege"
         brood = world.config.level_theme == "brood_moon"
+        comet = world.config.level_theme == "comet"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
@@ -80,6 +81,8 @@ class SciFiHudOverlay:
             if siege
             else palette.BROOD_MOON_HUD_ACCENT
             if brood
+            else palette.COMET_HUD_ACCENT
+            if comet
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM
@@ -160,6 +163,36 @@ class SciFiHudOverlay:
                         44,
                         anchor="w",
                         text=bm.hud_prompt[:22],
+                        fill=dim,
+                        font=self.FONT_SMALL,
+                    )
+            elif comet and world.expedition is not None:
+                from gravity_ho_matey.gameplay.expedition_mission import ExpeditionPhase
+
+                exp = world.expedition
+                self._label(canvas, 344, 12, "VOLATILE CHARTER", dim)
+                if exp.phase is ExpeditionPhase.ESCAPE_FLIGHT and world.finish_unlocked:
+                    status_txt, status_color = "GATE OPEN", palette.GATE_OPEN
+                elif exp.phase is ExpeditionPhase.ON_FOOT:
+                    status_txt, status_color = "EVA DEPOT", palette.COMET_HUD_ACCENT
+                elif exp.in_cinematic:
+                    status_txt, status_color = "TRANSIT", palette.COMET_HUD_ACCENT
+                else:
+                    status_txt, status_color = "ORBIT", palette.COMET_HUD_ACCENT
+                canvas.create_text(
+                    344,
+                    30,
+                    anchor="w",
+                    text=status_txt,
+                    fill=status_color,
+                    font=("Courier New", 11, "bold"),
+                )
+                if exp.hud_prompt:
+                    canvas.create_text(
+                        344,
+                        44,
+                        anchor="w",
+                        text=exp.hud_prompt[:22],
                         fill=dim,
                         font=self.FONT_SMALL,
                     )
@@ -516,6 +549,7 @@ class SciFiHudOverlay:
         rift = world.config.level_theme == "rift"
         siege = world.config.level_theme == "siege"
         brood = world.config.level_theme == "brood_moon"
+        comet = world.config.level_theme == "comet"
         accent = (
             palette.HUD_ACCENT_SOLAR
             if solar
@@ -525,6 +559,8 @@ class SciFiHudOverlay:
             if siege
             else palette.BROOD_MOON_HUD_ACCENT
             if brood
+            else palette.COMET_HUD_ACCENT
+            if comet
             else palette.HUD_ACCENT
         )
         dim = palette.HUD_DIM
@@ -586,6 +622,115 @@ class SciFiHudOverlay:
                 accent=accent,
                 dim=dim,
             )
+        elif comet and world.expedition is not None:
+            self._draw_expedition_interact_meter(
+                canvas,
+                world,
+                width,
+                height,
+                accent=accent,
+                dim=dim,
+            )
+
+    def _draw_expedition_interact_meter(
+        self,
+        canvas: tk.Canvas,
+        world: GameWorld,
+        width: float,
+        height: float,
+        *,
+        accent: str,
+        dim: str,
+    ) -> None:
+        from gravity_ho_matey.gameplay.expedition_mission import (
+            ExpeditionPhase,
+            expedition_fuel_loaded,
+            in_docking_band,
+            nearest_interact_node,
+        )
+        from gravity_ho_matey.levels.comet_fuel_layout import (
+            DELIVERY_CHARGE_SECONDS,
+            LANDING_CHARGE_SECONDS,
+        )
+
+        exp = world.expedition
+        if exp is None or exp.in_cinematic:
+            return
+
+        charge = 0.0
+        label = ""
+        active = False
+        blocked = False
+        elapsed = world.elapsed
+
+        if exp.phase is ExpeditionPhase.ORBITAL and exp.comet is not None and in_docking_band(world.ship.pos, exp.comet):
+            charge = exp.landing_charge / max(1e-6, LANDING_CHARGE_SECONDS)
+            label = "DOCK"
+            active = True
+        elif exp.phase is ExpeditionPhase.ON_FOOT and world.avatar is not None:
+            node = nearest_interact_node(exp, world.avatar.pos)
+            if node is not None and exp.active_interact_id == node.id:
+                charge = exp.interact_charge / max(1e-6, node.charge_seconds)
+                if node.kind.name == "FUEL_VALVE":
+                    label = "LOAD"
+                elif node.kind.name == "EXTRACT_PAD":
+                    if not expedition_fuel_loaded(exp):
+                        label = "LOCK"
+                        blocked = True
+                    else:
+                        label = "RTB"
+                        blocked = False
+                else:
+                    label = "USE"
+                active = True
+        elif exp.phase is ExpeditionPhase.ESCAPE_FLIGHT and not exp.fuel_delivered:
+            from gravity_ho_matey.gameplay.expedition_mission import delivery_node
+
+            node = delivery_node(exp)
+            if node is not None and (world.ship.pos - node.pos).length() <= node.radius:
+                charge = exp.delivery_charge / max(1e-6, DELIVERY_CHARGE_SECONDS)
+                label = "DELIVER"
+                active = True
+
+        if not active:
+            return
+
+        cx = width * 0.5
+        cy = height - 72.0
+        outer_r = 34.0
+        inner_r = 26.0
+        pulse = 0.55 + 0.45 * math.sin(elapsed * 3.4)
+        ring_color = dim if blocked else accent
+        fill_color = accent if not blocked else palette.BOSS_SCRAPE_WARN
+        if blocked:
+            canvas.create_oval(cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r, outline=ring_color, width=2, dash=(5, 4))
+        else:
+            canvas.create_oval(cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r, outline=ring_color, width=2)
+        start = 90.0
+        extent = -360.0 * max(0.0, min(1.0, charge))
+        if abs(extent) > 0.5 and not blocked:
+            canvas.create_arc(
+                cx - inner_r,
+                cy - inner_r,
+                cx + inner_r,
+                cy + inner_r,
+                start=start,
+                extent=extent,
+                style=tk.PIESLICE,
+                outline="",
+                fill=fill_color,
+            )
+        canvas.create_oval(
+            cx - inner_r,
+            cy - inner_r,
+            cx + inner_r,
+            cy + inner_r,
+            outline=fill_color if not blocked else ring_color,
+            width=2,
+            dash=(4, 3) if blocked else (),
+        )
+        canvas.create_text(cx, cy - 4, text="E", fill=fill_color if not blocked else dim, font=("Courier New", 14, "bold"))
+        canvas.create_text(cx, cy + 12, text=label, fill=dim, font=self.FONT_SMALL)
 
     @staticmethod
     def _badge(

@@ -229,6 +229,10 @@ class SquidEnemyTests(unittest.TestCase):
         squid = scene.world.enemies[0]
         ship_pos = Vec2(squid.pos.x + 36, squid.pos.y)
         scene.world.ship.pos = ship_pos
+        scene.world.asteroids = [
+            asteroid for asteroid in scene.world.asteroids if (asteroid.pos - ship_pos).length() > 140.0
+        ]
+        scene.world.asteroid_spatial.rebuild(scene.world.asteroids)
         chunks_before = scene.campaign.hull_chunks
 
         for _ in range(200):

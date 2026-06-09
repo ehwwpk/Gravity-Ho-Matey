@@ -30,6 +30,7 @@ _CAMPAIGN_ARC: tuple[tuple[str, str, str], ...] = (
     ("rift", "Relay Hold", "Defend relay · 3 waves · extract south"),
     ("siege", "The Siege Line", "12-hostile roster · wing escorts · station"),
     ("brood_moon", "The Brood Moon", "Surface ops · optional Nursery Matriarch"),
+    ("comet_fuel", "Volatile Charter", "Comet dock · EVA fuel run · charter delivery"),
 )
 
 _LEVEL_LOCK: dict[str, str] = {
@@ -39,6 +40,7 @@ _LEVEL_LOCK: dict[str, str] = {
     "rift": "Clear Drift",
     "siege": "Clear Rift",
     "brood_moon": "Clear Siege",
+    "comet_fuel": "Clear Brood Moon",
 }
 
 

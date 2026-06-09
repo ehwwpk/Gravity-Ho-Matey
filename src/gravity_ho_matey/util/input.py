@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from gravity_ho_matey.gameplay.world import ControlIntent
+from gravity_ho_matey.gameplay.control_intent import ControlIntent
 
 
 @dataclass(slots=True)
@@ -30,7 +30,9 @@ class InputState:
             rotate_left=self.down("a", "left"),
             rotate_right=self.down("d", "right"),
             thrust=self.down("w", "up"),
+            reverse=self.down("s", "down"),
             boost_tap=boost_tap,
+            sprint=shift_down,
             fire=self.down("space"),
         )
 

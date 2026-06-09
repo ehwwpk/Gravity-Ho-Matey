@@ -61,6 +61,136 @@ def draw_edge_hints(
         tag = "XT" if world.finish_unlocked else "PD"
         color = palette.GATE_OPEN if world.finish_unlocked else palette.RIFT_PAD_COOLDOWN
         _maybe_hint(hints, camera, gc, ship, ship_angle, tag, color, vw, vh, play_top)
+    elif world.config.expedition_mission and world.expedition is not None:
+        from gravity_ho_matey.gameplay.expedition_mission import ExpeditionPhase, is_expedition_foot
+        from gravity_ho_matey.gameplay.squid_behavior import SquidBehaviorMode
+
+        exp = world.expedition
+        if is_expedition_foot(world.config) and world.avatar is not None:
+            anchor = world.avatar.pos
+            anchor_angle = world.avatar.aim_angle
+            from gravity_ho_matey.gameplay.expedition_mission import InteractKind, expedition_fuel_loaded
+            from gravity_ho_matey.levels.comet_fuel_expedition import charter_depot_center
+            from gravity_ho_matey.levels.comet_fuel_layout import LANDER_PAD
+
+            if not expedition_fuel_loaded(exp):
+                for node in exp.interact_nodes:
+                    if node.kind is not InteractKind.FUEL_VALVE:
+                        continue
+                    if node.id in exp.completed_interact_ids:
+                        continue
+                    _maybe_hint(
+                        hints,
+                        camera,
+                        node.pos,
+                        anchor,
+                        anchor_angle,
+                        "FL",
+                        palette.COMET_HUD_ACCENT,
+                        vw,
+                        vh,
+                        play_top,
+                    )
+                    break
+                _maybe_hint(
+                    hints,
+                    camera,
+                    charter_depot_center(),
+                    anchor,
+                    anchor_angle,
+                    "DP",
+                    palette.COMET_VOLATILE_GLOW,
+                    vw,
+                    vh,
+                    play_top,
+                )
+            elif expedition_fuel_loaded(exp):
+                _maybe_hint(
+                    hints,
+                    camera,
+                    LANDER_PAD,
+                    anchor,
+                    anchor_angle,
+                    "RB",
+                    palette.GATE_OPEN,
+                    vw,
+                    vh,
+                    play_top,
+                )
+            for entry, enemy in zip(exp.squid_entries, world.enemies, strict=False):
+                if not enemy.alive:
+                    continue
+                if entry.mode == SquidBehaviorMode.FEEDING.name:
+                    continue
+                if entry.mode == SquidBehaviorMode.ALERT.name:
+                    continue
+                engage = getattr(enemy, "engage_range", 440.0)
+                if (enemy.pos - anchor).length() > engage + 40.0:
+                    continue
+                _maybe_hint(
+                    hints,
+                    camera,
+                    enemy.pos,
+                    anchor,
+                    anchor_angle,
+                    "SQ",
+                    palette.HOSTILE_PROJECTILE,
+                    vw,
+                    vh,
+                    play_top,
+                )
+                break
+        elif exp.phase is ExpeditionPhase.ORBITAL and exp.comet is not None:
+            from gravity_ho_matey.gameplay.expedition_mission import comet_limb_hint
+
+            _maybe_hint(
+                hints,
+                camera,
+                comet_limb_hint(ship, exp.comet),
+                ship,
+                ship_angle,
+                "DK",
+                palette.COMET_HUD_ACCENT,
+                vw,
+                vh,
+                play_top,
+            )
+            nearest_rock = _nearest_closing_asteroid(world, ship, ORBITAL_ASTEROID_THREAT_RADIUS)
+            if nearest_rock is not None:
+                _maybe_hint(
+                    hints,
+                    camera,
+                    nearest_rock,
+                    ship,
+                    ship_angle,
+                    "RK",
+                    palette.HOLO_ASTEROID_EDGE,
+                    vw,
+                    vh,
+                    play_top,
+                )
+        elif exp.phase is ExpeditionPhase.ESCAPE_FLIGHT:
+            if not exp.fuel_delivered:
+                from gravity_ho_matey.gameplay.expedition_mission import delivery_node
+
+                node = delivery_node(exp)
+                if node is not None:
+                    _maybe_hint(
+                        hints,
+                        camera,
+                        node.pos,
+                        ship,
+                        ship_angle,
+                        "DP",
+                        palette.COMET_HUD_ACCENT,
+                        vw,
+                        vh,
+                        play_top,
+                    )
+            elif not world.finish_unlocked:
+                gate = world.finish_gate.rect
+                gc = Vec2(gate.x + gate.w * 0.5, gate.y + gate.h * 0.5)
+                _maybe_hint(hints, camera, gc, ship, ship_angle, "GT", palette.GATE_LOCKED, vw, vh, play_top)
     elif world.config.brood_moon_mission and world.brood_moon is not None:
         from gravity_ho_matey.gameplay.brood_moon_mission import BroodPhase
 

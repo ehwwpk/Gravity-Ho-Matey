@@ -18,7 +18,7 @@ from gravity_ho_matey.levels.level_registry import build_level, next_level_id
 class BroodMoonLevelTests(unittest.TestCase):
     def test_registry_chain_includes_brood_moon(self) -> None:
         self.assertEqual(next_level_id("siege"), "brood_moon")
-        self.assertIsNone(next_level_id("brood_moon"))
+        self.assertEqual(next_level_id("brood_moon"), "comet_fuel")
 
     def test_world_content(self) -> None:
         world = build_level("brood_moon")

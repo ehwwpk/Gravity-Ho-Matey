@@ -31,6 +31,9 @@ from gravity_ho_matey.render.title_deploy_list import (
     row_visible,
     title_chrome_layout,
     viewport_contains,
+    scroll_thumb_hit_rect,
+    scroll_track_hit_rect,
+    scrollbar_geometry,
     visible_row_hit_rect,
 )
 from gravity_ho_matey.render.title_info_pages import (
@@ -47,6 +50,7 @@ _LEVEL_DETAILS: dict[str, str] = {
     "rift": "Hold relay · 3 waves · extract south",
     "siege": "Clear 12-hostile roster · escorts · optional station",
     "brood_moon": "Land · tag · rupture pods · seal lap · dock RTB",
+    "comet_fuel": "Dock comet · EVA depot · load fuel · deliver charter",
 }
 
 _LEVEL_LOCK: dict[str, str] = {
@@ -282,14 +286,13 @@ class TitleScreenOverlay:
     ) -> None:
         if layout.max_scroll <= 0.0:
             return
-        track_x = layout.panel_x + layout.panel_w - 18.0
-        track_y = layout.viewport_y + 4.0
-        track_h = layout.viewport_h - 8.0
+        track_x, track_y, track_h, thumb_y, thumb_h = scrollbar_geometry(layout, scroll)
         canvas.create_rectangle(track_x, track_y, track_x + 8.0, track_y + track_h, fill=palette.HUD_BG, outline=dim)
-        thumb_h = max(24.0, track_h * (layout.viewport_h / layout.content_h))
-        travel = max(1.0, track_h - thumb_h)
-        thumb_y = track_y + (scroll / layout.max_scroll) * travel
         canvas.create_rectangle(track_x + 1.0, thumb_y, track_x + 7.0, thumb_y + thumb_h, fill=accent, outline="")
+        tx, ty, tw, th = scroll_track_hit_rect(layout, scroll)
+        self.hits.add("deploy_scroll_track", tx, ty, tw, th)
+        hx, hy, hw, hh = scroll_thumb_hit_rect(layout, scroll)
+        self.hits.add("deploy_scroll_thumb", hx, hy, hw, hh)
 
     def _draw_deploy_page(
         self,
@@ -314,7 +317,7 @@ class TitleScreenOverlay:
         hp.draw_panel(canvas, x, y, w, h, frame=frame, accent=accent, fill=palette.HUD_BG)
         draw_holo_corners(canvas, x, y, w, h, accent=accent, elapsed=elapsed)
         hp.draw_panel_title(canvas, x + 16, y + 14, "CHART MANIFEST", color=dim)
-        hint = "↑ ↓ · wheel · Enter" if layout.max_scroll > 0.0 else "↑ ↓ · Enter"
+        hint = "drag · wheel · ↑↓ · Enter" if layout.max_scroll > 0.0 else "↑ ↓ · Enter"
         canvas.create_text(x + w - 16, y + 14, anchor="e", text=hint, fill=dim, font=hp.FONT_SMALL)
 
         vy0 = layout.viewport_y
@@ -514,7 +517,7 @@ class TitleScreenOverlay:
         )
 
         if page is TitlePage.DEPLOY:
-            center = "Pick a chart · dossier updates on focus · Enter launches · B = Bazaar"
+            center = "Pick a chart · drag or wheel the list · Enter launches · B = Bazaar"
         elif page is TitlePage.WELCOME:
             center = "↑ ↓ field codex · ← → briefing tabs · Enter deploys · B bazaar"
         else:

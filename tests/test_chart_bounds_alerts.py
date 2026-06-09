@@ -24,8 +24,12 @@ class _FakeHost:
         pass
 
 
+def _cove_oob_x() -> float:
+    from gravity_ho_matey.gameplay.chart_bounds import chart_limits
+    from gravity_ho_matey.levels.level_registry import build_level
 
-_COVE_OOB_X = -135.0  # outside Cove play chart (expanded ~13% margin on 960-wide level)
+    x0, _, _, _ = chart_limits(build_level("cove").config)
+    return x0 - 50.0
 
 
 class ChartBoundsAlertTests(unittest.TestCase):
@@ -46,7 +50,7 @@ class ChartBoundsAlertTests(unittest.TestCase):
 
     def test_play_scene_fires_leave_toast_when_crossing_out(self) -> None:
         scene = PlayScene("cove", CampaignState.new())
-        scene.world.ship.pos = Vec2(_COVE_OOB_X, 100)
+        scene.world.ship.pos = Vec2(_cove_oob_x(), 100)
         scene.update(_FakeHost(), 0.05)
         self.assertEqual(scene.bounds_toast_kind, ChartBoundsToast.LEFT_CHART)
         self.assertAlmostEqual(scene.bounds_toast_ttl, CHART_BOUNDS_TOAST_SECONDS, places=2)
@@ -54,7 +58,7 @@ class ChartBoundsAlertTests(unittest.TestCase):
 
     def test_play_scene_fires_enter_toast_when_returning(self) -> None:
         scene = PlayScene("cove", CampaignState.new())
-        scene.world.ship.pos = Vec2(_COVE_OOB_X, 100)
+        scene.world.ship.pos = Vec2(_cove_oob_x(), 100)
         scene.update(_FakeHost(), 0.05)
         scene.bounds_toast_ttl = 0.0
         scene.bounds_toast_kind = None
@@ -64,7 +68,7 @@ class ChartBoundsAlertTests(unittest.TestCase):
 
     def test_toast_expires(self) -> None:
         scene = PlayScene("cove", CampaignState.new())
-        scene.world.ship.pos = Vec2(_COVE_OOB_X, 100)
+        scene.world.ship.pos = Vec2(_cove_oob_x(), 100)
         scene.update(_FakeHost(), 0.05)
         scene.update(_FakeHost(), CHART_BOUNDS_TOAST_SECONDS + 0.1)
         self.assertIsNone(scene.bounds_toast_kind)
@@ -72,7 +76,7 @@ class ChartBoundsAlertTests(unittest.TestCase):
 
     def test_respawn_does_not_fire_enter_toast(self) -> None:
         scene = PlayScene("cove", CampaignState.new())
-        scene.world.ship.pos = Vec2(_COVE_OOB_X, 100)
+        scene.world.ship.pos = Vec2(_cove_oob_x(), 100)
         scene.update(_FakeHost(), 0.05)
         scene.bounds_toast_ttl = 0.0
         scene.bounds_toast_kind = None
@@ -94,7 +98,7 @@ class ChartBoundsAlertTests(unittest.TestCase):
             level_theme=cfg.level_theme,
         )
         scene._ship_was_in_chart = None
-        scene.world.ship.pos = Vec2(_COVE_OOB_X, 100)
+        scene.world.ship.pos = Vec2(_cove_oob_x(), 100)
         scene._sync_chart_bounds_state(suppress_toast=False)
         self.assertIsNone(scene.bounds_toast_kind)
 

@@ -180,3 +180,54 @@ def brood_moon_surface_config(
         surface_wrap=True,
     )
     return replace(base, **overrides) if overrides else base
+
+
+def comet_fuel_orbital_config(
+    *,
+    width: int,
+    height: int,
+    **overrides: float | int | str | bool,
+) -> WorldConfig:
+    base = WorldConfig(
+        width=width,
+        height=height,
+        viewport_width=CANVAS_WIDTH,
+        viewport_height=CANVAS_HEIGHT,
+        level_theme="comet",
+        level_name="Volatile Charter",
+        open_bounds=True,
+        radiation_enabled=False,
+        chart_margin_frac=0.44,
+        max_asteroids=36,
+        gravity_scale=0.46,
+        turn_rate=5.1,
+        thrust=252.0,
+        expedition_mission=True,
+    )
+    return replace(base, **overrides) if overrides else base
+
+
+def comet_fuel_expedition_config(
+    *,
+    width: int,
+    height: int,
+    **overrides: float | int | str | bool,
+) -> WorldConfig:
+    base = WorldConfig(
+        width=width,
+        height=height,
+        viewport_width=CANVAS_WIDTH,
+        viewport_height=CANVAS_HEIGHT,
+        level_theme="comet",
+        level_name="Volatile Charter · Expedition",
+        open_bounds=False,
+        radiation_enabled=False,
+        chart_margin_frac=0.42,
+        max_asteroids=0,
+        gravity_scale=0.0,
+        turn_rate=5.0,
+        thrust=0.0,
+        expedition_mission=True,
+        expedition_foot=True,
+    )
+    return replace(base, **overrides) if overrides else base

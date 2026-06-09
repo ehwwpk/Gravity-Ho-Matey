@@ -15,6 +15,15 @@ from gravity_ho_matey.render.title_codex import TitleCodexState
 
 from gravity_ho_matey.scenes.base import Scene, SceneHost
 from gravity_ho_matey.scenes.game_flow import start_chart_briefing
+from gravity_ho_matey.scenes.title_deploy_ui import (
+    DeployListUiState,
+    deploy_list_pointer_down,
+    deploy_list_pointer_motion,
+    deploy_list_pointer_up,
+    deploy_list_reset,
+    deploy_list_track_click,
+    deploy_list_wheel,
+)
 from gravity_ho_matey.scenes.shop_ui import (
     ShopUiState,
     shop_fit_viewport_for,
@@ -52,6 +61,8 @@ class TitleScene(Scene):
         self._shop_opened_at: float | None = None
 
         self._shop_ui = ShopUiState()
+
+        self._deploy_ui = DeployListUiState()
 
         self.codex = TitleCodexState()
 
@@ -120,6 +131,18 @@ class TitleScene(Scene):
 
         self._pointer = (x, y)
 
+        if self.page is TitlePage.DEPLOY and not self.shop_open:
+            layout = self._deploy_layout()
+            updated = deploy_list_pointer_motion(
+                self._deploy_ui,
+                x,
+                y,
+                layout=layout,
+                scroll=self.deploy_scroll,
+            )
+            if updated is not None:
+                self.deploy_scroll = updated
+
         self.hover_id = host.renderer.title_hit_test(x, y)
 
         shop_on_pointer_motion(self._shop_ui, x, y, shop_open=self.shop_open)
@@ -170,6 +193,7 @@ class TitleScene(Scene):
 
             self.page = TitlePage.DEPLOY
 
+            deploy_list_reset(self._deploy_ui)
             self._sync_deploy_scroll()
 
             return
@@ -208,9 +232,33 @@ class TitleScene(Scene):
                     self.page = page
 
                     if page is TitlePage.DEPLOY:
+                        deploy_list_reset(self._deploy_ui)
                         self._sync_deploy_scroll()
 
                     return
+
+        if self.page is TitlePage.DEPLOY and not self.shop_open:
+            from gravity_ho_matey.render.title_deploy_list import panel_list_contains
+
+            layout = self._deploy_layout()
+            if (
+                (hit and hit.startswith("level:"))
+                or hit in ("deploy_scroll_track", "deploy_scroll_thumb")
+                or panel_list_contains(layout, x, y)
+            ):
+                if hit == "deploy_scroll_track":
+                    jumped = deploy_list_track_click(layout, x, y, self.deploy_scroll)
+                    if jumped is not None:
+                        self.deploy_scroll = jumped
+                deploy_list_pointer_down(
+                    self._deploy_ui,
+                    x,
+                    y,
+                    hit,
+                    layout=layout,
+                    scroll=self.deploy_scroll,
+                )
+                return
 
         if hit and hit.startswith("level:"):
 
@@ -224,7 +272,20 @@ class TitleScene(Scene):
 
     def on_pointer_release(self, host: SceneHost, x: float, y: float, button: int) -> None:
 
-        _ = host, x, y, button
+        if button != 1:
+            shop_on_pointer_up(self._shop_ui)
+            return
+
+        if self.page is TitlePage.DEPLOY and not self.shop_open:
+            pending, dragged = deploy_list_pointer_up(self._deploy_ui)
+            if not dragged and pending and pending.startswith("level:"):
+                level_id = pending.split(":", 1)[1]
+                if level_id in LEVEL_ORDER:
+                    self.deploy_focus = LEVEL_ORDER.index(level_id)
+                    self._sync_deploy_scroll()
+                if is_level_selectable(level_id):
+                    host.set_scene(start_chart_briefing(level_id, campaign=self.campaign))
+                    return
 
         shop_on_pointer_up(self._shop_ui)
 
@@ -232,11 +293,6 @@ class TitleScene(Scene):
 
     def on_wheel(self, host: SceneHost, x: float, y: float, delta: int) -> None:
 
-        from gravity_ho_matey.render.title_deploy_list import (
-            compute_deploy_list_layout,
-            scroll_wheel_delta,
-            viewport_contains,
-        )
         from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
 
         self._pointer = (x, y)
@@ -256,10 +312,10 @@ class TitleScene(Scene):
                 return
 
         if self.page is TitlePage.DEPLOY and not self.shop_open and delta != 0:
-            chrome = TitleScreenOverlay.chrome_layout()
-            layout = compute_deploy_list_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH))
-            if viewport_contains(layout, x, y):
-                self.deploy_scroll = scroll_wheel_delta(self.deploy_scroll, layout, delta)
+            split = self._deploy_split()
+            updated = deploy_list_wheel(self.deploy_scroll, split.list, x, y, delta, split=split)
+            if updated is not None:
+                self.deploy_scroll = updated
                 return
 
         fit = shop_fit_viewport_for(self._shop_ui, self.campaign)
@@ -372,12 +428,15 @@ class TitleScene(Scene):
 
 
 
-    def _deploy_layout(self):
+    def _deploy_split(self):
         from gravity_ho_matey.render.title_deploy_list import compute_deploy_split_layout
         from gravity_ho_matey.render.title_overlay import TitleScreenOverlay
 
         chrome = TitleScreenOverlay.chrome_layout()
-        return compute_deploy_split_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH)).list
+        return compute_deploy_split_layout(chrome, screen_w=float(TitleScreenOverlay.WIDTH))
+
+    def _deploy_layout(self):
+        return self._deploy_split().list
 
     def _sync_deploy_scroll(self) -> None:
         from gravity_ho_matey.render.title_deploy_list import scroll_to_show_index

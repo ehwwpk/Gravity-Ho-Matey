@@ -139,6 +139,21 @@ class FinishGate:
     rect: Rect
 
 
+@dataclass(slots=True)
+class EvaAvatar:
+    pos: Vec2
+    vel: Vec2 = field(default_factory=Vec2)
+    face_angle: float = field(default_factory=lambda: -math.pi / 2)
+    aim_angle: float = field(default_factory=lambda: -math.pi / 2)
+    radius: float = 16.0
+    fire_cooldown: float = 0.0
+    sprint_timer: float = 2.5
+    sprint_cooldown: float = 0.0
+    carrying_fuel: bool = False
+    invuln_remaining: float = 0.0
+    recoil_timer: float = 0.0
+
+
 @dataclass(frozen=True, slots=True)
 class WorldConfig:
     width: int
@@ -171,5 +186,7 @@ class WorldConfig:
     roster_kill_quota: int = 0
     brood_moon_mission: bool = False
     surface_wrap: bool = False
+    expedition_mission: bool = False
+    expedition_foot: bool = False
     max_space_junk: int = 128
     space_junk_enabled: bool = True

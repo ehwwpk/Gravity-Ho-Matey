@@ -8,6 +8,7 @@ from gravity_ho_matey.gameplay.world import ControlIntent
 from gravity_ho_matey.gameplay.progress import record_level_cleared
 from gravity_ho_matey.gameplay.session import (
     chip_damage_recovers_in_place,
+    recover_eva_in_place,
     recover_ship_in_place,
     wire_world_for_campaign,
 )
@@ -61,6 +62,14 @@ class PlayScene(Scene):
         self._prev_boost_flash = self.world.ship.boost_flash
 
     def _sync_chart_bounds_state(self, *, suppress_toast: bool) -> None:
+        from gravity_ho_matey.gameplay.expedition_mission import is_expedition_foot
+
+        if is_expedition_foot(self.world.config):
+            self._ship_was_in_chart = True
+            return
+        if self.world.expedition is not None and self.world.expedition.in_cinematic:
+            self._ship_was_in_chart = True
+            return
         if not self.world.config.open_bounds:
             self._ship_was_in_chart = True
             return
@@ -89,6 +98,10 @@ class PlayScene(Scene):
         )
 
     def _update_camera(self, dt: float) -> None:
+        if self._expedition_on_foot() and self.world.avatar is not None:
+            self.camera.set_play_layout(self._playfield_hud_top())
+            self.camera.update_follow(self.world.avatar.pos, self.world.config, dt)
+            return
         self.camera.set_play_layout(self._playfield_hud_top())
         self.camera.update_follow(self.world.ship.pos, self.world.config, dt)
         self.camera.update_chase_heading(self.world.ship.angle, dt)
@@ -129,11 +142,16 @@ class PlayScene(Scene):
             host.input_state.to_control_intent(),
             beacon_capture_slack=capture_slack,
             interaction_hold=interaction_hold,
+            aim_world=self._expedition_aim_world(host),
         )
         if rebake:
             self._rebuild_gravity_field()
-            self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
+            if self._expedition_on_foot():
+                self._snap_expedition_camera()
+            else:
+                self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
         self._tick_brood_transition(dt)
+        self._tick_expedition_transition(dt)
         from gravity_ho_matey.gameplay.drone_session import sync_drone_wingman_to_campaign
         from gravity_ho_matey.gameplay.nifflerp_session import sync_nifflerp_to_campaign
 
@@ -186,11 +204,19 @@ class PlayScene(Scene):
                 return
 
             if chip_damage_recovers_in_place(life_lost=result.life_lost):
-                recover_ship_in_place(self.world)
+                if self._expedition_on_foot():
+                    recover_eva_in_place(self.world)
+                else:
+                    recover_ship_in_place(self.world)
                 self.camera.reset_chase_presentation()
                 self._prev_boost_flash = self.world.ship.boost_flash
                 self._sync_chart_bounds_state(suppress_toast=True)
-                if damage.source is DamageSource.CHART_RADIATION:
+                if self._expedition_on_foot() and damage.source is DamageSource.SQUID_CLING:
+                    self.hud_alert = (
+                        f"SUIT BREACH — {result.hull_chunks} CHUNK"
+                        f"{'S' if result.hull_chunks != 1 else ''} LEFT · RTB TO LANDER"
+                    )
+                elif damage.source is DamageSource.CHART_RADIATION:
                     self.hud_alert = (
                         f"RADIATION BURN — {result.hull_chunks} CHUNK"
                         f"{'S' if result.hull_chunks != 1 else ''} LEFT"
@@ -214,6 +240,107 @@ class PlayScene(Scene):
 
         self._update_camera(dt)
         self._enforce_brood_surface_camera()
+        self._enforce_expedition_camera()
+
+    def _expedition_on_foot(self) -> bool:
+        from gravity_ho_matey.gameplay.expedition_mission import is_expedition_foot
+
+        return is_expedition_foot(self.world.config)
+
+    def _expedition_in_cinematic(self) -> bool:
+        exp = self.world.expedition
+        return exp is not None and exp.in_cinematic
+
+    def _expedition_aim_world(self, host: SceneHost):
+        from gravity_ho_matey.core.vector import Vec2
+
+        if not self._expedition_on_foot() or self.world.avatar is None:
+            return None
+        if not hasattr(host, "pointer") and not hasattr(host.input_state, "pointer"):
+            return None
+        ptr = getattr(host, "pointer", None) or getattr(host.input_state, "pointer", None)
+        if ptr is None:
+            return None
+        follow = self.world.avatar.pos
+        hud_top = self._playfield_hud_top()
+        self.camera.set_play_layout(hud_top)
+        wx = ptr[0] / max(1e-6, self.camera.tactical_scale) + follow.x - self.camera.viewport_width * 0.5 / max(1e-6, self.camera.tactical_scale)
+        wy = (ptr[1] - hud_top) / max(1e-6, self.camera.tactical_scale) + follow.y - (self.camera.viewport_height - hud_top) * 0.5 / max(1e-6, self.camera.tactical_scale)
+        return Vec2(wx, wy)
+
+    def _snap_expedition_camera(self) -> None:
+        if self.world.avatar is None:
+            return
+        self.camera.mode = CameraMode.TACTICAL
+        self.camera.set_play_layout(self._playfield_hud_top())
+        self.camera.snap_tactical_to_ship(self.world.avatar.pos, self.world.config)
+
+    def _enforce_expedition_camera(self) -> None:
+        if not self._expedition_on_foot():
+            return
+        if self.camera.mode is CameraMode.TACTICAL and self.world.avatar is not None:
+            self.camera.set_play_layout(self._playfield_hud_top())
+            self.camera.update_follow(self.world.avatar.pos, self.world.config, 0.016)
+            return
+        self.camera.mode = CameraMode.TACTICAL
+        self._snap_expedition_camera()
+
+    def _ensure_expedition_transition_sequence(self, canvas) -> None:
+        exp = self.world.expedition
+        if exp is None or not exp.in_cinematic:
+            return
+        if self._transition_loaded_stem != exp.transition_asset_stem:
+            self._transition_sequence = None
+            self._transition_frame_index = 0
+            self._transition_frame_elapsed = 0.0
+            self._transition_frame_hold = None
+            self._transition_loaded_stem = exp.transition_asset_stem
+        if self._transition_sequence is not None:
+            return
+        from gravity_ho_matey.gameplay.expedition_mission import resolve_transition_asset
+        from gravity_ho_matey.render.animated_image import AnimatedImageSequence
+
+        asset = resolve_transition_asset(exp.transition_asset_stem)
+        if asset is None:
+            return
+        try:
+            self._transition_sequence = AnimatedImageSequence.load(
+                asset, max_width=900, max_height=460, master=canvas
+            )
+            from gravity_ho_matey.levels.comet_fuel_layout import CINEMATIC_DEFAULT_SECONDS
+
+            exp.cinematic_seconds = CINEMATIC_DEFAULT_SECONDS
+            self._transition_frame_hold = self._transition_sequence.frame(0)
+        except (OSError, ValueError, RuntimeError, tk.TclError):
+            self._transition_sequence = None
+            self._transition_frame_hold = None
+
+    def _tick_expedition_transition(self, dt: float) -> None:
+        exp = self.world.expedition
+        if exp is None or not exp.in_cinematic:
+            return
+        if self._transition_sequence is None:
+            return
+        self._transition_frame_elapsed += dt
+        delay = self._transition_sequence.delay_seconds(self._transition_frame_index)
+        last_frame = self._transition_sequence.frame_count - 1
+        if self._transition_frame_index < last_frame and self._transition_frame_elapsed >= delay:
+            self._transition_frame_elapsed = 0.0
+            self._transition_frame_index += 1
+            self._transition_frame_hold = self._transition_sequence.frame(self._transition_frame_index)
+
+    def _skip_expedition_cinematic(self) -> None:
+        exp = self.world.expedition
+        if exp is None or not exp.in_cinematic:
+            return
+        exp.cinematic_elapsed = exp.cinematic_seconds
+        rebake = self.world.update(0.0, ControlIntent(), interaction_hold=False)
+        if rebake:
+            self._rebuild_gravity_field()
+            if self._expedition_on_foot():
+                self._snap_expedition_camera()
+            else:
+                self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
 
     def _brood_on_surface(self) -> bool:
         bm = self.world.brood_moon
@@ -303,6 +430,15 @@ class PlayScene(Scene):
             self.camera.snap_tactical_to_ship(self.world.ship.pos, self.world.config)
 
     def draw(self, host: SceneHost) -> None:
+        exp = self.world.expedition
+        if exp is not None and exp.in_cinematic:
+            self._ensure_expedition_transition_sequence(host.renderer.canvas)
+            frame = self._transition_frame_hold
+            if self._transition_sequence is not None:
+                frame = self._transition_sequence.frame(self._transition_frame_index)
+                self._transition_frame_hold = frame
+            host.renderer.draw_expedition_transition(self.world, frame_image=frame)
+            return
         bm = self.world.brood_moon
         if bm is not None and bm.in_cinematic:
             self._ensure_transition_sequence(host.renderer.canvas)
@@ -330,7 +466,15 @@ class PlayScene(Scene):
         if key == "space" and self.world.brood_moon is not None and self.world.brood_moon.in_cinematic:
             self._skip_brood_cinematic()
             return
+        if key == "space" and self.world.expedition is not None and self.world.expedition.in_cinematic:
+            self._skip_expedition_cinematic()
+            return
         if key == "v":
+            if self._expedition_on_foot():
+                self.hud_alert = "EVA · A/D TURN · W/S FWD·BACK · SHIFT RUN · SPACE FIRE · E WORK"
+                self.hud_alert_ttl = 2.2
+                self._enforce_expedition_camera()
+                return
             if self._brood_on_surface():
                 self.hud_alert = "SURFACE OPS — TACTICAL CHART VIEW ONLY"
                 self.hud_alert_ttl = 1.4

@@ -20,10 +20,19 @@ class _FakeHost:
         pass
 
 
+def _cove_oob_pos() -> Vec2:
+    from gravity_ho_matey.gameplay.chart_bounds import chart_limits
+    from gravity_ho_matey.levels.level_registry import build_level
+
+    x0, y0, x1, y1 = chart_limits(build_level("cove").config)
+    return Vec2(x0 - 50.0, (y0 + y1) * 0.5)
+
+
 class RadiationPlaySceneTests(unittest.TestCase):
     def test_radiation_chip_applies_one_chunk_without_spawn_teleport(self) -> None:
         scene = PlayScene("cove", CampaignState.new())
-        scene.world.ship.pos = Vec2(-120, 400)
+        oob = _cove_oob_pos()
+        scene.world.ship.pos = oob
         start = Vec2(scene.world.spawn_pos.x, scene.world.spawn_pos.y)
         self.assertEqual(scene.campaign.hull_chunks, 3)
 
@@ -48,7 +57,7 @@ class RadiationPlaySceneTests(unittest.TestCase):
 
         scene = PlayScene("cove", CampaignState.new())
         start = Vec2(scene.world.spawn_pos.x, scene.world.spawn_pos.y)
-        oob_pos = Vec2(-120, 400)
+        oob_pos = _cove_oob_pos()
         scene.world.ship.pos = oob_pos
         scene.world.invuln_remaining = 0.0
         scene.world._register_ship_hit(DamageSource.ASTEROID)

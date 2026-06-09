@@ -14,6 +14,7 @@ _KEY_DRIFT = Vec2(-0.60, -0.78).normalized()
 _KEY_RIFT = Vec2(-0.48, -0.82).normalized()
 _KEY_SIEGE = Vec2(-0.52, -0.76).normalized()
 _KEY_BROOD = Vec2(-0.58, -0.78).normalized()
+_KEY_COMET = Vec2(-0.56, -0.79).normalized()
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,9 +34,12 @@ class LightRig:
         rift = theme == "rift"
         siege = theme == "siege"
         brood = theme == "brood_moon"
+        comet = theme == "comet"
         key = (
             _KEY_SOLAR
             if solar
+            else _KEY_COMET
+            if comet
             else _KEY_RIFT
             if rift
             else _KEY_BROOD
@@ -58,9 +62,13 @@ class LightRig:
             rim += 0.04
         elif brood:
             rim += 0.05 if view == "chase" else 0.03
+        elif comet:
+            rim += 0.04
         ambient = (
             0.28
             if solar
+            else 0.34
+            if comet
             else 0.38
             if rift
             else 0.36
@@ -103,6 +111,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
                     crater_pit=palette.ASTEROID_CRATER,
                     crater_rim_hi=palette.CHASE_ASTEROID_REGOLITH,
                 )
+            if theme == "comet":
+                return MaterialTones(
+                    highlight=palette.COMET_REGOLITH_HIGHLIGHT,
+                    mid=palette.COMET_REGOLITH_MID,
+                    shadow=palette.COMET_REGOLITH_SHADOW,
+                    deep=palette.COMET_REGOLITH_DEEP,
+                    rim=palette.COMET_REGOLITH_RIM,
+                    crater_pit=palette.COMET_REGOLITH_PIT,
+                    crater_rim_hi=palette.COMET_VEIN,
+                )
             return MaterialTones(
                 highlight="#8298a8",
                 mid="#556068",
@@ -121,6 +139,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
                 rim=palette.CHASE_ASTEROID_RIM,
                 crater_pit=palette.ASTEROID_CRATER,
                 crater_rim_hi=palette.CHASE_ASTEROID_REGOLITH,
+            )
+        if theme == "comet":
+            return MaterialTones(
+                highlight=palette.COMET_REGOLITH_HIGHLIGHT,
+                mid=palette.COMET_REGOLITH_MID,
+                shadow=palette.COMET_REGOLITH_SHADOW,
+                deep=palette.COMET_REGOLITH_DEEP,
+                rim=palette.COMET_REGOLITH_RIM,
+                crater_pit=palette.COMET_REGOLITH_PIT,
+                crater_rim_hi=palette.COMET_VEIN,
             )
         return MaterialTones(
             highlight="#6a90b0",
@@ -171,6 +199,16 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
                 rim=lerp_hex(palette.BROOD_MOON_HUD_ACCENT, palette.BROOD_MOON_VEIN, 0.4),
                 crater_pit=palette.BROOD_REGOLITH_PIT,
                 crater_rim_hi=palette.BROOD_MOON_VEIN,
+            )
+        if theme == "comet":
+            return MaterialTones(
+                highlight="#a8f0ff",
+                mid="#5a6878",
+                shadow="#3a4450",
+                deep="#1a2430",
+                rim="#8aa0b8",
+                crater_pit="#2a3440",
+                crater_rim_hi="#c0d8e8",
             )
         return MaterialTones(
             highlight="#ffe8a8",
@@ -317,6 +355,26 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
         )
     if kind == "station_neutral":
         return _station_faction_material(StationFaction.NEUTRAL, theme=theme, view=view)
+    if kind == "comet_regolith":
+        return MaterialTones(
+            highlight=palette.COMET_REGOLITH_HIGHLIGHT,
+            mid=palette.COMET_REGOLITH_MID,
+            shadow=palette.COMET_REGOLITH_SHADOW,
+            deep=palette.COMET_REGOLITH_DEEP,
+            rim=palette.COMET_REGOLITH_RIM,
+            crater_pit=palette.COMET_REGOLITH_PIT,
+            crater_rim_hi=palette.COMET_VEIN,
+        )
+    if kind == "comet_ice":
+        return MaterialTones(
+            highlight=palette.COMET_ICE_HIGHLIGHT,
+            mid=palette.COMET_ICE_MID,
+            shadow=palette.COMET_ICE_SHADOW,
+            deep=palette.COMET_ICE_DEEP,
+            rim=palette.COMET_ICE_RIM,
+            crater_pit=palette.COMET_REGOLITH_PIT,
+            crater_rim_hi=palette.COMET_ICE_HIGHLIGHT,
+        )
     if kind == "brood_regolith":
         return MaterialTones(
             highlight=palette.BROOD_REGOLITH_HIGHLIGHT,
@@ -386,6 +444,26 @@ def material_for(kind: str, *, theme: str, view: str = "tactical") -> MaterialTo
             rim=palette.RIFT_HUD_ACCENT,
             crater_pit="#0a2028",
             crater_rim_hi=palette.FRIENDLY_SHIP_TRIM,
+        )
+    if kind == "eva_suit":
+        if theme == "comet":
+            return MaterialTones(
+                highlight=lerp_hex("#a8f0ff", palette.COMET_VEIN, 0.35),
+                mid=lerp_hex("#5a6878", palette.COMET_REGOLITH_MID, 0.4),
+                shadow=lerp_hex("#2a3440", palette.COMET_REGOLITH_SHADOW, 0.45),
+                deep=palette.COMET_REGOLITH_DEEP,
+                rim=lerp_hex("#c0d8e8", palette.COMET_ICE_RIM, 0.5),
+                crater_pit=palette.COMET_REGOLITH_PIT,
+                crater_rim_hi=palette.COMET_ICE_HIGHLIGHT,
+            )
+        return MaterialTones(
+            highlight="#8aa0b8",
+            mid="#4a5868",
+            shadow="#2a3440",
+            deep="#141c24",
+            rim="#c0d8e8",
+            crater_pit="#1a2430",
+            crater_rim_hi="#a8f0ff",
         )
     return material_for("asteroid", theme=theme)
 

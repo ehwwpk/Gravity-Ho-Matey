@@ -192,11 +192,81 @@ def scroll_to_show_index(scroll: float, layout: DeployListLayout, index: int) ->
     return scroll
 
 
-def scroll_wheel_delta(scroll: float, layout: DeployListLayout, delta: int, *, step: float = 28.0) -> float:
+def scroll_wheel_delta(scroll: float, layout: DeployListLayout, delta: int, *, step: float | None = None) -> float:
     if delta == 0 or layout.max_scroll <= 0.0:
         return scroll
-    direction = 1.0 if delta > 0 else -1.0
-    return clamp_scroll(scroll + direction * step, layout)
+    notch = delta / 120.0
+    row_step = step if step is not None else layout.row_pitch
+    return clamp_scroll(scroll + notch * row_step, layout)
+
+
+def scroll_from_drag_delta(scroll: float, layout: DeployListLayout, delta_y: float) -> float:
+    """1:1 finger/mouse drag — pull content with the pointer (zero friction)."""
+    return clamp_scroll(scroll - delta_y, layout)
+
+
+def panel_list_contains(layout: DeployListLayout, x: float, y: float) -> bool:
+    """Full chart manifest panel — wheel/drag work anywhere on the list card."""
+    return (
+        layout.panel_x <= x <= layout.panel_x + layout.panel_w
+        and layout.panel_y <= y <= layout.panel_y + layout.panel_h
+    )
+
+
+def deploy_split_contains(split: DeploySplitLayout, x: float, y: float) -> bool:
+    """Deploy page body — list card or sector dossier preview."""
+    if panel_list_contains(split.list, x, y):
+        return True
+    preview = split.preview
+    return preview.x <= x <= preview.x + preview.w and preview.y <= y <= preview.y + preview.h
+
+
+def scrollbar_geometry(
+    layout: DeployListLayout,
+    scroll: float,
+) -> tuple[float, float, float, float, float]:
+    """track_x, track_y, track_h, thumb_y, thumb_h"""
+    track_x = layout.panel_x + layout.panel_w - 18.0
+    track_y = layout.viewport_y + 4.0
+    track_h = layout.viewport_h - 8.0
+    thumb_h = max(24.0, track_h * (layout.viewport_h / max(1.0, layout.content_h)))
+    travel = max(1.0, track_h - thumb_h)
+    thumb_y = track_y + (scroll / layout.max_scroll) * travel if layout.max_scroll > 0.0 else track_y
+    return track_x, track_y, track_h, thumb_y, thumb_h
+
+
+def scroll_at_track_y(
+    layout: DeployListLayout,
+    track_y: float,
+    track_h: float,
+    thumb_h: float,
+    client_y: float,
+) -> float:
+    """Jump/drag scroll so the thumb center follows client_y."""
+    if layout.max_scroll <= 0.0:
+        return 0.0
+    thumb_h = max(24.0, thumb_h)
+    travel = max(1.0, track_h - thumb_h)
+    target = client_y - thumb_h * 0.5 - track_y
+    ratio = max(0.0, min(1.0, target / travel))
+    return clamp_scroll(ratio * layout.max_scroll, layout)
+
+
+def scroll_track_hit_rect(
+    layout: DeployListLayout,
+    scroll: float,
+) -> tuple[float, float, float, float]:
+    track_x, track_y, track_h, thumb_y, thumb_h = scrollbar_geometry(layout, scroll)
+    _ = thumb_y, thumb_h
+    return track_x, track_y, 8.0, track_h
+
+
+def scroll_thumb_hit_rect(
+    layout: DeployListLayout,
+    scroll: float,
+) -> tuple[float, float, float, float]:
+    track_x, track_y, _track_h, thumb_y, thumb_h = scrollbar_geometry(layout, scroll)
+    return track_x + 1.0, thumb_y, 6.0, thumb_h
 
 
 def viewport_contains(layout: DeployListLayout, x: float, y: float) -> bool:

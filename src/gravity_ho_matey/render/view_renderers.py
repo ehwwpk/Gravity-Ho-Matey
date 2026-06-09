@@ -137,6 +137,36 @@ class TacticalViewRenderer:
                     show_fog=True,
                     show_rings=False,
                 )
+        comet = world.config.level_theme == "comet"
+        exp_orbital = (
+            comet
+            and world.expedition is not None
+            and world.expedition.comet is not None
+            and not world.config.expedition_foot
+        )
+        if exp_orbital:
+            from gravity_ho_matey.gameplay.expedition_mission import ExpeditionPhase
+            from gravity_ho_matey.render.comet_orbital_viz import draw_comet_tactical
+            from gravity_ho_matey.render.planet_mission_viz import draw_planet_landing_band_tactical
+
+            comet_body = world.expedition.comet
+            if world.expedition.phase is ExpeditionPhase.ORBITAL:
+                draw_comet_tactical(
+                    canvas, comet_body, camera=camera, ship_pos=ship_pos, hud_top=float(hud_top), rig=rig, elapsed=world.elapsed
+                )
+                draw_planet_landing_band_tactical(
+                    canvas,
+                    comet_body.planet_body(),
+                    camera=camera,
+                    ship_pos=ship_pos,
+                    ship_angle=world.ship.angle,
+                    hud_top=float(hud_top),
+                    accent=palette.COMET_HUD_ACCENT,
+                    dim=palette.HUD_DIM,
+                    elapsed=world.elapsed,
+                    show_fog=True,
+                    show_rings=False,
+                )
         threat_radius = ORBITAL_ASTEROID_THREAT_RADIUS if brood_orbital else 0.0
         scree_material = "brood_regolith" if brood else "asteroid"
         if brood_orbital:

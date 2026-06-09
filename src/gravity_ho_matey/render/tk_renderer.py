@@ -17,6 +17,7 @@ from gravity_ho_matey.render.hud_overlay import SciFiHudOverlay
 from gravity_ho_matey.render.launch_countdown_overlay import draw_launch_countdown_strip, draw_playfield_reveal
 from gravity_ho_matey.render.level_intro_overlay import LevelIntroOverlay
 from gravity_ho_matey.render.brood_moon_transition_overlay import BroodMoonTransitionOverlay
+from gravity_ho_matey.render.expedition_view_renderer import ExpeditionViewRenderer
 from gravity_ho_matey.render.startup_splash_overlay import StartupSplashOverlay
 from gravity_ho_matey.render.title_overlay import TitlePage, TitleScreenOverlay
 from gravity_ho_matey.render.shop_tree_view import ShopTreeView
@@ -32,6 +33,7 @@ class TkRenderer:
         self._level_intro = LevelIntroOverlay()
         self._startup_splash = StartupSplashOverlay()
         self._brood_transition = BroodMoonTransitionOverlay()
+        self._expedition = ExpeditionViewRenderer()
         self._tactical = TacticalViewRenderer()
         self._perspective = PerspectiveViewRenderer()
 
@@ -100,7 +102,12 @@ class TkRenderer:
             bounds_toast_ttl=bounds_toast_ttl,
         )
 
-        if camera.mode is CameraMode.TACTICAL:
+        from gravity_ho_matey.gameplay.expedition_mission import is_expedition_foot
+
+        if is_expedition_foot(world.config):
+            camera.set_play_layout(hud_top)
+            self._expedition.draw(self.canvas, world, camera, hud_top=hud_top)
+        elif camera.mode is CameraMode.TACTICAL:
             camera.set_play_layout(hud_top)
             self._tactical.draw(
                 self.canvas,
@@ -162,6 +169,30 @@ class TkRenderer:
             bm=bm,
             frame_image=frame_image,
         )
+
+    def draw_expedition_transition(
+        self,
+        world: GameWorld,
+        *,
+        frame_image: tk.PhotoImage | None = None,
+    ) -> None:
+        from gravity_ho_matey.render import palette
+
+        self.clear()
+        exp = world.expedition
+        if exp is None:
+            return
+        vw, vh = 960, 640
+        accent = "#48c8f0"
+        progress = min(1.0, exp.cinematic_elapsed / max(0.01, exp.cinematic_seconds))
+        self.canvas.create_rectangle(0, 0, vw, vh, fill="#040810", outline="")
+        header = "DOCK" if exp.cinematic_kind == "dock" else "UNDOCK"
+        self.canvas.create_text(vw // 2, 48, text=f"VOLATILE CHARTER · {header}", fill=accent, font=("Courier", 16, "bold"))
+        if frame_image is not None:
+            self.canvas.create_image(vw // 2, vh // 2, image=frame_image)
+        else:
+            self.canvas.create_text(vw // 2, vh // 2, text="CHARTER TRANSIT", fill=palette.HUD_DIM, font=("Courier", 14))
+        self.canvas.create_rectangle(80, vh - 48, 80 + int((vw - 160) * progress), vh - 36, fill=accent, outline="")
 
     def draw_chart_briefing(
         self,

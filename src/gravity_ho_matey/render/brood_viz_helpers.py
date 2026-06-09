@@ -55,7 +55,7 @@ def draw_brood_ground_shadow(
     dy = rig.key_dir.y * radius * 0.12 + radius * 0.08
     rx = radius * 1.15
     ry = radius * 0.28
-    fill = palette.BROOD_REGOLITH_DEEP if rig.theme == "brood_moon" else "#060408"
+    fill = palette.BROOD_REGOLITH_DEEP if rig.theme == "brood_moon" else palette.COMET_REGOLITH_DEEP
     canvas.create_oval(cx - rx + dx, cy - ry + dy, cx + rx + dx, cy + ry + dy, fill=fill, outline="")
 
 

@@ -3,6 +3,7 @@ import tkinter as tk
 from unittest.mock import patch
 
 from gravity_ho_matey.gameplay.progress import is_level_selectable, record_level_cleared, reset_progress
+from gravity_ho_matey.levels.level_registry import LEVEL_ORDER
 from gravity_ho_matey.gameplay.campaign import CampaignState
 from gravity_ho_matey.render.title_home_layout import (
     compute_codex_layout,
@@ -142,6 +143,26 @@ class TitleOverlayTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_deploy_scrollbar_hits_registered(self) -> None:
+        root, canvas = _canvas()
+        overlay = TitleScreenOverlay()
+        try:
+            overlay.draw(
+                canvas,
+                page=TitlePage.DEPLOY,
+                campaign=CampaignState.new(),
+                solar_unlocked=True,
+                drift_unlocked=True,
+                rift_unlocked=True,
+                siege_unlocked=True,
+                brood_unlocked=True,
+            )
+            ids = {r.id for r in overlay.hits.regions}
+            self.assertIn("deploy_scroll_track", ids)
+            self.assertIn("deploy_scroll_thumb", ids)
+        finally:
+            root.destroy()
+
 
 class TitleSceneTests(unittest.TestCase):
     def test_page_navigation_wraps(self) -> None:
@@ -169,6 +190,27 @@ class TitleSceneTests(unittest.TestCase):
         from gravity_ho_matey.render.title_deploy_list import row_visible
 
         self.assertTrue(row_visible(layout, 5, scene.deploy_scroll))
+
+    def test_deploy_drag_reveals_last_level(self) -> None:
+        from gravity_ho_matey.render.title_deploy_list import row_visible
+        from gravity_ho_matey.scenes.title_deploy_ui import (
+            DeployListUiState,
+            deploy_list_pointer_down,
+            deploy_list_pointer_motion,
+        )
+
+        scene = TitleScene()
+        scene.page = TitlePage.DEPLOY
+        layout = scene._deploy_layout()
+        state = DeployListUiState()
+        x = layout.panel_x + layout.panel_w * 0.5
+        y = layout.viewport_y + layout.viewport_h * 0.5
+        deploy_list_pointer_down(state, x, y, None, layout=layout, scroll=0.0)
+        updated = deploy_list_pointer_motion(state, x, y - layout.max_scroll, layout=layout, scroll=0.0)
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertAlmostEqual(updated, layout.max_scroll)
+        self.assertTrue(row_visible(layout, len(LEVEL_ORDER) - 1, updated))
 
     def test_shop_open_blocks_page_navigation(self) -> None:
         scene = TitleScene()

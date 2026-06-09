@@ -45,7 +45,7 @@ class SiegeLevelBuildTests(unittest.TestCase):
     def test_campaign_order_includes_siege(self) -> None:
         self.assertEqual(next_level_id("rift"), "siege")
         self.assertEqual(next_level_id("siege"), "brood_moon")
-        self.assertIsNone(next_level_id("brood_moon"))
+        self.assertEqual(next_level_id("brood_moon"), "comet_fuel")
 
     def test_siege_allies_spread_east_of_spawn(self) -> None:
         from gravity_ho_matey.levels.siege_escorts import siege_friendly_fighters

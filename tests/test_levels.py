@@ -16,8 +16,8 @@ def test_all_registered_levels_build() -> None:
         world = build_level(level_id)
         assert world.config.viewport_width == 960
         assert world.config.viewport_height == 640
-        assert len(world.beacons) >= 3 or level_id in ("drift", "rift", "siege", "brood_moon")
-        assert len(world.wells) >= 3 or level_id in ("drift", "rift", "siege", "brood_moon")
+        assert len(world.beacons) >= 3 or level_id in ("drift", "rift", "siege", "brood_moon", "comet_fuel")
+        assert len(world.wells) >= 3 or level_id in ("drift", "rift", "siege", "brood_moon", "comet_fuel")
         if level_id == "cove":
             assert world.config.height == 640
         if level_id == "solar":
@@ -41,12 +41,15 @@ def test_all_registered_levels_build() -> None:
             assert world.config.width == 4800
             assert world.config.brood_moon_mission is True
             assert world.brood_moon is not None
+        if level_id == "comet_fuel":
+            assert world.config.expedition_mission is True
+            assert world.expedition is not None
 
 
 def test_all_registered_levels_have_asteroids() -> None:
     for level_id in LEVEL_BUILDERS:
         world = build_level(level_id)
-        min_rocks = 3 if level_id == "cove" else (100 if level_id == "drift" else (12 if level_id == "rift" else 8))
+        min_rocks = 3 if level_id == "cove" else (100 if level_id == "drift" else (12 if level_id == "rift" else (8 if level_id != "comet_fuel" else 20)))
         assert len(world.asteroids) >= min_rocks
         assert world.config.open_bounds is True
 
@@ -115,7 +118,8 @@ def test_campaign_level_order() -> None:
     assert next_level_id("drift") == "rift"
     assert next_level_id("rift") == "siege"
     assert next_level_id("siege") == "brood_moon"
-    assert next_level_id("brood_moon") is None
+    assert next_level_id("brood_moon") == "comet_fuel"
+    assert next_level_id("comet_fuel") is None
 
 
 def test_solar_level_has_patrol_enemies() -> None:
